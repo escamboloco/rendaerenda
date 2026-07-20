@@ -1,0 +1,13 @@
+Olá!
+
+Sua nota fiscal de serviço foi emitida.
+
+{% if order %}Referente: taxa de serviço do pedido #{{ order.id|slice:":8" }}{% else %}Referente: assinatura de acesso à plataforma{% endif %}
+Valor do serviço: R$ {{ invoice.amount }}
+{% if invoice.pdf_url %}
+Baixe o PDF: {{ invoice.pdf_url }}
+{% else %}
+O PDF fica disponível na sua conta, na área de pedidos.
+{% endif %}
+
+{{ site_name }}

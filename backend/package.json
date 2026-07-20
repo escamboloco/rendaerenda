@@ -1,0 +1,12 @@
+{
+  "name": "renda-e-renda-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build:css": "node node_modules/tailwindcss/lib/cli.js -i ./static/css/input.css -o ./static/css/tailwind.css --minify",
+    "watch:css": "node node_modules/tailwindcss/lib/cli.js -i ./static/css/input.css -o ./static/css/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

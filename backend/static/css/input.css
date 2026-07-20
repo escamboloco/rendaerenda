@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-surface text-gray-100 antialiased;
+  }
+  ::selection {
+    @apply bg-brand/40 text-white;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-border rounded-full;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand/70 ring-offset-2 ring-offset-surface;
+  }
+  [x-cloak] {
+    display: none !important;
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply max-w-6xl mx-auto w-full px-4 sm:px-6;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark
+      text-white font-semibold text-sm rounded-xl px-5 py-3 min-h-[44px]
+      transition shadow-glow disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10
+      text-gray-100 font-medium text-sm rounded-xl px-5 py-3 min-h-[44px]
+      border border-surface-border transition disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 text-gray-400 hover:text-white
+      text-sm font-medium transition min-h-[44px] px-2;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 bg-red-600/90 hover:bg-red-600
+      text-white font-semibold text-sm rounded-xl px-5 py-3 min-h-[44px] transition;
+  }
+
+  .card {
+    @apply bg-surface-card border border-surface-border rounded-2xl overflow-hidden;
+  }
+  .card-hover {
+    @apply hover:border-brand/60 hover:shadow-glow transition;
+  }
+
+  .input-field {
+    @apply w-full bg-surface-alt border border-surface-border rounded-xl px-4 py-3
+      text-sm text-gray-100 placeholder-gray-500 transition
+      focus:outline-none focus:ring-2 focus:ring-brand/60 focus:border-brand;
+  }
+  .input-label {
+    @apply block text-xs font-medium uppercase tracking-wide text-gray-400 mb-1.5;
+  }
+  .input-help {
+    @apply mt-1.5 text-xs text-gray-500;
+  }
+  .input-error {
+    @apply mt-1.5 text-xs text-red-400;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full leading-5;
+  }
+  .badge-verified {
+    @apply badge text-emerald-400 bg-emerald-400/10;
+  }
+  .badge-boost {
+    @apply badge text-accent-gold bg-accent-gold/10;
+  }
+  .badge-pending {
+    @apply badge text-amber-400 bg-amber-400/10;
+  }
+  .badge-neutral {
+    @apply badge text-gray-400 bg-white/5;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 text-sm font-medium px-3.5 py-2 rounded-full
+      border border-surface-border text-gray-300 bg-surface-alt
+      hover:border-brand/50 hover:text-white transition whitespace-nowrap;
+  }
+  .chip-active {
+    @apply !border-brand !bg-brand/15 !text-white;
+  }
+
+  .nav-link {
+    @apply text-sm font-medium text-gray-300 hover:text-white transition;
+  }
+
+  .lock-overlay {
+    @apply absolute inset-0 flex flex-col items-center justify-center gap-2
+      bg-surface/70 backdrop-blur-md text-center px-4;
+  }
+
+  .avatar-ring {
+    @apply rounded-full ring-2 ring-surface-border;
+  }
+
+  /* Assinatura visual sutil: violeta -> vermelho, usada com moderacao
+     (wordmark, glow de hero) - nao em botoes/CTAs de uso repetido. */
+  .text-gradient-brand {
+    @apply bg-gradient-brand bg-clip-text text-transparent;
+  }
+  .hero-glow {
+    background: radial-gradient(60% 60% at 50% 0%, rgba(124, 77, 191, 0.18) 0%, rgba(224, 36, 63, 0.08) 45%, transparent 75%);
+  }
+
+  .table-row-alt > * {
+    @apply odd:bg-white/[0.02];
+  }
+
+  .prose-legal {
+    @apply text-gray-300 text-sm leading-relaxed;
+  }
+  .prose-legal h1 {
+    @apply text-2xl font-extrabold text-white mt-2 mb-4;
+  }
+  .prose-legal h2 {
+    @apply text-lg font-bold text-white mt-8 mb-3;
+  }
+  .prose-legal h3 {
+    @apply text-base font-semibold text-white mt-6 mb-2;
+  }
+  .prose-legal p {
+    @apply mb-4;
+  }
+  .prose-legal ul,
+  .prose-legal ol {
+    @apply mb-4 ml-5 space-y-1.5 list-disc;
+  }
+  .prose-legal blockquote {
+    @apply card px-4 py-3 text-amber-300 bg-amber-400/5 border-amber-400/20 my-6 text-xs;
+  }
+  .prose-legal strong {
+    @apply text-white font-semibold;
+  }
+  .prose-legal table {
+    @apply w-full text-xs my-4 border-collapse;
+  }
+  .prose-legal th,
+  .prose-legal td {
+    @apply border border-surface-border px-3 py-2 text-left align-top;
+  }
+  .prose-legal th {
+    @apply bg-surface-alt text-gray-300;
+  }
+  .prose-legal a {
+    @apply text-brand hover:underline;
+  }
+}

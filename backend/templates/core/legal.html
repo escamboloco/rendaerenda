@@ -1,0 +1,9 @@
+{% extends "core/base.html" %}
+{% block title %}{{ title }} — Renda &amp; Renda{% endblock %}
+{% block robots %}index, follow{% endblock %}
+
+{% block content %}
+<article class="max-w-2xl mx-auto prose-legal">
+  {{ content|safe }}
+</article>
+{% endblock %}

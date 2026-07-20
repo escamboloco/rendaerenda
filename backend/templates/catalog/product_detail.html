@@ -1,0 +1,240 @@
+{% extends "core/base.html" %}
+{% block title %}{{ product.title }} — {{ store.display_name }} | Renda &amp; Renda{% endblock %}
+{% block description %}{{ product.description|truncatechars:150 }}{% endblock %}
+{% block robots %}index, follow{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+
+{% block extra_head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "{{ product.title|escapejs }}",
+  "description": "{{ product.description|truncatechars:300|escapejs }}",
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "BRL",
+    "price": "{{ product.price }}",
+    "availability": "{% if product.is_available %}https://schema.org/InStock{% else %}https://schema.org/OutOfStock{% endif %}",
+    "url": "{{ request.build_absolute_uri }}"
+  }
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<nav class="text-xs text-gray-500 mb-4 flex items-center gap-1.5">
+  <a href="{% url 'stores:home' %}" class="hover:text-gray-300">Início</a>
+  <span>/</span>
+  <a href="{% url 'stores:detail' store.slug %}" class="hover:text-gray-300">{{ store.display_name }}</a>
+  <span>/</span>
+  <span class="text-gray-400">{{ product.title }}</span>
+</nav>
+
+<div x-data="productCheckout('{{ product.id }}')" class="grid md:grid-cols-2 gap-8">
+
+  <div>
+    <div class="relative aspect-square card">
+      {% with cover=product.images.first %}
+      {% if cover %}
+      <img src="{{ cover.file.url }}" alt="{{ product.title }}" class="w-full h-full object-cover">
+      {% else %}
+      <div class="w-full h-full flex items-center justify-center text-gray-600 text-sm">Sem foto</div>
+      {% endif %}
+      {% endwith %}
+    </div>
+
+    {% if product.images.count > 1 %}
+    <div class="grid grid-cols-4 gap-2 mt-2">
+      {% for image in product.images.all|slice:":4" %}
+      <div class="aspect-square card">
+        <img src="{{ image.file.url }}" alt="" class="w-full h-full object-cover">
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if product.videos.all %}
+    <div class="mt-2 space-y-2">
+      {% for video in product.videos.all %}
+      <video src="{{ video.file.url }}" controls playsinline class="w-full rounded-2xl border border-surface-border"></video>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="space-y-5">
+    <div>
+      <span class="badge-neutral">{{ product.category.name }}</span>
+      <h1 class="text-2xl font-bold mt-2">{{ product.title }}</h1>
+      <p class="text-3xl font-extrabold text-brand mt-1">R$ {{ product.price }}</p>
+    </div>
+
+    <p class="text-gray-400 text-sm leading-relaxed whitespace-pre-line">{{ product.description }}</p>
+
+    <a href="{% url 'stores:detail' store.slug %}" class="card p-3 flex items-center gap-3 hover:border-brand/50 transition">
+      <div class="w-10 h-10 rounded-full bg-white/10 avatar-ring shrink-0"></div>
+      <div class="min-w-0">
+        <p class="font-medium truncate">{{ store.display_name }}</p>
+        <p class="text-xs text-gray-500">Ver loja</p>
+      </div>
+    </a>
+
+    {% if not product.is_available %}
+    <p class="card px-4 py-3 text-sm text-gray-400">Este item já foi vendido.</p>
+
+    {% elif not request.user.is_authenticated %}
+    <a href="{% url 'account_login' %}?next={{ request.path }}" class="btn-primary w-full">Entrar para comprar</a>
+
+    {% elif not can_buy %}
+    <a href="{% url 'accounts_pages:phone_page' %}" class="btn-primary w-full">Verificar celular para comprar</a>
+
+    {% else %}
+    <div class="card p-4 space-y-4">
+      <template x-if="!charge">
+        <div class="space-y-3">
+          <div class="flex gap-2">
+            <input type="text" x-model="cep" maxlength="9" placeholder="CEP de entrega" class="input-field flex-1">
+            <button type="button" class="btn-secondary shrink-0" @click="quoteFreight()" :disabled="loadingQuote">
+              <span x-show="!loadingQuote">Calcular frete</span>
+              <span x-show="loadingQuote">…</span>
+            </button>
+          </div>
+
+          <div x-show="freightOptions.length" class="space-y-2">
+            <template x-for="option in freightOptions" :key="option.service">
+              <label class="chip w-full justify-between" :class="shippingService === option.service ? 'chip-active' : ''">
+                <span>
+                  <input type="radio" class="mr-1.5" :value="option.service" x-model="shippingService">
+                  <span x-text="option.label"></span> · <span x-text="option.deadline_days + ' dias úteis'"></span>
+                </span>
+                <span x-text="'R$ ' + option.price.toFixed(2)"></span>
+              </label>
+            </template>
+          </div>
+
+          <template x-if="shippingService">
+            <div class="grid grid-cols-2 gap-2">
+              <input type="text" x-model="address.street" placeholder="Rua" class="input-field col-span-2">
+              <input type="text" x-model="address.number" placeholder="Número" class="input-field">
+              <input type="text" x-model="address.neighborhood" placeholder="Bairro" class="input-field">
+              <input type="text" x-model="address.city" placeholder="Cidade" class="input-field">
+              <input type="text" x-model="address.state" placeholder="UF" maxlength="2" class="input-field">
+            </div>
+          </template>
+
+          <template x-if="shippingService">
+            <select x-model="paymentMethod" class="input-field">
+              <option value="pix">Pix</option>
+              <option value="credit_card">Cartão de crédito</option>
+              <option value="boleto">Boleto</option>
+            </select>
+          </template>
+
+          <p x-show="error" x-text="error" class="input-error"></p>
+
+          <button x-show="shippingService" type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
+            <span x-show="!loadingCheckout">Comprar agora</span>
+            <span x-show="loadingCheckout">Processando…</span>
+          </button>
+        </div>
+      </template>
+
+      <template x-if="charge">
+        <div class="text-center space-y-3">
+          <p class="text-sm text-gray-300">Pedido criado! Finalize o pagamento:</p>
+          <div x-show="charge.pix_qr_code" class="bg-white p-3 rounded-xl inline-block">
+            <img :src="charge.pix_qr_code" alt="QR Code Pix" class="w-40 h-40">
+          </div>
+          <a x-show="charge.payment_url" :href="charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir cobrança</a>
+        </div>
+      </template>
+    </div>
+    {% endif %}
+
+    {% include "moderation/_report_button.html" with target_type="product" object_id=product.id %}
+  </div>
+</div>
+
+{% if related_products %}
+<section class="mt-14">
+  <h2 class="text-lg font-bold mb-4">Mais de {{ store.display_name }}</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    {% for related in related_products %}
+    <a href="{% url 'catalog:detail' store.slug related.slug %}" class="card card-hover">
+      <div class="aspect-square bg-white/5 overflow-hidden">
+        {% with cover=related.images.first %}
+        {% if cover %}<img src="{{ cover.file.url }}" alt="{{ related.title }}" class="w-full h-full object-cover">{% endif %}
+        {% endwith %}
+      </div>
+      <div class="p-3">
+        <p class="text-sm font-medium truncate">{{ related.title }}</p>
+        <p class="text-brand font-bold text-sm">R$ {{ related.price }}</p>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block extra_body %}
+<script>
+function productCheckout(productId) {
+  return {
+    cep: "",
+    freightOptions: [],
+    shippingService: "",
+    address: { street: "", number: "", neighborhood: "", city: "", state: "" },
+    paymentMethod: "pix",
+    loadingQuote: false,
+    loadingCheckout: false,
+    error: "",
+    charge: null,
+    async quoteFreight() {
+      this.error = "";
+      this.loadingQuote = true;
+      try {
+        const resp = await fetch("{% url 'shipping:quote' %}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+          body: JSON.stringify({ product_ids: [productId], destination_cep: this.cep.replace(/\D/g, "") }),
+        });
+        if (!resp.ok) throw new Error("quote failed");
+        this.freightOptions = await resp.json();
+      } catch (e) {
+        this.error = "Não foi possível calcular o frete. Confira o CEP.";
+      } finally {
+        this.loadingQuote = false;
+      }
+    },
+    async checkout() {
+      this.error = "";
+      this.loadingCheckout = true;
+      try {
+        const resp = await fetch("{% url 'payments:checkout' %}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+          body: JSON.stringify({
+            items: [{ product_id: productId, quantity: 1 }],
+            shipping_service: this.shippingService,
+            shipping_address: { cep: this.cep.replace(/\D/g, ""), ...this.address },
+            payment_method: this.paymentMethod,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          this.error = data.detail || "Não foi possível concluir a compra.";
+          return;
+        }
+        this.charge = { payment_url: data.payment_url, pix_qr_code: data.pix_qr_code };
+      } catch (e) {
+        this.error = "Erro de conexão. Tente novamente.";
+      } finally {
+        this.loadingCheckout = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

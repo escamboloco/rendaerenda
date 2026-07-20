@@ -1,0 +1,157 @@
+{% extends "core/base.html" %}
+{% block title %}Planos de assinatura — Renda &amp; Renda{% endblock %}
+{% block description %}Assine para desbloquear contato e compra direta com vendedoras verificadas. Pix, cartão, cobrança discreta.{% endblock %}
+{% block robots %}index, follow{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+
+{% block extra_head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Preciso assinar para comprar?",
+      "acceptedAnswer": {"@type": "Answer", "text": "Sim. A assinatura mensal desbloqueia o contato e a compra direta com as vendedoras verificadas da plataforma."}
+    },
+    {
+      "@type": "Question",
+      "name": "A cobrança aparece discreta na fatura?",
+      "acceptedAnswer": {"@type": "Answer", "text": "Sim, usamos um descritor de fatura neutro e e-mails transacionais sem conteúdo explícito."}
+    },
+    {
+      "@type": "Question",
+      "name": "Posso cancelar quando quiser?",
+      "acceptedAnswer": {"@type": "Answer", "text": "Sim, o cancelamento interrompe a renovação automática e a assinatura permanece ativa até o fim do período já pago."}
+    }
+  ]
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<div x-data="subscriptionCheckout()" class="space-y-16">
+
+  <section class="text-center max-w-2xl mx-auto space-y-3">
+    <span class="badge-boost">Acesso completo</span>
+    <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">Assine e desbloqueie a plataforma</h1>
+    <p class="text-gray-400">Uma assinatura mensal libera contato e compra direta com todas as vendedoras verificadas. Sem taxa por item, sem surpresa na fatura.</p>
+  </section>
+
+  {% if current_subscription %}
+  <section class="card px-5 py-4 max-w-xl mx-auto flex items-center justify-between gap-4">
+    <div>
+      <p class="text-sm text-gray-400">Sua assinatura</p>
+      <p class="font-semibold">
+        {{ current_subscription.plan.name }}
+        {% if current_subscription.status == 'active' %}
+          <span class="badge-verified ml-1">Ativa até {{ current_subscription.current_period_end|date:"d/m/Y" }}</span>
+        {% elif current_subscription.status == 'past_due' %}
+          <span class="badge-pending ml-1">Aguardando pagamento</span>
+        {% else %}
+          <span class="badge-neutral ml-1">Cancelada</span>
+        {% endif %}
+      </p>
+    </div>
+    {% if current_subscription.status == 'active' %}
+    <button class="btn-ghost" @click="cancelSubscription()">Cancelar renovação</button>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="grid sm:grid-cols-3 gap-5 max-w-4xl mx-auto items-stretch">
+    {% for plan in plans %}
+    <div class="card p-6 flex flex-col {% if plan.is_featured %}border-brand shadow-glow relative{% endif %}">
+      {% if plan.is_featured %}
+      <span class="absolute -top-3 left-1/2 -translate-x-1/2 badge-boost">Mais popular</span>
+      {% endif %}
+      <p class="font-semibold text-gray-300">{{ plan.name }}</p>
+      <p class="mt-2 mb-1">
+        <span class="text-3xl font-extrabold">R$ {{ plan.price }}</span>
+        <span class="text-gray-500 text-sm">/{{ plan.get_period_display|lower }}</span>
+      </p>
+      <ul class="mt-4 mb-6 space-y-2 text-sm text-gray-400 flex-1">
+        <li class="flex items-start gap-2"><svg class="w-4 h-4 text-brand mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Contato liberado com todas as vendedoras</li>
+        <li class="flex items-start gap-2"><svg class="w-4 h-4 text-brand mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Compra direta, sem taxa por item</li>
+        <li class="flex items-start gap-2"><svg class="w-4 h-4 text-brand mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Cobrança discreta na fatura</li>
+      </ul>
+      {% if request.user.is_authenticated %}
+      <button class="btn-primary w-full" @click="checkout({{ plan.id }})" :disabled="loading">
+        <span x-show="!loading || selectedPlan !== {{ plan.id }}">Assinar {{ plan.name|lower }}</span>
+        <span x-show="loading && selectedPlan === {{ plan.id }}">Gerando cobrança…</span>
+      </button>
+      {% else %}
+      <a href="{% url 'account_signup' %}?next={% url 'subscriptions:plans' %}" class="btn-primary w-full">Criar conta para assinar</a>
+      {% endif %}
+    </div>
+    {% empty %}
+    <p class="col-span-full text-center text-gray-500">Nenhum plano disponível no momento.</p>
+    {% endfor %}
+  </section>
+
+  <section x-show="charge" x-cloak class="card max-w-md mx-auto p-6 text-center space-y-4">
+    <h2 class="font-semibold">Finalize o pagamento</h2>
+    <p class="text-sm text-gray-400">Pague via Pix para ativar sua assinatura em instantes.</p>
+    <div x-show="charge && charge.pix_qr_code" class="bg-white p-3 rounded-xl inline-block">
+      <img :src="charge && charge.pix_qr_code" alt="QR Code Pix" class="w-40 h-40">
+    </div>
+    <a x-show="charge && charge.payment_url" :href="charge && charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir cobrança</a>
+  </section>
+
+  <section class="max-w-2xl mx-auto">
+    <h2 class="text-xl font-bold mb-4 text-center">Dúvidas frequentes</h2>
+    <div class="space-y-3">
+      <details class="card px-4 py-3 group">
+        <summary class="cursor-pointer font-medium text-sm">Preciso assinar para comprar?</summary>
+        <p class="text-sm text-gray-400 mt-2">Sim. A assinatura mensal desbloqueia o contato e a compra direta com as vendedoras verificadas da plataforma.</p>
+      </details>
+      <details class="card px-4 py-3 group">
+        <summary class="cursor-pointer font-medium text-sm">A cobrança aparece discreta na fatura?</summary>
+        <p class="text-sm text-gray-400 mt-2">Sim, usamos um descritor de fatura neutro e e-mails transacionais sem conteúdo explícito.</p>
+      </details>
+      <details class="card px-4 py-3 group">
+        <summary class="cursor-pointer font-medium text-sm">Posso cancelar quando quiser?</summary>
+        <p class="text-sm text-gray-400 mt-2">Sim, o cancelamento interrompe a renovação automática e a assinatura permanece ativa até o fim do período já pago.</p>
+      </details>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+function subscriptionCheckout() {
+  return {
+    loading: false,
+    selectedPlan: null,
+    charge: null,
+    async checkout(planId) {
+      this.loading = true;
+      this.selectedPlan = planId;
+      try {
+        const resp = await fetch("{% url 'subscriptions_api:checkout' %}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" },
+          body: JSON.stringify({ plan_id: planId, payment_method: "pix" }),
+        });
+        if (!resp.ok) throw new Error("Falha ao iniciar cobrança");
+        this.charge = await resp.json();
+      } catch (e) {
+        alert("Não foi possível iniciar o pagamento. Tente novamente.");
+      } finally {
+        this.loading = false;
+      }
+    },
+    async cancelSubscription() {
+      if (!confirm("Cancelar a renovação automática?")) return;
+      await fetch("{% url 'subscriptions_api:cancel' %}", {
+        method: "POST",
+        headers: { "X-CSRFToken": "{{ csrf_token }}" },
+      });
+      window.location.reload();
+    },
+  };
+}
+</script>
+{% endblock %}

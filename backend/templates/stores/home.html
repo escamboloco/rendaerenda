@@ -1,0 +1,67 @@
+{% extends "core/base.html" %}
+{% block title %}Renda &amp; Renda — Classificados +18 entre adultos verificados{% endblock %}
+{% block description %}Compre e venda itens íntimos usados direto com vendedoras verificadas. Sem mensalidade — pague só na compra. Cobrança discreta e envio rastreado.{% endblock %}
+{% block robots %}index, follow{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+
+{% block content %}
+<section class="hero-glow -mx-4 sm:-mx-6 px-4 sm:px-6 pt-2 pb-10 text-center max-w-2xl mx-auto mb-2 space-y-4 rounded-b-[2rem]">
+  <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">
+    Classificados <span class="text-gradient-brand">+18</span> entre adultos verificados
+  </h1>
+  <p class="text-gray-400">Compra e venda direta com vendedoras verificadas. Privacidade em primeiro lugar, cobrança discreta, envio rastreado.</p>
+  <div class="flex flex-wrap justify-center gap-3 pt-2 text-xs text-gray-500">
+    <span class="badge-verified">Idade verificada por biometria</span>
+    <span class="badge-neutral">Sem mensalidade — pague só na compra</span>
+    <span class="badge-neutral">Envio via Correios</span>
+  </div>
+</section>
+
+<section class="flex gap-2 overflow-x-auto pb-2 mb-8 -mx-4 px-4 sm:mx-0 sm:px-0">
+  <a href="{% url 'stores:home' %}" class="chip {% if not active_category %}chip-active{% endif %}">Todas</a>
+  {% for category in categories %}
+  <a href="?categoria={{ category.slug }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}"
+     class="chip {% if active_category == category.slug %}chip-active{% endif %}">{{ category.name }}</a>
+  {% endfor %}
+</section>
+
+{% if request.GET.q %}
+<p class="text-sm text-gray-500 mb-4">Resultados para "<span class="text-gray-300">{{ request.GET.q }}</span>"</p>
+{% endif %}
+
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+  {% for store in stores %}
+  <a href="{% url 'stores:detail' store.slug %}" class="card card-hover group">
+    <div class="aspect-square bg-white/5 flex items-center justify-center text-gray-600 text-xs relative overflow-hidden">
+      {% with cover=store.products.first.images.first %}
+      {% if cover %}
+      <img src="{{ cover.file.url }}" alt="{{ store.display_name }}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+      {% else %}
+      <span>{{ store.display_name|slice:":1" }}</span>
+      {% endif %}
+      {% endwith %}
+      {% if store.id in boosted_ids %}
+      <span class="badge-boost absolute top-2 left-2">Destaque</span>
+      {% endif %}
+    </div>
+    <div class="p-3">
+      <p class="font-semibold truncate flex items-center gap-1">
+        {{ store.display_name }}
+        <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 1l2.39 1.94 3.03-.36.99 2.9 2.9.99-.36 3.03L21 12l-1.94 2.39.36 3.03-2.9.99-.99 2.9-3.03-.36L10 23l-2.39-1.94-3.03.36-.99-2.9-2.9-.99.36-3.03L-1 12l1.94-2.39-.36-3.03 2.9-.99.99-2.9 3.03.36L10 1zm-1.2 13.6l5.6-5.6-1.13-1.13-4.47 4.47-2.07-2.07L5.6 11.4l3.2 3.2z" clip-rule="evenodd"/></svg>
+      </p>
+      <div class="flex items-center gap-1 text-xs text-gray-500 truncate">
+        {% if store.review_count %}
+        <svg class="w-3 h-3 text-accent-gold shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.958a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.368 2.447a1 1 0 00-.363 1.118l1.287 3.959c.299.921-.755 1.688-1.539 1.118l-3.367-2.447a1 1 0 00-1.176 0l-3.367 2.447c-.784.57-1.838-.197-1.539-1.118l1.287-3.959a1 1 0 00-.363-1.118L2.062 9.385c-.783-.57-.38-1.81.588-1.81h4.163a1 1 0 00.95-.69l1.286-3.958z"/></svg>
+        <span class="text-gray-300">{{ store.avg_rating }}</span>
+        <span>({{ store.review_count }})</span>
+        <span>·</span>
+        {% endif %}
+        <span>{{ store.products.count }} itens</span>
+      </div>
+    </div>
+  </a>
+  {% empty %}
+  <p class="col-span-full text-gray-500 text-center py-12">Nenhuma loja encontrada.</p>
+  {% endfor %}
+</div>
+{% endblock %}

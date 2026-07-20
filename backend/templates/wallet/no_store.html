@@ -1,0 +1,10 @@
+{% extends "core/base.html" %}
+{% block title %}Carteira — Renda &amp; Renda{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto text-center card p-8 space-y-4">
+  <h1 class="text-xl font-bold">Você ainda não tem uma loja</h1>
+  <p class="text-gray-400 text-sm">Abra sua loja para começar a vender e acompanhar sua carteira aqui.</p>
+  <a href="{% url 'stores:onboard_page' %}" class="btn-primary w-full">Abrir minha loja</a>
+</div>
+{% endblock %}

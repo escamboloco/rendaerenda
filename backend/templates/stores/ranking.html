@@ -1,0 +1,41 @@
+{% extends "core/base.html" %}
+{% block title %}Ranking das melhores lojas — Renda &amp; Renda{% endblock %}
+{% block description %}As lojas mais bem avaliadas do Renda & Renda, por nota, vendas e número de avaliações.{% endblock %}
+{% block robots %}index, follow{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+
+{% block content %}
+<section class="text-center max-w-xl mx-auto mb-10 space-y-3">
+  <span class="badge-boost">Top vendedoras</span>
+  <h1 class="text-3xl font-extrabold tracking-tight">Ranking das melhores lojas</h1>
+  <p class="text-gray-400 text-sm">
+    Ordenado pela nota ajustada pelo volume de avaliações — lojas com poucas avaliações não furam
+    na frente de quem já vendeu e foi avaliada de verdade. Vendas e número de avaliações desempatam.
+  </p>
+</section>
+
+<div class="max-w-2xl mx-auto space-y-3">
+  {% for store in stores %}
+  <a href="{% url 'stores:detail' store.slug %}" class="card card-hover p-4 flex items-center gap-4">
+    <span class="w-8 text-center font-extrabold text-lg shrink-0 {% if forloop.counter <= 3 %}text-accent-gold{% else %}text-gray-600{% endif %}">
+      {{ forloop.counter }}
+    </span>
+    <div class="w-12 h-12 rounded-full bg-white/10 avatar-ring shrink-0 flex items-center justify-center font-bold text-gray-400">
+      {{ store.display_name|slice:":1" }}
+    </div>
+    <div class="flex-1 min-w-0">
+      <p class="font-semibold truncate">{{ store.display_name }}</p>
+      <div class="flex items-center gap-2 flex-wrap text-xs text-gray-500 mt-0.5">
+        {% include "reviews/_stars.html" with rating=store.avg_rating size="w-3.5 h-3.5" %}
+        <span class="text-gray-300">{{ store.avg_rating }}</span>
+        <span>({{ store.review_count }} avaliaç{{ store.review_count|pluralize:"ão,ões" }})</span>
+        <span>·</span>
+        <span>{{ store.sales_count }} venda{{ store.sales_count|pluralize }}</span>
+      </div>
+    </div>
+  </a>
+  {% empty %}
+  <p class="text-gray-500 text-center py-12">Ainda não há lojas avaliadas o suficiente para o ranking.</p>
+  {% endfor %}
+</div>
+{% endblock %}

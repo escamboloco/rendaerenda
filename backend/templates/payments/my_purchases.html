@@ -1,0 +1,154 @@
+{% extends "core/base.html" %}
+{% block title %}Minhas compras — Renda &amp; Renda{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6" x-data="purchaseActions()">
+  <div>
+    <h1 class="text-2xl font-bold">Minhas compras</h1>
+    <p class="text-gray-400 text-sm mt-1">Acompanhe cada etapa do envio. Após a entrega, você tem 1 dia para confirmar ou contestar — depois disso o pedido é concluído automaticamente.</p>
+  </div>
+
+  {% for order in orders %}
+  <div class="card p-5 space-y-4">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <p class="font-semibold">#{{ order.id|slice:":8" }} · {{ order.store.display_name }}</p>
+        <p class="text-xs text-gray-500">{{ order.created_at|date:"d/m/Y" }} · {{ order.items.count }} item(ns)</p>
+      </div>
+      <p class="font-bold shrink-0">R$ {{ order.grand_total }}</p>
+    </div>
+
+    {# --- Timeline de etapas --- #}
+    {% with s=order.shipment %}
+    <ol class="grid grid-cols-4 gap-1 text-[11px] text-center">
+      <li class="space-y-1">
+        <div class="h-1 rounded-full bg-emerald-400"></div>
+        <span class="text-gray-300">Pago</span>
+      </li>
+      <li class="space-y-1">
+        <div class="h-1 rounded-full {% if s.status == 'posted' or s.status == 'in_transit' or s.status == 'delivered' %}bg-emerald-400{% else %}bg-surface-border{% endif %}"></div>
+        <span class="{% if s.status == 'posted' or s.status == 'in_transit' or s.status == 'delivered' %}text-gray-300{% else %}text-gray-600{% endif %}">Postado</span>
+      </li>
+      <li class="space-y-1">
+        <div class="h-1 rounded-full {% if s.status == 'in_transit' or s.status == 'delivered' %}bg-emerald-400{% else %}bg-surface-border{% endif %}"></div>
+        <span class="{% if s.status == 'in_transit' or s.status == 'delivered' %}text-gray-300{% else %}text-gray-600{% endif %}">Em trânsito</span>
+      </li>
+      <li class="space-y-1">
+        <div class="h-1 rounded-full {% if s.status == 'delivered' %}bg-emerald-400{% else %}bg-surface-border{% endif %}"></div>
+        <span class="{% if s.status == 'delivered' %}text-gray-300{% else %}text-gray-600{% endif %}">Entregue</span>
+      </li>
+    </ol>
+
+    {% if s.tracking_code %}
+    <p class="text-xs text-gray-500">
+      Rastreio: <span class="font-mono text-gray-300">{{ s.tracking_code }}</span>
+      {% if s.last_tracking_event %} · último evento: {{ s.last_tracking_event }}{% endif %}
+    </p>
+    {% endif %}
+
+    {% if order.status == 'disputed' %}
+    <p class="card bg-amber-400/5 border-amber-400/20 px-4 py-3 text-sm text-amber-300">
+      Contestação registrada. Nossa equipe vai entrar em contato por e-mail.
+    </p>
+    {% elif s.status == 'delivered' and not s.buyer_confirmed_at and not s.buyer_disputed_at %}
+    <div class="card bg-surface-alt p-4 space-y-3">
+      <p class="text-sm text-gray-300">O item chegou como combinado?</p>
+      <div class="flex gap-2">
+        <button class="btn-primary flex-1 !py-2" @click="respond('{{ order.id }}', 'confirm')">Sim, confirmar recebimento</button>
+        <button class="btn-ghost !text-red-300" @click="respond('{{ order.id }}', 'dispute')">Contestar</button>
+      </div>
+      <p class="input-help">Confirmando, o valor é liberado para a vendedora. Sem resposta em 1 dia, a confirmação é automática.</p>
+    </div>
+    {% elif s.buyer_confirmed_at %}
+    <p class="text-sm text-emerald-400">Recebimento confirmado. Obrigado!</p>
+    {% endif %}
+
+    {% if order.status == 'delivered' %}
+      {% if order.review %}
+      <div class="card bg-surface-alt p-4 space-y-1.5">
+        <p class="text-xs text-gray-500 uppercase tracking-wide">Sua avaliação</p>
+        <div class="flex gap-0.5">
+          {% for i in "12345" %}
+          <svg class="w-4 h-4 {% if forloop.counter <= order.review.rating %}text-accent-gold{% else %}text-surface-border{% endif %}" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.958a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.368 2.447a1 1 0 00-.363 1.118l1.287 3.959c.299.921-.755 1.688-1.539 1.118l-3.367-2.447a1 1 0 00-1.176 0l-3.367 2.447c-.784.57-1.838-.197-1.539-1.118l1.287-3.959a1 1 0 00-.363-1.118L2.062 9.385c-.783-.57-.38-1.81.588-1.81h4.163a1 1 0 00.95-.69l1.286-3.958z"/></svg>
+          {% endfor %}
+        </div>
+        {% if order.review.comment %}<p class="text-sm text-gray-400">"{{ order.review.comment }}"</p>{% endif %}
+      </div>
+      {% else %}
+      <div class="card bg-surface-alt p-4 space-y-3" x-data="reviewForm('{{ order.id }}')">
+        <p class="text-sm text-gray-300">Avalie sua compra na {{ order.store.display_name }}</p>
+        <div class="flex gap-1">
+          <template x-for="i in [1,2,3,4,5]" :key="i">
+            <button type="button" @click="rating = i" class="p-0.5">
+              <svg class="w-6 h-6" :class="i <= rating ? 'text-accent-gold' : 'text-surface-border'" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.958a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.368 2.447a1 1 0 00-.363 1.118l1.287 3.959c.299.921-.755 1.688-1.539 1.118l-3.367-2.447a1 1 0 00-1.176 0l-3.367 2.447c-.784.57-1.838-.197-1.539-1.118l1.287-3.959a1 1 0 00-.363-1.118L2.062 9.385c-.783-.57-.38-1.81.588-1.81h4.163a1 1 0 00.95-.69l1.286-3.958z"/></svg>
+            </button>
+          </template>
+        </div>
+        <textarea x-model="comment" maxlength="1000" rows="2" placeholder="Conte como foi (opcional) — sem contatos ou links externos" class="input-field"></textarea>
+        <p x-show="error" x-text="error" class="input-error"></p>
+        <button type="button" class="btn-primary !py-2" :disabled="!rating || loading" @click="submit()">
+          <span x-show="!loading">Enviar avaliação</span>
+          <span x-show="loading">Enviando…</span>
+        </button>
+      </div>
+      {% endif %}
+    {% endif %}
+    {% endwith %}
+  </div>
+  {% empty %}
+  <p class="text-gray-500 text-center py-12">Você ainda não fez nenhuma compra.</p>
+  {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+function purchaseActions() {
+  return {
+    async respond(orderId, action) {
+      if (action === "dispute" && !confirm("Contestar o recebimento? Nossa equipe vai analisar o caso.")) return;
+      const resp = await fetch(`/api/pedidos/${orderId}/recebimento/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+        body: JSON.stringify({ action }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        alert(data.detail || "Não foi possível concluir.");
+        return;
+      }
+      window.location.reload();
+    },
+  };
+}
+
+function reviewForm(orderId) {
+  return {
+    rating: 0,
+    comment: "",
+    loading: false,
+    error: "",
+    async submit() {
+      this.loading = true; this.error = "";
+      try {
+        const resp = await fetch("{% url 'reviews_api:create' %}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+          body: JSON.stringify({ order_id: orderId, rating: this.rating, comment: this.comment }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          this.error = Array.isArray(data) ? data.join(" ") : (data.detail || "Não foi possível enviar a avaliação.");
+          return;
+        }
+        window.location.reload();
+      } catch (e) {
+        this.error = "Erro de conexão. Tente novamente.";
+      } finally {
+        this.loading = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}
