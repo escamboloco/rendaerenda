@@ -1,0 +1,20 @@
+Olá!
+
+Seu pedido #{{ order.id|slice:":8" }} foi confirmado.
+
+Resumo:
+- Itens: {{ order.items.count }}
+- Subtotal: R$ {{ order.items_total }}
+- Frete: R$ {{ order.shipping_total }}
+- Total: R$ {{ order.grand_total }}
+
+A vendedora já foi avisada e vai postar o item nos Correios. Assim que
+o código de rastreio for gerado, você recebe outro e-mail por aqui.
+
+Sua nota fiscal referente à taxa de serviço da plataforma chega em um
+e-mail separado em instantes.
+
+Para ver os detalhes completos do pedido, acesse sua conta na plataforma.
+
+{{ site_name }}
+Este e-mail não contém detalhes dos itens por privacidade.

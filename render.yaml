@@ -1,0 +1,162 @@
+# Blueprint de deploy no Render (https://render.com/docs/blueprint-spec).
+# Sobe: site (Django/gunicorn), worker Celery (com beat embutido), Postgres
+# e Redis. Depois do primeiro deploy, va no dashboard de cada servico e
+# preencha as variaveis marcadas com `sync: false` abaixo (segredos - nunca
+# comitar no repo). Ver docs/BASE_JURIDICA.md para o que cada uma controla.
+
+envVarGroups:
+  - name: rendaerenda-shared
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: SITE_NAME
+        value: "Renda & Renda"
+      - key: SITE_DOMAIN
+        sync: false # dominio final (custom domain configurado no Render)
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com" # trocar pelo dominio custom quando configurar um
+      - key: PLATFORM_COMMISSION_PERCENT
+        value: "30"
+      - key: WALLET_RELEASE_DAYS_AFTER_SHIPPING
+        value: "3"
+      - key: DELIVERY_CONFIRMATION_WINDOW_HOURS
+        value: "24"
+      - key: PACKAGING_FEE
+        value: "3.90"
+      - key: SHIPPING_PROVIDER
+        value: "melhor_envio"
+      - key: MELHOR_ENVIO_TOKEN
+        sync: false
+      - key: MELHOR_ENVIO_SANDBOX
+        value: "False"
+      - key: PAYMENT_PROVIDER
+        value: "asaas"
+      - key: ASAAS_API_URL
+        value: "https://api.asaas.com/v3"
+      - key: ASAAS_API_KEY
+        sync: false
+      - key: ASAAS_WEBHOOK_TOKEN
+        sync: false
+      - key: AGE_KYC_PROVIDER
+        value: "idwall"
+      - key: AGE_KYC_API_KEY
+        sync: false
+      - key: PHONE_CPF_BUREAU_URL
+        sync: false
+      - key: PHONE_CPF_BUREAU_API_KEY
+        sync: false
+      - key: SMS_PROVIDER_URL
+        sync: false
+      - key: SMS_PROVIDER_API_KEY
+        sync: false
+      - key: NFSE_PROVIDER_URL
+        value: "https://api.focusnfe.com.br/v2/nfse"
+      - key: NFSE_PROVIDER_API_KEY
+        sync: false
+      - key: PLATFORM_LEGAL_NAME
+        sync: false
+      - key: PLATFORM_CNPJ
+        sync: false
+      - key: PLATFORM_MUNICIPAL_SERVICE_CODE
+        sync: false
+      - key: CORREIOS_CWS_USER
+        sync: false
+      - key: CORREIOS_CWS_PASSWORD
+        sync: false
+      - key: CORREIOS_CONTRACT_NUMBER
+        sync: false
+      - key: CORREIOS_CARD_NUMBER
+        sync: false
+      - key: CORREIOS_ORIGIN_CEP
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_STORAGE_BUCKET_NAME
+        sync: false
+      - key: AWS_S3_ENDPOINT_URL
+        sync: false
+      - key: AWS_S3_SIGNED_URL_EXPIRE_SECONDS
+        value: "300"
+      - key: EMAIL_BACKEND
+        value: "django.core.mail.backends.smtp.EmailBackend"
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: DEFAULT_FROM_EMAIL
+        value: "Renda & Renda <no-reply@rendaerenda.com.br>"
+
+databases:
+  - name: rendaerenda-db
+    plan: starter
+    region: oregon
+    postgresMajorVersion: "16"
+
+services:
+  - type: redis
+    name: rendaerenda-redis
+    plan: starter
+    region: oregon
+    ipAllowList: [] # sem acesso externo - so servicos deste projeto usam
+
+  - type: web
+    name: rendaerenda-web
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    buildCommand: "bash build.sh"
+    startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 60"
+    healthCheckPath: /healthz/
+    envVarGroups:
+      - rendaerenda-shared
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: rendaerenda-redis
+          property: connectionString
+
+  - type: worker
+    name: rendaerenda-celery
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    # -B roda o beat scheduler no mesmo processo do worker - unico job
+    # periodico hoje e o poll de rastreio dos Correios (config/settings.py
+    # CELERY_BEAT_SCHEDULE). Separar em servico proprio se o volume crescer.
+    startCommand: "celery -A config worker -B --loglevel=info --concurrency=2"
+    envVarGroups:
+      - rendaerenda-shared
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        sync: false # copiar o mesmo valor gerado no servico web
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: rendaerenda-redis
+          property: connectionString

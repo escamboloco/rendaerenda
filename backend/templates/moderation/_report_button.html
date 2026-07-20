@@ -1,0 +1,47 @@
+{% comment %}
+Botão + modal de denúncia reutilizável. Uso:
+  {% include "moderation/_report_button.html" with target_type="product" object_id=product.id %}
+{% endcomment %}
+<div x-data="reportModal('{{ target_type }}', '{{ object_id }}')" class="inline-block">
+  <button type="button" @click="open = true" class="btn-ghost !text-gray-500 hover:!text-red-300">
+    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+    Denunciar
+  </button>
+
+  <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" @keydown.escape.window="open = false">
+    <div @click.outside="open = false" class="card p-6 w-full max-w-sm space-y-4">
+      <h3 class="font-semibold">Denunciar</h3>
+
+      <template x-if="sent">
+        <p class="text-sm text-emerald-400">Denúncia enviada. Nossa equipe vai revisar.</p>
+      </template>
+
+      <template x-if="!sent">
+        <form @submit.prevent="submit()" class="space-y-3">
+          <div>
+            <label class="input-label">Motivo</label>
+            <select x-model="reason" required class="input-field">
+              <option value="underage_suspicion">Suspeita de menor de idade</option>
+              <option value="sexual_service">Oferta de serviço sexual</option>
+              <option value="scam">Golpe/fraude</option>
+              <option value="illegal_content">Conteúdo ilegal</option>
+              <option value="other">Outro</option>
+            </select>
+          </div>
+          <div>
+            <label class="input-label">Detalhes (opcional)</label>
+            <textarea x-model="details" rows="3" maxlength="1000" class="input-field"></textarea>
+          </div>
+          <p x-show="error" x-text="error" class="input-error"></p>
+          <div class="flex gap-2">
+            <button type="button" @click="open = false" class="btn-secondary flex-1">Cancelar</button>
+            <button type="submit" class="btn-danger flex-1" :disabled="loading">
+              <span x-show="!loading">Enviar</span>
+              <span x-show="loading">Enviando…</span>
+            </button>
+          </div>
+        </form>
+      </template>
+    </div>
+  </div>
+</div>

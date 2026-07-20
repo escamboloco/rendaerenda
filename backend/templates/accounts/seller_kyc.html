@@ -1,0 +1,86 @@
+{% extends "core/base.html" %}
+{% block title %}Verificação de vendedora — Renda &amp; Renda{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto card p-6 sm:p-8 space-y-6">
+  <div class="text-center">
+    <h1 class="text-xl font-bold">Verificação de vendedora</h1>
+    <p class="text-gray-500 text-sm mt-1">Documento + selfie + termo de maioridade e cessão de imagem — exigido antes de abrir sua loja.</p>
+  </div>
+
+  {% if not request.user.is_age_verified %}
+  <div class="card px-4 py-3 text-sm text-amber-300 bg-amber-400/5 border-amber-400/20">
+    Você precisa concluir a <a href="{% url 'accounts_pages:verification_page' %}" class="underline">verificação de idade</a> antes de enviar seu KYC de vendedora.
+  </div>
+  {% elif kyc.status == 'approved' %}
+  <div class="text-center space-y-3">
+    <span class="badge-verified text-sm px-3 py-1">Aprovada</span>
+    <p class="text-gray-400 text-sm">Seu KYC foi aprovado. Você já pode abrir sua loja.</p>
+    <a href="{% url 'stores:onboard_page' %}" class="btn-primary w-full">Abrir minha loja</a>
+  </div>
+  {% elif kyc.status == 'pending' %}
+  <div class="text-center space-y-3">
+    <span class="badge-pending text-sm px-3 py-1">Em análise</span>
+    <p class="text-gray-400 text-sm">Recebemos seus documentos. A revisão manual costuma levar até 24h.</p>
+  </div>
+  {% else %}
+  <form id="kyc-form" class="space-y-4" enctype="multipart/form-data">
+    {% if kyc.status == 'rejected' %}
+    <p class="input-error">Seu envio anterior não foi aprovado. Confira se as fotos estão nítidas e tente novamente.</p>
+    {% endif %}
+    <div>
+      <label class="input-label">Documento (frente)</label>
+      <input type="file" name="document_front" accept="image/*" capture="environment" required class="input-field">
+    </div>
+    <div>
+      <label class="input-label">Documento (verso)</label>
+      <input type="file" name="document_back" accept="image/*" capture="environment" required class="input-field">
+    </div>
+    <div>
+      <label class="input-label">Selfie segurando o documento</label>
+      <input type="file" name="selfie_with_document" accept="image/*" capture="user" required class="input-field">
+      <p class="input-help">Rosto e documento visíveis e legíveis na mesma foto.</p>
+    </div>
+    <label class="flex items-start gap-2 text-sm text-gray-400">
+      <input type="checkbox" name="accepts_majority_and_image_consent_term" required class="mt-0.5 rounded border-surface-border bg-surface-alt text-brand focus:ring-brand">
+      Confirmo que sou maior de 18 anos e cedo o uso de imagem dos itens/mídias que eu publicar, conforme o
+      <a href="{% url 'core_pages:terms' %}" class="text-brand hover:underline" target="_blank">Termo de Maioridade e Cessão de Imagem</a>.
+    </label>
+    <p id="kyc-error" class="input-error hidden"></p>
+    <button type="submit" class="btn-primary w-full">Enviar para análise</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+document.getElementById("kyc-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const btn = form.querySelector("button[type=submit]");
+  const errorEl = document.getElementById("kyc-error");
+  btn.disabled = true;
+  errorEl.classList.add("hidden");
+  try {
+    const resp = await fetch("{% url 'accounts:seller_kyc_submit' %}", {
+      method: "POST",
+      headers: { "X-CSRFToken": "{{ csrf_token }}" },
+      body: new FormData(form),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      errorEl.textContent = data.detail || "Não foi possível enviar seus documentos. Confira os arquivos e tente novamente.";
+      errorEl.classList.remove("hidden");
+      return;
+    }
+    window.location.reload();
+  } catch (e) {
+    errorEl.textContent = "Erro de conexão. Tente novamente.";
+    errorEl.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+{% endblock %}

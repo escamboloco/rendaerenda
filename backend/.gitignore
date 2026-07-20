@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.sqlite3
+.env
+staticfiles/
+media/
+# MEDIA_ROOT nao esta explicito em settings.py (produção usa S3), entao
+# uploads locais de teste caem direto nestas pastas na raiz do backend -
+# nunca sao codigo-fonte, nunca comitar.
+/products/
+/kyc/
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+node_modules/
+npm-debug.log*
+
+# static/css/tailwind.css e static/vendor/*.js SAO versionados de proposito -
+# o build do Render nao roda npm (ver build.sh). Rode `npm run build:css`
+# localmente e comite o resultado antes de dar deploy.

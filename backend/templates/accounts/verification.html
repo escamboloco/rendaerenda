@@ -1,0 +1,72 @@
+{% extends "core/base.html" %}
+{% block title %}Verificação de idade — Renda &amp; Renda{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto card p-6 sm:p-8 space-y-6 text-center">
+  <h1 class="text-xl font-bold">Verificação de idade</h1>
+
+  {% if verification.status == 'approved' %}
+    <div class="space-y-3">
+      <span class="badge-verified text-sm px-3 py-1">Verificado</span>
+      <p class="text-gray-400 text-sm">Sua idade já foi confirmada. Você pode assinar e comprar normalmente.</p>
+      <a href="{% url 'stores:home' %}" class="btn-primary w-full">Ir para a loja</a>
+    </div>
+  {% elif verification.status == 'pending' %}
+    <div class="space-y-3">
+      <span class="badge-pending text-sm px-3 py-1">Em análise</span>
+      <p class="text-gray-400 text-sm">Recebemos sua verificação e estamos conferindo com o provedor de identidade. Isso costuma levar poucos minutos.</p>
+    </div>
+  {% elif verification.status == 'rejected' %}
+    <div class="space-y-3">
+      <span class="badge text-red-400 bg-red-400/10 text-sm px-3 py-1">Não aprovado</span>
+      <p class="text-gray-400 text-sm">Não conseguimos confirmar seus dados. Verifique se o CPF e a data de nascimento no cadastro estão corretos e tente novamente.</p>
+    </div>
+  {% else %}
+    <p class="text-gray-400 text-sm leading-relaxed">
+      Por exigência da Lei 15.211/2025, não aceitamos "tenho 18+" como prova de idade.
+      Você vai confirmar seus dados com uma verificação facial rápida (prova de vida) feita pelo
+      nosso parceiro de identidade — os dados são usados só para essa checagem.
+    </p>
+    <div id="kyc-widget" class="rounded-xl border border-dashed border-surface-border p-6 text-sm text-gray-500">
+      Widget de verificação facial carrega aqui.
+    </div>
+    <button id="start-verification" type="button" class="btn-primary w-full">Iniciar verificação facial</button>
+    <p id="verification-error" class="input-error hidden"></p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+  // O parceiro de KYC (idwall/unico/CAF) fornece um SDK JS que roda a
+  // captura de vida facial no navegador e devolve uma referencia
+  // (selfie_video_ref) - a integracao real desse widget entra aqui,
+  // dentro de #kyc-widget. So a referencia trafega pro backend, nunca
+  // o video em si.
+  document.getElementById("start-verification")?.addEventListener("click", async () => {
+    const btn = document.getElementById("start-verification");
+    const errorEl = document.getElementById("verification-error");
+    if (!window.KycSdk) {
+      errorEl.textContent = "Verificação facial indisponível no momento. Tente novamente em instantes.";
+      errorEl.classList.remove("hidden");
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const { selfie_video_ref } = await window.KycSdk.startLivenessCapture({ target: "#kyc-widget" });
+      const resp = await fetch("{% url 'accounts:age_verification_request' %}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" },
+        body: JSON.stringify({ selfie_video_ref }),
+      });
+      if (!resp.ok) throw new Error("request failed");
+      window.location.reload();
+    } catch (e) {
+      errorEl.textContent = "Não foi possível concluir a verificação. Tente novamente.";
+      errorEl.classList.remove("hidden");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "core/base.html" %}
+{% block title %}Verificação de telefone — Renda &amp; Renda{% endblock %}
+
+{% block content %}
+<div class="max-w-sm mx-auto card p-6 sm:p-8 space-y-6" x-data="phoneVerification()">
+  <div class="text-center">
+    <h1 class="text-xl font-bold">Confirme seu celular</h1>
+    <p class="text-gray-500 text-sm mt-1">O número precisa estar registrado no seu CPF — validamos a titularidade antes de enviar o código.</p>
+  </div>
+
+  {% if request.user.is_phone_verified %}
+  <div class="text-center space-y-3">
+    <span class="badge-verified text-sm px-3 py-1">Verificado</span>
+    <p class="text-gray-400 text-sm">Celular confirmado: ***{{ request.user.phone_number|slice:"-4:" }}</p>
+    <a href="{% url 'stores:home' %}" class="btn-primary w-full">Voltar às lojas</a>
+  </div>
+  {% else %}
+
+  <div x-show="step === 1" class="space-y-4">
+    <div>
+      <label class="input-label" for="phone">Celular (DDD + número)</label>
+      <input id="phone" type="tel" x-model="phone" inputmode="numeric" placeholder="11999998888" class="input-field">
+      <p class="input-help">Titular da linha deve ser o mesmo CPF do cadastro.</p>
+    </div>
+    <p x-show="error" x-text="error" class="input-error"></p>
+    <button class="btn-primary w-full" @click="requestCode()" :disabled="loading">
+      <span x-show="!loading">Enviar código por SMS</span>
+      <span x-show="loading">Validando titularidade…</span>
+    </button>
+  </div>
+
+  <div x-show="step === 2" x-cloak class="space-y-4">
+    <div>
+      <label class="input-label" for="code">Código recebido por SMS</label>
+      <input id="code" type="text" x-model="code" inputmode="numeric" maxlength="6" placeholder="000000"
+             class="input-field text-center text-2xl tracking-[0.5em]">
+    </div>
+    <p x-show="error" x-text="error" class="input-error"></p>
+    <button class="btn-primary w-full" @click="confirmCode()" :disabled="loading">
+      <span x-show="!loading">Confirmar</span>
+      <span x-show="loading">Conferindo…</span>
+    </button>
+    <button class="btn-ghost w-full" @click="step = 1; error = ''">Trocar número</button>
+  </div>
+
+  <div x-show="step === 3" x-cloak class="text-center space-y-3">
+    <span class="badge-verified text-sm px-3 py-1">Verificado</span>
+    <p class="text-gray-400 text-sm">Telefone confirmado com sucesso.</p>
+    <a href="{% url 'stores:home' %}" class="btn-primary w-full">Continuar</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+function phoneVerification() {
+  return {
+    step: 1,
+    phone: "",
+    code: "",
+    loading: false,
+    error: "",
+    async requestCode() {
+      this.loading = true; this.error = "";
+      try {
+        const resp = await fetch("{% url 'accounts:phone_request' %}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+          body: JSON.stringify({ phone_number: this.phone }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { this.error = data.detail || "Não foi possível enviar o código."; return; }
+        this.step = 2;
+      } catch (e) { this.error = "Erro de conexão. Tente novamente."; }
+      finally { this.loading = false; }
+    },
+    async confirmCode() {
+      this.loading = true; this.error = "";
+      try {
+        const resp = await fetch("{% url 'accounts:phone_confirm' %}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+          body: JSON.stringify({ code: this.code }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { this.error = data.detail || "Código incorreto."; return; }
+        this.step = 3;
+      } catch (e) { this.error = "Erro de conexão. Tente novamente."; }
+      finally { this.loading = false; }
+    },
+  };
+}
+</script>
+{% endblock %}

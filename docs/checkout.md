@@ -1,0 +1,283 @@
+# Checkout, pagamento, frete e liberação — Renda & Renda
+
+> Documento técnico + pesquisa. Consolida as decisões do novo modelo de
+> negócio e o passo a passo de integração. Como todo o resto do projeto,
+> **nada entra em produção sem o aval jurídico** de `docs/BASE_JURIDICA.md`
+> (seção 7). As pesquisas abaixo são de julho/2026 — confirme preços,
+> contratos e termos de cada fornecedor antes de assinar.
+
+---
+
+## 1. Novo modelo de negócio (o que mudou)
+
+| Antes | Agora |
+|---|---|
+| Comprador pagava assinatura mensal para poder comprar | **Sem assinatura.** Navegar, ver fotos e comprar são gratuitos — só se paga o pedido no ato |
+| Vendedora pagava plano mensal para manter a loja | **Anunciar é grátis.** `Store.plan` é opcional (null = plano gratuito) |
+| Comissão calculada como % "para dentro" do preço | Vendedora declara **quanto quer receber** (`Product.payout_amount`); o site soma 30% **por cima**, e o comprador paga o total |
+| Frete repassado à vendedora | Frete + embalagem ficam com a plataforma, que **compra a etiqueta automaticamente** e entrega pronta pra vendedora colar |
+| Saldo liberado N dias após o envio | Comprador confirma o recebimento (libera na hora) **ou** libera automático 24h após a entrega |
+
+Como a plataforma ganha: **só a comissão de 30% sobre cada venda** (mais o que sobrar do frete acima do custo real da etiqueta). Sem receita recorrente.
+
+### Exemplo de cálculo (implementado em `apps/catalog/models.py`)
+
+```
+Vendedora quer receber:  R$ 100,00   (payout_amount)
+Comissão da plataforma:  R$  30,00   (30% por cima)
+─────────────────────────────────
+Preço exibido/pago:      R$ 130,00   (price)   ← Product.save() calcula
++ Frete (ex. PAC):       R$  18,50   (cotado do CEP da vendedora)
++ Embalagem:             R$   3,90   (PACKAGING_FEE, embutida no frete)
+─────────────────────────────────
+Comprador paga:          R$ 152,40
+Vendedora recebe:        R$ 100,00 (líquido, na carteira)
+Plataforma fica com:     R$  30,00 + sobra do frete
+```
+
+A tela de anúncio (`templates/catalog/product_create.html`) mostra esse
+cálculo **ao vivo** enquanto a vendedora digita o valor.
+
+---
+
+## 2. Gateway de pagamento — recomendação
+
+### O problema do nicho
+Gateways mainstream (Mercado Pago, PagSeguro, Stripe, bancos) **proíbem
+conteúdo adulto/íntimo nos termos** — risco de congelar saldo e banir a
+conta (`docs/BASE_JURIDICA.md` § 5). **Nunca integrar escondendo o nicho.**
+O enquadramento correto aqui é **venda de vestuário íntimo usado entre
+pessoas físicas** (produto físico), não conteúdo adulto digital — mas isso
+precisa estar **aprovado por escrito** no contrato do PSP.
+
+### Recomendação: Asaas (com Conta Escrow + Split + Subcontas)
+Pesquisa (jul/2026) mostrou que o Asaas é o que melhor cobre os 3 requisitos
+que o nosso fluxo exige **de forma nativa e em BRL**:
+
+1. **Split de pagamento** — divide automaticamente entre a subconta da
+   vendedora e a conta master da plataforma, por transação. (Iugu, Pagar.me
+   e Zoop também fazem split; escolhemos Asaas pelo escrow nativo.)
+2. **Subconta por vendedora** — criada no onboarding; é ela que recebe o
+   repasse, então **a plataforma nunca custodia o dinheiro** (peça central
+   da tese jurídica).
+3. **Conta Escrow** — retém o valor e libera **por prazo (até 45 dias) ou
+   manualmente via API** quando a entrega é confirmada. É exatamente o
+   "segura o dinheiro até o comprador confirmar" que queremos.
+   - Custo (jul/2026): **R$ 99,90/mês** (conta principal) + **R$ 9,90 por
+     subconta** com escrow ativo. Avaliar no volume — pode compensar ligar
+     escrow só acima de um ticket mínimo.
+
+**Alternativa**: Iugu (split + subcontas, bom painel de vendedor), mas o
+escrow condicionado a evento é menos explícito na doc — exigiria a gente
+controlar a retenção pelo lado de cá.
+
+### Meios de pagamento
+- **Pix** primeiro (sem chargeback; ideal pro nicho). Já temos a trava de
+  **pagamento só pelo CPF do titular** (`apps/payments/services.py:verify_payer_cpf`).
+- **Cartão de crédito** como secundário — o Asaas valida titularidade pelo
+  `creditCardHolderInfo.cpfCnpj` contra o customer (que é o CPF da conta).
+
+Fontes: [Asaas — Split](https://docs.asaas.com/docs/split-de-pagamentos) ·
+[Asaas — Conta Escrow](https://docs.asaas.com/docs/introducao-conta-escrow) ·
+[Iugu — Split](https://www.iugu.com/split-pagamentos)
+
+### Split Payment tributário (Reforma / IBS-CBS) — pode usar já?
+**Ainda não como fonte única.** Pesquisa (jul/2026):
+- A Receita + Comitê Gestor do IBS **publicaram a documentação técnica** da
+  Plataforma Pública do Split Payment em junho/2026.
+- **2026 é ano de teste** operacional, com alíquota simbólica de 1%.
+- A vigência efetiva começa em **2027** (CBS) e o IBS entra progressivamente
+  até **2032**. No início vale só para **Pix, boleto e transferência**
+  (cartão fica para depois).
+
+**O que isso significa pra nós:** o "split tributário" do governo (separar
+CBS/IBS na hora do pagamento) é **diferente** do split comercial do PSP
+(dividir entre vendedora e plataforma) que já usamos. Eles vão **coexistir**:
+o PSP continua fazendo o split comercial; quando o split tributário virar
+obrigatório, o próprio PSP (Asaas/Iugu) fará a segregação do imposto — não é
+algo que a gente implementa na mão. **Ação agora:** manter emissão de NFS-e
+correta (já temos, `apps/payments/invoicing.py`) e acompanhar o PSP liberar
+o suporte. Não bloquear o lançamento por causa disso.
+
+Fontes: [gov.br — documentação técnica](https://www.gov.br/fazenda/pt-br/assuntos/noticias/2026/junho/receita-federal-e-comite-gestor-do-ibs-publicam-documentacao-tecnica-da-plataforma-publica-do-split-payment) ·
+[Thomson Reuters](https://www.thomsonreuters.com.br/pt/tax-accounting/onesource-mastersaf/blog/split-payment-reforma-tributaria.html)
+
+---
+
+## 3. Logística — recomendação: Melhor Envio
+
+### Por que Melhor Envio
+Pesquisa (jul/2026) — a **Kangu encerrou** a intermediação de fretes em
+jan/2025, então saiu da mesa. O **Melhor Envio** virou o hub mais completo e
+faz tudo que o pedido exige, com **API gratuita**:
+
+- **Cotação simultânea** Correios + transportadoras privadas (Jadlog, Loggi,
+  Buslog…) numa chamada só — `POST /api/v2/me/shipment/calculate`.
+- **+14.000 pontos de postagem/coleta** parceiros, incluindo **Loggi Ponto**
+  e agências Jadlog — é o "sistema de pontos tipo Shopee/Mercado Livre" que
+  você pediu. Endpoint de agências devolve o ponto mais próximo do CEP.
+- **Compra de etiqueta via API** (carrinho → checkout → generate → print),
+  em **PDF/ZPL** — é o "papel pronto pra colar na encomenda".
+- **Rastreio unificado** independente da transportadora.
+- **Logística reversa/devolução** suportada (`reverse: true`).
+- **Sandbox** com saldo fake de R$ 10.000 para testar tudo.
+
+Implementado em `apps/shipping/melhor_envio.py` e plugado via
+`SHIPPING_PROVIDER=melhor_envio` (o provider Correios/CWS continua como
+alternativa).
+
+Fontes: [Melhor Envio — API](https://docs.melhorenvio.com.br/reference/introducao-api-melhor-envio) ·
+[Fim da Kangu](https://melhorenvio.com.br/blog/ecommerce-e-marketplace/fim-da-kangu-o-que-aconteceu/) ·
+[Loggi Ponto](https://melhorenvio.com.br/blog/frete-e-logistica/loggi-ponto/)
+
+### Fluxo automatizado da etiqueta (já implementado)
+1. Comprador escolhe o frete no checkout (cotado do **CEP da vendedora**).
+   A embalagem (`PACKAGING_FEE`) já vem somada.
+2. Pagamento confirma → webhook do PSP dispara
+   `apps.shipping.tasks.buy_label_for_order` (Celery).
+3. A **plataforma compra a etiqueta** no Melhor Envio com o frete que o
+   comprador pagou. A vendedora **não paga nada**.
+4. Vendedora recebe e-mail (`emails/label_ready.txt`) com: link do PDF da
+   etiqueta + **ponto de coleta mais próximo** dela.
+5. Rastreio sincroniza sozinho (`poll_active_shipments`, Celery beat) e o
+   comprador acompanha cada etapa em `/compras/`.
+
+---
+
+## 4. Retenção e liberação do saldo (escrow do nosso lado)
+
+Implementado em `apps/wallet/services.py` + `apps/shipping/`:
+
+1. Pagamento confirma → `credit_sale()` cria o crédito **retido**
+   (`available_at` = hoje + teto de segurança de 30 dias).
+2. Rastreio marca **entregue** → `mark_delivered()` muda o status, **sem
+   liberar**.
+3. Comprador tem **24h** (`DELIVERY_CONFIRMATION_WINDOW_HOURS`) para:
+   - **Confirmar** (`POST /api/pedidos/<id>/recebimento/` com `confirm`) →
+     `release_sale()` libera na hora; ou
+   - **Contestar** (`dispute`) → trava para análise, pedido vira `disputed`.
+4. Sem resposta, `release_confirmed_deliveries` (Celery beat, a cada 30 min)
+   libera automaticamente após a janela.
+5. Teto de 30 dias garante que extravio/rastreio travado não prenda o
+   dinheiro pra sempre (compatível com o máximo de 45 dias do escrow Asaas).
+
+Saque sempre para a **chave Pix = CPF da vendedora** (`request_withdrawal`).
+
+---
+
+## 5. Maioridade e responsabilidade jurídica (modelo Privacy + doc-sign)
+
+### Como a Privacy.com.br faz (pesquisa jul/2026)
+- **Criadoras/vendedoras**: KYC com análise de **documento + dados de
+  identificação + prova de autenticidade** da pessoa responsável pelo perfil.
+- **Assinantes/compradores**: processo de identificação que **confirma 18+**.
+- **Saque**: verificação de **titularidade da conta de destino**, com
+  mecanismos que **impedem transferência para terceiros** — exatamente o que
+  já fazemos (saque só pra chave CPF da titular).
+- **Moderação**: tecnologia (IA) + revisão humana.
+
+O que já temos alinhado a esse modelo: verificação de idade por CPF+biometria
+(`AgeVerification.validated_birth_date`, idade oficial da base do CPF),
+telefone vinculado ao CPF, KYC de vendedora com documento+selfie, saque só
+pro CPF, e moderação prévia.
+
+Fontes: [Privacy — verificação de identidade](https://privacy.com.br/verificacaoidentidade) ·
+[Privacy — do cadastro ao saque](https://blog.privacy.com.br/do-cadastro-ao-saque-como-a-privacy-garante-a-seguranca-de-criadores-e-usuarios-dentro-da-rede/) ·
+[Lei 15.211/2025 — guia 2026](https://mancheteesportiva.com.br/enciclopedia/lei-verificacao-idade-brasil-guia-2026/510/)
+
+### Assinatura eletrônica do termo (Clicksign / D4Sign / ZapSign)
+O checkbox de aceite do termo de maioridade + cessão de imagem serve para o
+MVP, mas para **força probatória plena** o termo deve ser **assinado
+eletronicamente** com trilha de auditoria (IP, timestamp, hash do documento).
+Pesquisa (jul/2026): **Clicksign** e **D4Sign** são as líderes no Brasil,
+com validade jurídica (MP 2.200-2/ICP-Brasil), servidores no país e ~16
+métodos de autenticação do signatário. **ZapSign** é a opção mais barata.
+
+Campos já preparados no modelo (`SellerKYC.esign_provider`,
+`esign_document_ref`, `esign_signed_at`, `esign_signed_document_url`) — falta
+só plugar o SDK/webhook do provider escolhido.
+
+Fontes: [Clicksign](https://www.clicksign.com/) ·
+[D4Sign](https://d4sign.com.br/) ·
+[Clicksign — validade jurídica](https://www.clicksign.com/validade-juridica)
+
+---
+
+## 6. Passo a passo de implementação
+
+### Pré-requisitos (contas e contratos)
+- [ ] Conta **Asaas** aprovada **por escrito** para o nicho (vestuário íntimo
+      usado entre PF). Ativar Split + Subcontas + **Conta Escrow**.
+- [ ] Conta **Melhor Envio** (sandbox para dev, produção depois). Gerar o
+      **token OAuth2**.
+- [ ] Provider de **KYC/idade** (idwall, unico, CAF) — CPF+biometria.
+- [ ] Bureau **telefone×CPF** (Serpro Datavalid, idwall) + provider de **SMS**
+      (Zenvia, Twilio, AWS SNS).
+- [ ] Provider de **NFS-e** (Focus NFe) + CNPJ com **razão social neutra**
+      (cobrança discreta).
+- [ ] Provider de **assinatura eletrônica** (Clicksign/D4Sign/ZapSign).
+
+### Variáveis de ambiente (ver `backend/.env.example`)
+```
+PAYMENT_PROVIDER=asaas
+ASAAS_API_KEY=...            ASAAS_WEBHOOK_TOKEN=...
+SHIPPING_PROVIDER=melhor_envio
+MELHOR_ENVIO_TOKEN=...       MELHOR_ENVIO_SANDBOX=True
+PLATFORM_COMMISSION_PERCENT=30
+PACKAGING_FEE=3.90
+DELIVERY_CONFIRMATION_WINDOW_HOURS=24
+PHONE_CPF_BUREAU_URL=...     PHONE_CPF_BUREAU_API_KEY=...
+SMS_PROVIDER_URL=...         SMS_PROVIDER_API_KEY=...
+NFSE_PROVIDER_API_KEY=...    PLATFORM_CNPJ=...  PLATFORM_MUNICIPAL_SERVICE_CODE=...
+```
+
+### Migrar e subir
+```bash
+cd backend
+pip install -r requirements.txt
+npm install && npm run build:css
+python manage.py migrate
+python manage.py createsuperuser
+# dev sem Redis/Postgres:
+#   USE_LOCMEM_CACHE=True CELERY_TASK_ALWAYS_EAGER=True DATABASE_URL=sqlite:///db.sqlite3
+python manage.py runserver
+```
+
+### Configurar webhooks
+- **Asaas** → `POST https://SEU_DOMINIO/webhooks/asaas/` (header
+  `Asaas-Access-Token` = `ASAAS_WEBHOOK_TOKEN`). Eventos: `PAYMENT_CONFIRMED`,
+  `PAYMENT_REFUNDED`, `PAYMENT_CHARGEBACK_REQUESTED`.
+- **KYC** → `POST https://SEU_DOMINIO/webhooks/kyc/` (header
+  `X-Kyc-Webhook-Token` = `AGE_KYC_API_KEY`).
+- **Melhor Envio**: o rastreio é puxado por polling (`poll_active_shipments`);
+  se quiser push, configurar o webhook de tracking do ME apontando pra um
+  endpoint novo (não obrigatório para o MVP).
+
+### O que já está pronto no código
+- Modelo de comissão (`Product.payout_amount` → `price`), sem paywall.
+- Checkout sem assinatura, com trava de CPF do pagador.
+- Cotação de frete do CEP da vendedora + embalagem embutida.
+- Compra automática de etiqueta + e-mail com PDF e ponto de coleta.
+- Confirmação de recebimento + liberação automática em 24h.
+- NF de serviço + e-mails (confirmação, NF, postagem/rastreio).
+- Campos de assinatura eletrônica no KYC.
+
+### O que falta plugar (integração real dos fornecedores)
+- SDK do provider de KYC/biometria na página de verificação de idade.
+- Chamada real do bureau telefone×CPF e do provider de SMS.
+- Webhook/SDK do provider de assinatura eletrônica do termo.
+- Credenciais reais do Asaas, Melhor Envio e Focus NFe (hoje rodam em modo
+  dev/sandbox, que **falha fechado** em produção sem credencial).
+
+---
+
+## 7. Checklist de teste (antes de abrir pro público)
+- [ ] Anunciar um item e conferir o cálculo comissão (payout → preço).
+- [ ] Comprar sem assinatura, pagando via Pix de conta do **próprio CPF**
+      (deve passar) e de **terceiro** (deve estornar).
+- [ ] Etiqueta comprada automaticamente e e-mail recebido com PDF + ponto.
+- [ ] Rastreio atualizando as etapas em `/compras/`.
+- [ ] Confirmar recebimento libera saldo; sem confirmar, libera em 24h.
+- [ ] Saque cai só na chave Pix = CPF da vendedora.
+- [ ] NF de serviço emitida e e-mail enviado (sem conteúdo explícito).
+- [ ] Todos os itens do `docs/BASE_JURIDICA.md` § 7 revisados por advogado.

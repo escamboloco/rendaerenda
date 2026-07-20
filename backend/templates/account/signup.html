@@ -1,0 +1,61 @@
+{% extends "core/base.html" %}
+{% load widget_tweaks %}
+{% block title %}Criar conta — Renda &amp; Renda{% endblock %}
+
+{% block content %}
+<div class="max-w-sm mx-auto">
+  <div class="card p-6 sm:p-8 space-y-6">
+    <div class="text-center">
+      <h1 class="text-xl font-bold">Criar conta</h1>
+      <p class="text-gray-500 text-sm mt-1">Cadastro permitido apenas para maiores de 18 anos.</p>
+    </div>
+
+    {% if form.non_field_errors %}
+    <div class="input-error">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>
+    {% endif %}
+
+    <form method="post" action="{% url 'account_signup' %}" class="space-y-4">
+      {% csrf_token %}
+
+      {% for field in form %}
+        {% if field.name == 'role' %}
+        <div>
+          <span class="input-label">{{ field.label }}</span>
+          <div class="grid grid-cols-2 gap-2">
+            {% for radio in field %}
+            <label class="chip justify-center cursor-pointer has-[:checked]:!border-brand has-[:checked]:!bg-brand/15 has-[:checked]:!text-white">
+              {{ radio.tag }} {{ radio.choice_label }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        {% else %}
+        <div>
+          <label class="input-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {% render_field field class="input-field" autocomplete="on" %}
+          {% if field.help_text %}<p class="input-help">{{ field.help_text }}</p>{% endif %}
+        </div>
+        {% endif %}
+        {% for error in field.errors %}<p class="input-error">{{ error }}</p>{% endfor %}
+      {% endfor %}
+
+      {% if redirect_field_value %}
+      <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+      {% endif %}
+
+      <p class="text-xs text-gray-500 leading-relaxed">
+        Ao continuar, você confirma ter 18 anos ou mais e concorda com os
+        <a href="{% url 'core_pages:terms' %}" class="text-brand hover:underline">Termos de Uso</a> e a
+        <a href="{% url 'core_pages:privacy' %}" class="text-brand hover:underline">Política de Privacidade</a>.
+        A verificação de idade real (documento + biometria) acontece no próximo passo.
+      </p>
+
+      <button type="submit" class="btn-primary w-full">Criar conta</button>
+    </form>
+
+    <p class="text-center text-sm text-gray-500">
+      Já tem conta? <a href="{% url 'account_login' %}" class="text-brand hover:underline">Entrar</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

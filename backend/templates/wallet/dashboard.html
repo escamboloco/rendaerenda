@@ -1,0 +1,160 @@
+{% extends "core/base.html" %}
+{% block title %}Carteira — {{ store.display_name }}{% endblock %}
+
+{% block content %}
+<div x-data="walletDashboard()" class="space-y-8 max-w-3xl mx-auto">
+  <div>
+    <h1 class="text-2xl font-bold">Carteira</h1>
+    <p class="text-gray-400 text-sm">Saldo da loja {{ store.display_name }}.</p>
+  </div>
+
+  <div class="grid sm:grid-cols-2 gap-4">
+    <div class="card p-5">
+      <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Disponível para saque</p>
+      <p class="text-3xl font-extrabold text-emerald-400">R$ {{ available_balance }}</p>
+    </div>
+    <div class="card p-5">
+      <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Pendente (liberação em até {{ release_days }} dias)</p>
+      <p class="text-3xl font-extrabold text-amber-400">R$ {{ pending_balance }}</p>
+    </div>
+  </div>
+
+  <div class="card p-5 space-y-4">
+    <h2 class="font-semibold">Sacar via Pix</h2>
+    <p class="text-sm text-gray-400">
+      Destino fixo por segurança: <span class="text-gray-200 font-medium">chave Pix do seu CPF</span>
+      (***.{{ store.owner.cpf|slice:"3:6" }}.{{ store.owner.cpf|slice:"6:9" }}-**).
+    </p>
+    <form @submit.prevent="withdraw" class="flex flex-col sm:flex-row gap-3">
+      <input type="number" step="0.01" min="0.01" x-model="amount" placeholder="Valor (R$)" required class="input-field sm:max-w-[200px]" aria-label="Valor do saque">
+      <button type="submit" class="btn-primary sm:w-auto" :disabled="loading">
+        <span x-show="!loading">Sacar</span>
+        <span x-show="loading">Enviando…</span>
+      </button>
+    </form>
+    <p x-show="error" x-text="error" class="input-error"></p>
+    <p x-show="success" class="text-sm text-emerald-400">Saque solicitado com sucesso.</p>
+  </div>
+
+  <div class="card p-5">
+    <h2 class="font-semibold mb-3">Pedidos da loja</h2>
+    <p class="text-xs text-gray-500 mb-3">Após postar nos Correios, registre o código de rastreio — o comprador é avisado por e-mail e a entrega antecipa a liberação do seu saldo.</p>
+    <div class="space-y-3">
+      {% for order in orders %}
+      <div class="card bg-surface-alt p-4 space-y-2" x-data="{ code: '', err: '' }">
+        <div class="flex items-center justify-between gap-3 text-sm">
+          <span class="font-medium">#{{ order.id|slice:":8" }} · R$ {{ order.grand_total }}</span>
+          {% if order.status == 'paid' %}<span class="badge-pending">Aguardando postagem</span>
+          {% elif order.status == 'shipped' %}<span class="badge-neutral">Enviado</span>
+          {% else %}<span class="badge-verified">Entregue</span>{% endif %}
+        </div>
+        {% if order.status == 'paid' %}
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input type="text" x-model="code" placeholder="Código de rastreio (AA123456789BR)" maxlength="13"
+                 class="input-field flex-1 uppercase" style="text-transform: uppercase">
+          <button type="button" class="btn-primary !py-2 sm:w-auto"
+                  @click="fetch('/api/vendedora/pedidos/{{ order.id }}/postagem/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN },
+                            body: JSON.stringify({ tracking_code: code.toUpperCase() }),
+                          }).then(r => r.ok ? window.location.reload() : r.json().then(d => err = d.tracking_code ? 'Código inválido (formato AA123456789BR).' : (d.detail || 'Falha ao registrar.')))">
+            Registrar postagem
+          </button>
+        </div>
+        <p x-show="err" x-text="err" class="input-error"></p>
+        {% elif order.shipment.tracking_code %}
+        <p class="text-xs text-gray-500">Rastreio: <span class="text-gray-300 font-mono">{{ order.shipment.tracking_code }}</span></p>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p class="text-gray-500 text-sm">Nenhum pedido pago ainda.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card p-5">
+    <h2 class="font-semibold mb-3">Histórico de saques</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-gray-500 text-xs uppercase">
+          <tr><th class="text-left py-2">Data</th><th class="text-left py-2">Valor</th><th class="text-left py-2">Status</th></tr>
+        </thead>
+        <tbody class="table-row-alt">
+          {% for w in withdrawals %}
+          <tr>
+            <td class="py-2">{{ w.requested_at|date:"d/m/Y H:i" }}</td>
+            <td class="py-2">R$ {{ w.amount }}</td>
+            <td class="py-2">
+              {% if w.status == 'paid' %}<span class="badge-verified">Pago</span>
+              {% elif w.status == 'failed' %}<span class="badge text-red-400 bg-red-400/10">Falhou</span>
+              {% else %}<span class="badge-pending">{{ w.get_status_display }}</span>{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" class="py-4 text-gray-500 text-center">Nenhum saque ainda.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card p-5">
+    <h2 class="font-semibold mb-3">Extrato</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-gray-500 text-xs uppercase">
+          <tr><th class="text-left py-2">Data</th><th class="text-left py-2">Tipo</th><th class="text-left py-2">Valor</th><th class="text-left py-2">Disponível em</th></tr>
+        </thead>
+        <tbody class="table-row-alt">
+          {% for entry in entries %}
+          <tr>
+            <td class="py-2">{{ entry.created_at|date:"d/m/Y" }}</td>
+            <td class="py-2">{{ entry.get_kind_display }}</td>
+            <td class="py-2 {% if entry.amount < 0 %}text-red-400{% else %}text-emerald-400{% endif %}">R$ {{ entry.amount }}</td>
+            <td class="py-2 text-gray-500">{{ entry.available_at|date:"d/m/Y" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="py-4 text-gray-500 text-center">Nenhuma movimentação ainda.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+function walletDashboard(availableBalance) {
+  return {
+    amount: "",
+    loading: false,
+    error: "",
+    success: false,
+    async withdraw() {
+      this.loading = true;
+      this.error = "";
+      this.success = false;
+      try {
+        const resp = await fetch("{% url 'wallet_api:withdrawal' %}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" },
+          body: JSON.stringify({ amount: this.amount }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          this.error = Array.isArray(data) ? data.join(" ") : (data.detail || "Não foi possível solicitar o saque.");
+          return;
+        }
+        this.success = true;
+        setTimeout(() => window.location.reload(), 1200);
+      } catch (e) {
+        this.error = "Erro de conexão. Tente novamente.";
+      } finally {
+        this.loading = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}
