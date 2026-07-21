@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
@@ -50,3 +52,7 @@ urlpatterns = [
     path("", include("apps.catalog.urls")),
     path("", include("apps.stores.urls")),
 ]
+
+# Mídia local (uploads) só em dev sem S3 - static() é no-op com DEBUG=False.
+if settings.DEBUG and not settings.AWS_STORAGE_BUCKET_NAME:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
