@@ -60,11 +60,14 @@ envVarGroups:
       - key: DEFAULT_FROM_EMAIL
         value: "Renda & Renda <no-reply@rendaerenda.com.br>"
 
-databases:
-  - name: rendaerenda-db
-    plan: starter
-    region: oregon
-    postgresMajorVersion: "16"
+# Sem bloco `databases:` de proposito: usamos um Postgres premium que ja
+# existe em producao (fora deste blueprint), em vez de deixar o Render
+# provisionar um banco novo pelo blueprint (que ficaria preso no plano
+# `starter`, indisponivel na conta). DATABASE_URL e preenchido manualmente
+# em cada servico abaixo (ver nota no `sync: false` correspondente) - cole
+# a "Internal Database URL" do banco existente (mais rapido/sem custo de
+# bandwidth do que a "External Database URL", já que web/worker rodam
+# dentro do proprio Render).
 
 services:
   - type: redis
@@ -85,9 +88,7 @@ services:
     envVars:
       - fromGroup: rendaerenda-shared
       - key: DATABASE_URL
-        fromDatabase:
-          name: rendaerenda-db
-          property: connectionString
+        sync: false # cole a Internal Database URL do Postgres premium ja existente
       - key: REDIS_URL
         fromService:
           type: redis
@@ -159,9 +160,7 @@ services:
     envVars:
       - fromGroup: rendaerenda-shared
       - key: DATABASE_URL
-        fromDatabase:
-          name: rendaerenda-db
-          property: connectionString
+        sync: false # cole a Internal Database URL do Postgres premium ja existente
       - key: REDIS_URL
         fromService:
           type: redis

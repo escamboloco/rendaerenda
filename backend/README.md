@@ -57,11 +57,11 @@ Para checar sem Postgres/Redis instalados (ex.: sanity check rápido), use `DATA
 
 ## Deploy no Render
 
-Use o `render.yaml` na raiz do repositório (Blueprint). Ele sobe: web (gunicorn), worker Celery (com beat embutido), Postgres e Redis.
+Use o `render.yaml` na raiz do repositório (Blueprint). Ele sobe: web (gunicorn), worker Celery (com beat embutido) e Redis. **Postgres não é provisionado pelo blueprint** — o projeto usa um banco premium já existente em produção (o plano `starter` gerenciado pelo blueprint pode não estar disponível na conta); `DATABASE_URL` é preenchido manualmente em cada serviço.
 
 1. Rode `npm run build:css` e commite `static/css/tailwind.css` (o build do Render é Python puro, sem Node — ver `build.sh`).
 2. No dashboard do Render, crie o Blueprint apontando pro repositório.
-3. Preencha as variáveis marcadas `sync: false` no `render.yaml` (segredos: Asaas, S3, KYC, Correios, SMTP, `SITE_DOMAIN`).
+3. Preencha as variáveis marcadas `sync: false` no `render.yaml` (segredos: Asaas, S3, KYC, Correios, SMTP, `SITE_DOMAIN`) — incluindo `DATABASE_URL` de cada serviço, com a **Internal Database URL** do Postgres existente (mais rápida e sem custo de bandwidth do que a External, já que web/worker rodam dentro do próprio Render).
 4. Depois do primeiro deploy, rode `python manage.py createsuperuser` via shell do Render.
 
 ## Checklist antes de expor a público
