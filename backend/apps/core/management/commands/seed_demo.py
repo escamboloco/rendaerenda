@@ -16,13 +16,14 @@ Regras:
 import datetime
 import io
 import random
+import unicodedata
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from apps.accounts.models import AgeVerification, SellerKYC, User
 from apps.catalog.models import Category, Product, ProductImage
@@ -77,31 +78,171 @@ REVIEW_COMMENTS = [
     "",
 ]
 
-# Paleta violeta/vermelho do design system para as imagens placeholder.
-GRADIENTS = [
-    ((124, 77, 191), (224, 36, 63)),
-    ((76, 45, 120), (124, 77, 191)),
-    ((224, 36, 63), (113, 16, 34)),
-    ((28, 19, 41), (124, 77, 191)),
-    ((28, 19, 41), (224, 36, 63)),
+# --- Geração de imagens ilustrativas de produto ---------------------------
+# NAO sao fotos reais: sao ilustracoes vetoriais (silhueta da peca) sobre um
+# fundo de estudio, na cor mencionada no titulo. Placeholder digno de
+# catalogo, sem qualquer conteudo fotografico (por isso nao ha questao de
+# consentimento/KYC de pessoa real - ver docs/BASE_JURIDICA.md).
+
+COLOR_RGB = {
+    "preta": (38, 38, 44), "preto": (38, 38, 44),
+    "vermelha": (198, 32, 52), "vermelho": (198, 32, 52),
+    "vinho": (120, 22, 48),
+    "lilás": (176, 140, 214), "lilas": (176, 140, 214),
+    "rosa": (233, 120, 162),
+    "branca": (240, 240, 244), "branco": (240, 240, 244),
+    "azul": (60, 92, 184),
+    "nude": (216, 178, 150),
+}
+
+
+def garment_color(title: str):
+    t = title.lower()
+    for key, rgb in COLOR_RGB.items():
+        if key in t:
+            return rgb
+    return (124, 77, 191)  # violeta da marca como padrao
+
+
+def _darker(rgb, f=0.62):
+    return tuple(int(c * f) for c in rgb)
+
+
+def _lighter(rgb, f=0.45):
+    return tuple(int(c + (255 - c) * f) for c in rgb)
+
+
+_FONT_PATHS = [
+    "C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/arial.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/Library/Fonts/Arial.ttf",
 ]
 
 
-def make_placeholder_jpeg(seed: int, label: str) -> bytes:
-    """Gradiente 600x600 com um marcador d'água textual - nenhuma foto real."""
-    top, bottom = GRADIENTS[seed % len(GRADIENTS)]
-    img = Image.new("RGB", (600, 600))
-    for y in range(600):
-        t = y / 599
-        color = tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3))
-        for x in range(600):
-            img.putpixel((x, y), color)
-    draw = ImageDraw.Draw(img)
-    draw.text((24, 552), label, fill=(255, 255, 255))
-    draw.text((24, 24), "foto ilustrativa", fill=(230, 230, 230))
+def _font(size: int):
+    """TrueType (com acentos) se disponível; senão a bitmap padrão (sem acentos)."""
+    for path in _FONT_PATHS:
+        try:
+            return ImageFont.truetype(path, size), True
+        except OSError:
+            continue
+    return ImageFont.load_default(size=size), False
+
+
+def _ascii(s: str) -> str:
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+
+
+def _studio_bg(w: int) -> Image.Image:
+    """Fundo de estudio: leve gradiente vertical mauve claro."""
+    top, bot = (240, 235, 242), (206, 197, 215)
+    mask = Image.linear_gradient("L").resize((w, w))
+    return Image.composite(Image.new("RGB", (w, w), bot), Image.new("RGB", (w, w), top), mask)
+
+
+def _draw_garment(d: ImageDraw.ImageDraw, w: int, category: str, c, cd, cl):
+    def P(f):  # fracao -> pixel
+        return int(f * w)
+
+    trim = max(P(0.006), 2)
+    if category == "Calcinhas":
+        d.rounded_rectangle([P(.34), P(.37), P(.66), P(.43)], radius=P(.02), fill=cd)
+        body = [(P(.34), P(.41)), (P(.66), P(.41)), (P(.615), P(.52)),
+                (P(.55), P(.62)), (P(.50), P(.67)), (P(.45), P(.62)), (P(.385), P(.52))]
+        d.polygon(body, fill=c)
+        d.line(body + [body[0]], fill=cl, width=trim, joint="curve")
+    elif category == "Sutiãs":
+        d.rounded_rectangle([P(.32), P(.54), P(.68), P(.60)], radius=P(.02), fill=cd)
+        d.ellipse([P(.32), P(.40), P(.505), P(.62)], fill=c)
+        d.ellipse([P(.495), P(.40), P(.68), P(.62)], fill=c)
+        d.line([(P(.36), P(.42)), (P(.42), P(.20))], fill=c, width=P(.022))
+        d.line([(P(.64), P(.42)), (P(.58), P(.20))], fill=c, width=P(.022))
+        d.arc([P(.32), P(.40), P(.505), P(.66)], 20, 160, fill=cl, width=trim)
+        d.arc([P(.495), P(.40), P(.68), P(.66)], 20, 160, fill=cl, width=trim)
+    elif category == "Meias":
+        for base in (.30, .52):
+            left, right = P(base), P(base + .18)
+            d.rounded_rectangle([left, P(.18), right, P(.82)], radius=P(.06), fill=c)
+            d.rounded_rectangle([left, P(.18), right, P(.28)], radius=P(.05), fill=cd)
+            d.line([(left, P(.29)), (right, P(.29))], fill=cl, width=trim)
+    elif category == "Sungas":
+        d.rounded_rectangle([P(.34), P(.40), P(.66), P(.47)], radius=P(.02), fill=cd)
+        d.polygon([(P(.34), P(.45)), (P(.66), P(.45)), (P(.62), P(.62)),
+                   (P(.54), P(.70)), (P(.46), P(.70)), (P(.38), P(.62))], fill=c)
+        d.polygon([(P(.46), P(.70)), (P(.50), P(.60)), (P(.54), P(.70))], fill=(0, 0, 0, 0))
+        d.line([(P(.34), P(.47)), (P(.66), P(.47))], fill=cl, width=trim)
+    else:  # Bodys — maiô/body inteiriço: ombros, cintura leve, quadril arredondado
+        d.line([(P(.40), P(.31)), (P(.44), P(.20))], fill=c, width=P(.018))
+        d.line([(P(.60), P(.31)), (P(.56), P(.20))], fill=c, width=P(.018))
+        body = [(P(.38), P(.30)), (P(.62), P(.30)), (P(.58), P(.44)),
+                (P(.545), P(.54)), (P(.58), P(.66)), (P(.53), P(.70)),
+                (P(.50), P(.715)), (P(.47), P(.70)), (P(.42), P(.66)),
+                (P(.455), P(.54)), (P(.42), P(.44))]
+        d.polygon(body, fill=c)
+        d.polygon([(P(.47), P(.30)), (P(.53), P(.30)), (P(.50), P(.375))], fill=(0, 0, 0, 0))
+        d.line([(P(.455), P(.54)), (P(.545), P(.54))], fill=cl, width=trim)
+
+
+def make_product_image(category: str, title: str, variant: int) -> bytes:
+    """Ilustração 800x800 da peça (supersampling 2x) sobre fundo de estúdio."""
+    w, ss = 800, 2
+    wk = w * ss
+    c = garment_color(title)
+    cd, cl = _darker(c), _lighter(c)
+
+    bg = _studio_bg(w)
+
+    shadow = Image.new("RGBA", (w, w), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).ellipse([w * 0.28, w * 0.74, w * 0.72, w * 0.86], fill=(40, 20, 50, 90))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(14))
+    bg.paste(shadow, (0, 0), shadow)
+
+    layer = Image.new("RGBA", (wk, wk), (0, 0, 0, 0))
+    _draw_garment(ImageDraw.Draw(layer), wk, category, c, cd, cl)
+    layer = layer.resize((w, w), Image.LANCZOS)
+    if variant == 1:  # 2a foto: leve angulo, como se fosse outro shot
+        layer = layer.rotate(-8, resample=Image.BICUBIC, expand=False)
+    bg.paste(layer, (0, 0), layer)
+
+    dd = ImageDraw.Draw(bg)
+    wm_font, has_unicode = _font(22)
+    lb_font, _ = _font(18)
+    wordmark = "RENDA & RENDA"
+    label = f"{category} · foto ilustrativa"
+    if not has_unicode:  # bitmap padrão não tem acentos/·: normaliza pra ASCII
+        wordmark, label = _ascii(wordmark), _ascii(label)
+    dd.text((24, 22), wordmark, fill=(120, 90, 140), font=wm_font)
+    dd.text((24, w - 40), label, fill=(90, 70, 110), font=lb_font)
+
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=80)
+    bg.convert("RGB").save(buf, format="JPEG", quality=85)
     return buf.getvalue()
+
+
+# Descrições variadas, montadas por peça (não explícitas).
+FABRIC = {
+    "Calcinhas": ["renda", "algodão", "microfibra", "cetim"],
+    "Sutiãs": ["renda", "cetim", "microfibra"],
+    "Meias": ["algodão", "fio de seda", "poliamida"],
+    "Sungas": ["poliéster", "microfibra"],
+    "Bodys": ["renda", "tule", "cetim"],
+}
+SIZES = ["PP", "P", "M", "G"]
+
+
+def build_description(title: str, category: str, idx: int) -> str:
+    fabrics = FABRIC.get(category, ["tecido macio"])
+    fabric = fabrics[idx % len(fabrics)]
+    size = SIZES[idx % len(SIZES)]
+    days = [1, 2, 3, 4][idx % 4]
+    base_name = title.split("—")[0].strip()
+    return (
+        f"{base_name} em {fabric}, tamanho {size}. "
+        f"Usada com carinho por {days} dia(s), em ótimo estado. "
+        "Embalagem lacrada e discreta, sem identificação do conteúdo por fora. "
+        "Postagem em até 2 dias úteis após a confirmação do pagamento. "
+        "Toda a negociação e o contato acontecem dentro da plataforma."
+    )
 
 
 class Command(BaseCommand):
@@ -178,22 +319,19 @@ class Command(BaseCommand):
             for offset in range(4):
                 title, cat_name, payout, grams = PRODUCTS[(store_index * 2 + offset) % len(PRODUCTS)]
                 slug = f"{store.slug}-item-{offset + 1}"
+                idx = store_index * 4 + offset
                 product, created = Product.objects.get_or_create(
                     store=store, slug=slug,
                     defaults={
                         "category": categories[cat_name], "title": title,
-                        "description": (
-                            "Item físico usado, exatamente como descrito no título. "
-                            "Embalagem lacrada e discreta, sem identificação do conteúdo. "
-                            "Envio em até 2 dias úteis após a compra."
-                        ),
+                        "description": build_description(title, cat_name, idx),
                         "payout_amount": Decimal(payout), "weight_grams": grams,
                         "status": "published", "stock": 1,
                     },
                 )
                 if created:
                     for image_index in range(2):
-                        data = make_placeholder_jpeg(store_index * 4 + offset + image_index, store.display_name)
+                        data = make_product_image(cat_name, title, image_index)
                         ProductImage.objects.create(
                             product=product,
                             file=ContentFile(data, name=f"{slug}-{image_index}.jpg"),
