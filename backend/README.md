@@ -14,14 +14,22 @@ pip install -r requirements.txt
 npm install
 npm run build:css   # gera static/css/tailwind.css a partir de static/css/input.css
 
-cp .env.example .env   # preencha DATABASE_URL (Postgres) e REDIS_URL no mínimo
+cp .env.example .env   # preencha DATABASE_URL (Postgres) no mínimo
 
 python manage.py migrate
+python manage.py createcachetable   # tabela do cache (rate-limit) - sem Redis
 python manage.py createsuperuser
 python manage.py runserver
 ```
 
-Para checar sem Postgres/Redis instalados (ex.: sanity check rápido), use `DATABASE_URL=sqlite:///db.sqlite3` + `USE_LOCMEM_CACHE=True` + `CELERY_TASK_ALWAYS_EAGER=True` no `.env` (ou como env var na hora de rodar) — mas produção é sempre Postgres + Redis reais.
+Sem Redis nem worker Celery: cache e rate-limit usam uma tabela no próprio
+Postgres (`django.core.cache.backends.db.DatabaseCache`), e toda task Celery
+roda síncrona no mesmo processo (`CELERY_TASK_ALWAYS_EAGER = True` sempre,
+ver `config/settings.py`) — arquitetura de menor custo no Render (só o
+serviço `web` + 2 Cron Jobs curtos, ver seção de deploy abaixo). Para checar
+sem Postgres instalado (ex.: sanity check rápido), use
+`DATABASE_URL=sqlite:///db.sqlite3` + `USE_LOCMEM_CACHE=True` no `.env` (ou
+como env var na hora de rodar) — mas produção é sempre Postgres real.
 
 **Sempre que mexer em `templates/**/*.html` ou `static/css/input.css`, rode `npm run build:css` de novo antes de commitar** — o build do Render não roda `npm` (ver `build.sh`), então o CSS compilado precisa estar atualizado no repo.
 
@@ -57,11 +65,27 @@ Para checar sem Postgres/Redis instalados (ex.: sanity check rápido), use `DATA
 
 ## Deploy no Render
 
-Use o `render.yaml` na raiz do repositório (Blueprint). Ele sobe: web (gunicorn), worker Celery (com beat embutido) e Redis. **Postgres não é provisionado pelo blueprint** — o projeto usa um banco premium já existente em produção (o plano `starter` gerenciado pelo blueprint pode não estar disponível na conta); `DATABASE_URL` é preenchido manualmente em cada serviço.
+Use o `render.yaml` na raiz do repositório (Blueprint). Arquitetura pensada
+pro **menor custo possível**: só 1 serviço `web` (gunicorn, plano `starter`)
++ 2 Render Cron Jobs curtos (`rendaerenda-poll-shipments` de hora em hora,
+`rendaerenda-release-deliveries` a cada 30 min — cron cobra por segundo de
+execução, não por hora ligado). **Sem Redis** (cache/rate-limit usam uma
+tabela no próprio Postgres) **e sem worker Celery 24/7** (as tasks
+assíncronas do checkout rodam síncronas no próprio processo do gunicorn —
+`CELERY_TASK_ALWAYS_EAGER = True`, ver `config/settings.py`). **Postgres não
+é provisionado pelo blueprint** — o projeto usa um banco premium já
+existente em produção (o plano `starter` gerenciado pelo blueprint pode não
+estar disponível na conta); `DATABASE_URL` é preenchido manualmente em cada
+serviço.
+
+Se o volume de pedidos crescer a ponto do checkout ficar lento esperando
+e-mail/NF-e ser emitida de forma síncrona, volte pro modelo com Redis +
+worker Celery dedicado (mais caro, mas desacopla o processamento assíncrono
+do tempo de resposta do webhook).
 
 1. Rode `npm run build:css` e commite `static/css/tailwind.css` (o build do Render é Python puro, sem Node — ver `build.sh`).
 2. No dashboard do Render, crie o Blueprint apontando pro repositório.
-3. Preencha as variáveis marcadas `sync: false` no `render.yaml` (segredos: Asaas, S3, KYC, Correios, SMTP, `SITE_DOMAIN`) — incluindo `DATABASE_URL` de cada serviço, com a **Internal Database URL** do Postgres existente (mais rápida e sem custo de bandwidth do que a External, já que web/worker rodam dentro do próprio Render).
+3. Preencha as variáveis marcadas `sync: false` no `render.yaml` (segredos: Asaas, S3, KYC, Correios, SMTP, `SITE_DOMAIN`) em cada um dos 3 serviços que precisar delas — incluindo `DATABASE_URL`, com a **Internal Database URL** do Postgres existente (mais rápida e sem custo de bandwidth do que a External, já que os serviços rodam dentro do próprio Render).
 4. Depois do primeiro deploy, rode `python manage.py createsuperuser` via shell do Render.
 
 ## Checklist antes de expor a público

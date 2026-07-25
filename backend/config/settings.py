@@ -165,7 +165,13 @@ CSP_IMG_SRC = ("'self'", "data:", f"https://{AWS_STORAGE_BUCKET_NAME}" if AWS_ST
 # Vídeos de produto (apps.catalog.models.ProductVideo) servidos do mesmo
 # bucket privado com URL assinada.
 CSP_MEDIA_SRC = ("'self'", f"https://{AWS_STORAGE_BUCKET_NAME}" if AWS_STORAGE_BUCKET_NAME else "'self'")
-CSP_SCRIPT_SRC = ("'self'",)
+# 'unsafe-eval' e exigido pelo Alpine.js (build padrao, nao o build "csp")
+# pra avaliar expressoes como x-show/x-data - sem isso, TODA diretiva
+# Alpine falha silenciosamente (fica no estado inicial: x-cloak nunca vira
+# x-show, modais somem ou ficam presos visiveis). O script em si continua
+# restrito a 'self' - nao abre brecha pra script de terceiro, so pra eval
+# do proprio JS que ja roda na pagina.
+CSP_SCRIPT_SRC = ("'self'", "'unsafe-eval'")
 CSP_STYLE_SRC = ("'self'", "'unsafe-inline'")
 CSP_FONT_SRC = ("'self'",)
 CSP_CONNECT_SRC = ("'self'",)
@@ -194,37 +200,31 @@ LOGGING = {
 # --- Rate limiting ---
 RATELIMIT_ENABLE = True
 RATELIMIT_USE_CACHE = "default"
-# USE_LOCMEM_CACHE=True roda sem Redis (dev/smoke test local) - o throttle
-# do DRF usa o cache default, entao sem isso qualquer endpoint com throttle
-# quebra na ausencia de Redis. Producao SEMPRE usa Redis.
+# Cache no proprio Postgres (tabela django_cache) - sem custo extra de um
+# servico Redis no Render. USE_LOCMEM_CACHE=True pula ate o banco (dev
+# rapido/smoke test); nunca usar isso em producao (cache nao seria
+# compartilhado entre workers do gunicorn).
 if config("USE_LOCMEM_CACHE", default=False, cast=bool):
     CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 else:
     CACHES = {
         "default": {
-            "BACKEND": "django.core.cache.backends.redis.RedisCache",
-            "LOCATION": config("REDIS_URL", default="redis://localhost:6379/0"),
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "django_cache",
         }
     }
 
-CELERY_BROKER_URL = config("REDIS_URL", default="redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = CELERY_BROKER_URL
-# True executa tasks inline (sem broker) - so para dev/teste local.
-CELERY_TASK_ALWAYS_EAGER = config("CELERY_TASK_ALWAYS_EAGER", default=False, cast=bool)
+# Sem worker/broker dedicado no Render (custo) - toda task Celery roda
+# sincrona, no mesmo processo do gunicorn/manage.py que a disparou.
+# ".delay(...)" continua funcionando normalmente nesse modo. As duas
+# tarefas periodicas (rastreio de envio + liberacao de saldo) rodam via
+# Render Cron Job chamando os management commands `poll_shipments` e
+# `release_deliveries` (ver render.yaml) em vez de um Celery beat.
+CELERY_BROKER_URL = "memory://"
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_TASK_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_BEAT_SCHEDULE = {
-    "poll-active-shipments": {
-        "task": "apps.shipping.tasks.poll_active_shipments",
-        "schedule": 3600.0,  # a cada hora
-    },
-    # Libera saldo da vendedora: confirmacao do comprador ou 24h apos a
-    # entrega sem contestacao (docs/checkout.md).
-    "release-confirmed-deliveries": {
-        "task": "apps.shipping.tasks.release_confirmed_deliveries",
-        "schedule": 1800.0,  # a cada 30 min
-    },
-}
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

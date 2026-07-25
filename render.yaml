@@ -1,16 +1,28 @@
 # Blueprint de deploy no Render (https://render.com/docs/blueprint-spec).
-# Sobe: site (Django/gunicorn), worker Celery (com beat embutido), Postgres
-# e Redis. Depois do primeiro deploy, va no dashboard de cada servico e
-# preencha as variaveis marcadas com `sync: false` abaixo (segredos - nunca
-# comitar no repo). Ver docs/BASE_JURIDICA.md para o que cada uma controla.
+#
+# Arquitetura de MENOR CUSTO possivel: 1 unico servico "web" (Django/
+# gunicorn) + 2 Render Cron Jobs curtos para as tarefas periodicas. Sem
+# Redis (cache/rate-limit usam o proprio Postgres) e sem worker Celery
+# 24/7 (tasks assincronas do checkout rodam sincronas no mesmo processo
+# do gunicorn via CELERY_TASK_ALWAYS_EAGER - ver config/settings.py).
+# Cron Job no Render cobra por segundo de execucao, nao por hora ligado,
+# entao os dois jobs abaixo custam poucos centavos por mes.
+#
+# Se o volume crescer a ponto do checkout ficar lento esperando e-mail/NF-e
+# sincrono, volte pro modelo com worker+Redis dedicados (arquitetura
+# anterior, ainda documentada no historico do git).
+#
+# Depois do primeiro deploy, va no dashboard do servico "web" e preencha as
+# variaveis marcadas com `sync: false` abaixo (segredos - nunca comitar no
+# repo). Ver docs/BASE_JURIDICA.md para o que cada uma controla.
 #
 # IMPORTANTE sobre envVarGroups: o grupo abaixo (rendaerenda-shared) so pode
 # conter valores LITERAIS ou `generateValue: true` - o Render nao aceita
 # `sync: false`, `fromDatabase` nem `fromService` dentro de um grupo (e
 # YAML nao tem como "espalhar" uma lista dentro da outra via ancora, entao
 # nao da pra fatorar isso com &anchor/*alias). Por isso os segredos (API
-# keys, tokens, credenciais) aparecem repetidos em CADA servico (web e
-# worker) que precisa deles, em vez de ficarem so no grupo.
+# keys, tokens, credenciais) aparecem repetidos em CADA servico que precisa
+# deles, em vez de ficarem so no grupo.
 
 envVarGroups:
   - name: rendaerenda-shared
@@ -25,8 +37,8 @@ envVarGroups:
         value: "Renda & Renda"
       - key: CSRF_TRUSTED_ORIGINS
         value: "https://*.onrender.com" # trocar pelo dominio custom quando configurar um
-      # Gerado UMA vez e compartilhado identico entre web e worker - por
-      # isso fica no grupo (generateValue e permitido aqui, sync:false nao).
+      # Gerado UMA vez e compartilhado identico entre web e os cron jobs -
+      # por isso fica no grupo (generateValue e permitido aqui, sync:false nao).
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT
@@ -66,16 +78,10 @@ envVarGroups:
 # `starter`, indisponivel na conta). DATABASE_URL e preenchido manualmente
 # em cada servico abaixo (ver nota no `sync: false` correspondente) - cole
 # a "Internal Database URL" do banco existente (mais rapido/sem custo de
-# bandwidth do que a "External Database URL", já que web/worker rodam
+# bandwidth do que a "External Database URL", já que web/cron rodam
 # dentro do proprio Render).
 
 services:
-  - type: redis
-    name: rendaerenda-redis
-    plan: starter
-    region: oregon
-    ipAllowList: [] # sem acesso externo - so servicos deste projeto usam
-
   - type: web
     name: rendaerenda-web
     runtime: python
@@ -88,14 +94,9 @@ services:
     envVars:
       - fromGroup: rendaerenda-shared
       - key: DATABASE_URL
-        sync: false # cole a Internal Database URL do Postgres premium ja existente
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: rendaerenda-redis
-          property: connectionString
+        sync: false
       - key: SITE_DOMAIN
-        sync: false # dominio final (custom domain configurado no Render)
+        sync: false
       - key: ASAAS_API_KEY
         sync: false
       - key: ASAAS_WEBHOOK_TOKEN
@@ -145,50 +146,21 @@ services:
       - key: EMAIL_HOST_PASSWORD
         sync: false
 
-  - type: worker
-    name: rendaerenda-celery
+  # Cron Jobs: cobrados por segundo de execucao (nao por hora ligado), bem
+  # mais barato que manter um worker Celery 24/7 rodando so pra 2 tarefas
+  # curtas. Mesmo Postgres/env do servico web.
+  - type: cron
+    name: rendaerenda-poll-shipments
     runtime: python
     region: oregon
     plan: starter
     rootDir: backend
+    schedule: "0 * * * *" # a cada hora
     buildCommand: "pip install -r requirements.txt"
-    # -B roda o beat scheduler no mesmo processo do worker - unico job
-    # periodico hoje e o poll de rastreio dos Correios/Melhor Envio e a
-    # liberacao automatica de saldo (config/settings.py CELERY_BEAT_SCHEDULE).
-    # Separar em servico proprio se o volume crescer.
-    startCommand: "celery -A config worker -B --loglevel=info --concurrency=2"
+    startCommand: "python manage.py poll_shipments"
     envVars:
       - fromGroup: rendaerenda-shared
       - key: DATABASE_URL
-        sync: false # cole a Internal Database URL do Postgres premium ja existente
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: rendaerenda-redis
-          property: connectionString
-      - key: SITE_DOMAIN
-        sync: false
-      - key: ASAAS_API_KEY
-        sync: false
-      - key: ASAAS_WEBHOOK_TOKEN
-        sync: false
-      - key: AGE_KYC_API_KEY
-        sync: false
-      - key: PHONE_CPF_BUREAU_URL
-        sync: false
-      - key: PHONE_CPF_BUREAU_API_KEY
-        sync: false
-      - key: SMS_PROVIDER_URL
-        sync: false
-      - key: SMS_PROVIDER_API_KEY
-        sync: false
-      - key: NFSE_PROVIDER_API_KEY
-        sync: false
-      - key: PLATFORM_LEGAL_NAME
-        sync: false
-      - key: PLATFORM_CNPJ
-        sync: false
-      - key: PLATFORM_MUNICIPAL_SERVICE_CODE
         sync: false
       - key: MELHOR_ENVIO_TOKEN
         sync: false
@@ -202,6 +174,12 @@ services:
         sync: false
       - key: CORREIOS_ORIGIN_CEP
         sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
       - key: AWS_ACCESS_KEY_ID
         sync: false
       - key: AWS_SECRET_ACCESS_KEY
@@ -210,9 +188,17 @@ services:
         sync: false
       - key: AWS_S3_ENDPOINT_URL
         sync: false
-      - key: EMAIL_HOST
-        sync: false
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
+
+  - type: cron
+    name: rendaerenda-release-deliveries
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "*/30 * * * *" # a cada 30 min
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py release_deliveries"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
         sync: false

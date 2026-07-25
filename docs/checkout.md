@@ -134,13 +134,15 @@ Fontes: [Melhor Envio — API](https://docs.melhorenvio.com.br/reference/introdu
 1. Comprador escolhe o frete no checkout (cotado do **CEP da vendedora**).
    A embalagem (`PACKAGING_FEE`) já vem somada.
 2. Pagamento confirma → webhook do PSP dispara
-   `apps.shipping.tasks.buy_label_for_order` (Celery).
+   `apps.shipping.tasks.buy_label_for_order` (Celery task, roda síncrona no
+   mesmo processo — sem worker dedicado, ver seção de deploy do `README.md`).
 3. A **plataforma compra a etiqueta** no Melhor Envio com o frete que o
    comprador pagou. A vendedora **não paga nada**.
 4. Vendedora recebe e-mail (`emails/label_ready.txt`) com: link do PDF da
    etiqueta + **ponto de coleta mais próximo** dela.
-5. Rastreio sincroniza sozinho (`poll_active_shipments`, Celery beat) e o
-   comprador acompanha cada etapa em `/compras/`.
+5. Rastreio sincroniza sozinho (`poll_active_shipments`, Render Cron Job de
+   hora em hora — `manage.py poll_shipments`) e o comprador acompanha cada
+   etapa em `/compras/`.
 
 ---
 
@@ -156,8 +158,9 @@ Implementado em `apps/wallet/services.py` + `apps/shipping/`:
    - **Confirmar** (`POST /api/pedidos/<id>/recebimento/` com `confirm`) →
      `release_sale()` libera na hora; ou
    - **Contestar** (`dispute`) → trava para análise, pedido vira `disputed`.
-4. Sem resposta, `release_confirmed_deliveries` (Celery beat, a cada 30 min)
-   libera automaticamente após a janela.
+4. Sem resposta, `release_confirmed_deliveries` (Render Cron Job a cada
+   30 min — `manage.py release_deliveries`) libera automaticamente após a
+   janela.
 5. Teto de 30 dias garante que extravio/rastreio travado não prenda o
    dinheiro pra sempre (compatível com o máximo de 45 dias do escrow Asaas).
 
@@ -238,8 +241,8 @@ pip install -r requirements.txt
 npm install && npm run build:css
 python manage.py migrate
 python manage.py createsuperuser
-# dev sem Redis/Postgres:
-#   USE_LOCMEM_CACHE=True CELERY_TASK_ALWAYS_EAGER=True DATABASE_URL=sqlite:///db.sqlite3
+# dev rapido sem Postgres (producao usa Postgres real - ver README.md):
+#   USE_LOCMEM_CACHE=True DATABASE_URL=sqlite:///db.sqlite3
 python manage.py runserver
 ```
 
