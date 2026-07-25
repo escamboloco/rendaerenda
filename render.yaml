@@ -1,16 +1,21 @@
 # Blueprint de deploy no Render (https://render.com/docs/blueprint-spec).
 #
-# Arquitetura de MENOR CUSTO possivel: 1 unico servico "web" (Django/
-# gunicorn) + 2 Render Cron Jobs curtos para as tarefas periodicas. Sem
-# Redis (cache/rate-limit usam o proprio Postgres) e sem worker Celery
+# MODO TESTE - CUSTO ZERO: so o servico "web", no plano free (`plan: free`).
+# Sem Redis (cache/rate-limit usam o proprio Postgres) e sem worker Celery
 # 24/7 (tasks assincronas do checkout rodam sincronas no mesmo processo
-# do gunicorn via CELERY_TASK_ALWAYS_EAGER - ver config/settings.py).
-# Cron Job no Render cobra por segundo de execucao, nao por hora ligado,
-# entao os dois jobs abaixo custam poucos centavos por mes.
+# do gunicorn via CELERY_TASK_ALWAYS_EAGER - ver config/settings.py). Os
+# Render Cron Jobs das tarefas periodicas (rastreio de envio + liberacao
+# de saldo) foram REMOVIDOS deste blueprint por enquanto - mesmo custando
+# centavos, o pedido foi custo zero enquanto o site ainda e so teste. Pra
+# reativar antes de ir ao ar: ver os dois blocos `type: cron` no historico
+# do git (commit "Corrigir CSP do Alpine.js e reduzir custo de hospedagem")
+# e o management command correspondente em apps/shipping/management/.
 #
-# Se o volume crescer a ponto do checkout ficar lento esperando e-mail/NF-e
-# sincrono, volte pro modelo com worker+Redis dedicados (arquitetura
-# anterior, ainda documentada no historico do git).
+# O plano free do Render: dorme apos ~15 min sem trafego (primeiro acesso
+# depois disso demora uns 30-50s pra acordar) e tem 512MB RAM/CPU
+# compartilhada - inaceitavel pra checkout de verdade com webhook de
+# pagamento, mas ok pra testar o site. Antes de abrir pro publico, trocar
+# `plan: free` por `plan: starter` no servico web e reativar os cron jobs.
 #
 # Depois do primeiro deploy, va no dashboard do servico "web" e preencha as
 # variaveis marcadas com `sync: false` abaixo (segredos - nunca comitar no
@@ -86,7 +91,7 @@ services:
     name: rendaerenda-web
     runtime: python
     region: oregon
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: "bash build.sh"
     startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 60"
@@ -146,59 +151,9 @@ services:
       - key: EMAIL_HOST_PASSWORD
         sync: false
 
-  # Cron Jobs: cobrados por segundo de execucao (nao por hora ligado), bem
-  # mais barato que manter um worker Celery 24/7 rodando so pra 2 tarefas
-  # curtas. Mesmo Postgres/env do servico web.
-  - type: cron
-    name: rendaerenda-poll-shipments
-    runtime: python
-    region: oregon
-    plan: starter
-    rootDir: backend
-    schedule: "0 * * * *" # a cada hora
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py poll_shipments"
-    envVars:
-      - fromGroup: rendaerenda-shared
-      - key: DATABASE_URL
-        sync: false
-      - key: MELHOR_ENVIO_TOKEN
-        sync: false
-      - key: CORREIOS_CWS_USER
-        sync: false
-      - key: CORREIOS_CWS_PASSWORD
-        sync: false
-      - key: CORREIOS_CONTRACT_NUMBER
-        sync: false
-      - key: CORREIOS_CARD_NUMBER
-        sync: false
-      - key: CORREIOS_ORIGIN_CEP
-        sync: false
-      - key: EMAIL_HOST
-        sync: false
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_STORAGE_BUCKET_NAME
-        sync: false
-      - key: AWS_S3_ENDPOINT_URL
-        sync: false
-
-  - type: cron
-    name: rendaerenda-release-deliveries
-    runtime: python
-    region: oregon
-    plan: starter
-    rootDir: backend
-    schedule: "*/30 * * * *" # a cada 30 min
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python manage.py release_deliveries"
-    envVars:
-      - fromGroup: rendaerenda-shared
-      - key: DATABASE_URL
-        sync: false
+# Cron Jobs (rastreio de envio + liberacao de saldo) removidos deste
+# blueprint em modo teste pra custo ficar $0. Antes de ir ao ar, adicionar
+# de volta 2 servicos `type: cron` chamando `python manage.py poll_shipments`
+# (schedule "0 * * * *") e `python manage.py release_deliveries` (schedule
+# "*/30 * * * *") - ver commit "Corrigir CSP do Alpine.js e reduzir custo
+# de hospedagem no Render" no historico do git pro YAML completo.
