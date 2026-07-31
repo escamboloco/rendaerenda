@@ -1,33 +1,33 @@
 # Blueprint de deploy no Render (https://render.com/docs/blueprint-spec).
 #
-# MODO TESTE - CUSTO ZERO: so o servico "web", no plano free (`plan: free`).
-# Sem Redis (cache/rate-limit usam o proprio Postgres) e sem worker Celery
-# 24/7 (tasks assincronas do checkout rodam sincronas no mesmo processo
-# do gunicorn via CELERY_TASK_ALWAYS_EAGER - ver config/settings.py). Os
-# Render Cron Jobs das tarefas periodicas (rastreio de envio + liberacao
-# de saldo) foram REMOVIDOS deste blueprint por enquanto - mesmo custando
-# centavos, o pedido foi custo zero enquanto o site ainda e so teste. Pra
-# reativar antes de ir ao ar: ver os dois blocos `type: cron` no historico
-# do git (commit "Corrigir CSP do Alpine.js e reduzir custo de hospedagem")
-# e o management command correspondente em apps/shipping/management/.
+# PRODUCAO — rendaerenda.com.br
+# Sobe: Postgres + Web (Django/gunicorn) + 2 Cron Jobs.
+# Sem Redis e sem worker Celery 24/7 (tasks assincronas rodam no gunicorn
+# via CELERY_TASK_ALWAYS_EAGER — ver config/settings.py). Cron cobra por
+# segundo de execucao (centavos/mes).
 #
-# O plano free do Render: dorme apos ~15 min sem trafego (primeiro acesso
-# depois disso demora uns 30-50s pra acordar) e tem 512MB RAM/CPU
-# compartilhada - inaceitavel pra checkout de verdade com webhook de
-# pagamento, mas ok pra testar o site. Antes de abrir pro publico, trocar
-# `plan: free` por `plan: starter` no servico web e reativar os cron jobs.
+# Como usar:
+#   1. Commit e push deste arquivo.
+#   2. Render Dashboard → New → Blueprint → selecione o repositorio.
+#   3. Preencha as variaveis sync:false (segredos) quando o Render pedir.
+#   4. Na Hostinger, aponte o DNS (A @ → 216.24.57.1 ; CNAME www →
+#      rendaerenda-web.onrender.com). Ver instrucoes no chat / README.
+#   5. Shell do web → python manage.py createsuperuser
 #
-# Depois do primeiro deploy, va no dashboard do servico "web" e preencha as
-# variaveis marcadas com `sync: false` abaixo (segredos - nunca comitar no
-# repo). Ver docs/BASE_JURIDICA.md para o que cada uma controla.
+# Custo aproximado: Web Starter (~US$7) + Postgres basic-256mb (~US$7) +
+# crons (centavos). NAO use plano free em producao (dorme + webhook quebra).
 #
-# IMPORTANTE sobre envVarGroups: o grupo abaixo (rendaerenda-shared) so pode
-# conter valores LITERAIS ou `generateValue: true` - o Render nao aceita
-# `sync: false`, `fromDatabase` nem `fromService` dentro de um grupo (e
-# YAML nao tem como "espalhar" uma lista dentro da outra via ancora, entao
-# nao da pra fatorar isso com &anchor/*alias). Por isso os segredos (API
-# keys, tokens, credenciais) aparecem repetidos em CADA servico que precisa
-# deles, em vez de ficarem so no grupo.
+# IMPORTANTE envVarGroups: so literais ou generateValue. Segredos (sync:false)
+# e fromDatabase ficam repetidos em cada servico que precisa deles.
+
+databases:
+  - name: rendaerenda-db
+    plan: basic-256mb
+    region: oregon
+    postgresMajorVersion: "16"
+    databaseName: rendaerenda
+    user: rendaerenda
+    ipAllowList: [] # so rede interna do Render (web/cron)
 
 envVarGroups:
   - name: rendaerenda-shared
@@ -37,13 +37,13 @@ envVarGroups:
       - key: DJANGO_DEBUG
         value: "False"
       - key: DJANGO_ALLOWED_HOSTS
-        value: ".onrender.com"
+        value: "rendaerenda.com.br,www.rendaerenda.com.br,.onrender.com"
       - key: SITE_NAME
         value: "Renda & Renda"
+      - key: SITE_DOMAIN
+        value: "rendaerenda.com.br"
       - key: CSRF_TRUSTED_ORIGINS
-        value: "https://*.onrender.com" # trocar pelo dominio custom quando configurar um
-      # Gerado UMA vez e compartilhado identico entre web e os cron jobs -
-      # por isso fica no grupo (generateValue e permitido aqui, sync:false nao).
+        value: "https://rendaerenda.com.br,https://www.rendaerenda.com.br"
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT
@@ -77,31 +77,25 @@ envVarGroups:
       - key: DEFAULT_FROM_EMAIL
         value: "Renda & Renda <no-reply@rendaerenda.com.br>"
 
-# Sem bloco `databases:` de proposito: usamos um Postgres premium que ja
-# existe em producao (fora deste blueprint), em vez de deixar o Render
-# provisionar um banco novo pelo blueprint (que ficaria preso no plano
-# `starter`, indisponivel na conta). DATABASE_URL e preenchido manualmente
-# em cada servico abaixo (ver nota no `sync: false` correspondente) - cole
-# a "Internal Database URL" do banco existente (mais rapido/sem custo de
-# bandwidth do que a "External Database URL", já que web/cron rodam
-# dentro do proprio Render).
-
 services:
   - type: web
     name: rendaerenda-web
     runtime: python
     region: oregon
-    plan: free
+    plan: starter
     rootDir: backend
     buildCommand: "bash build.sh"
     startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 60"
     healthCheckPath: /healthz/
+    domains:
+      - rendaerenda.com.br
+      - www.rendaerenda.com.br
     envVars:
       - fromGroup: rendaerenda-shared
       - key: DATABASE_URL
-        sync: false
-      - key: SITE_DOMAIN
-        sync: false
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
       - key: ASAAS_API_KEY
         sync: false
       - key: ASAAS_WEBHOOK_TOKEN
@@ -151,9 +145,62 @@ services:
       - key: EMAIL_HOST_PASSWORD
         sync: false
 
-# Cron Jobs (rastreio de envio + liberacao de saldo) removidos deste
-# blueprint em modo teste pra custo ficar $0. Antes de ir ao ar, adicionar
-# de volta 2 servicos `type: cron` chamando `python manage.py poll_shipments`
-# (schedule "0 * * * *") e `python manage.py release_deliveries` (schedule
-# "*/30 * * * *") - ver commit "Corrigir CSP do Alpine.js e reduzir custo
-# de hospedagem no Render" no historico do git pro YAML completo.
+  # Rastreio de envios (Melhor Envio / Correios) — a cada hora
+  - type: cron
+    name: rendaerenda-poll-shipments
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "0 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py poll_shipments"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: MELHOR_ENVIO_TOKEN
+        sync: false
+      - key: CORREIOS_CWS_USER
+        sync: false
+      - key: CORREIOS_CWS_PASSWORD
+        sync: false
+      - key: CORREIOS_CONTRACT_NUMBER
+        sync: false
+      - key: CORREIOS_CARD_NUMBER
+        sync: false
+      - key: CORREIOS_ORIGIN_CEP
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_STORAGE_BUCKET_NAME
+        sync: false
+      - key: AWS_S3_ENDPOINT_URL
+        sync: false
+
+  # Libera saldo apos confirmacao de entrega — a cada 30 min
+  - type: cron
+    name: rendaerenda-release-deliveries
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "*/30 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py release_deliveries"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString

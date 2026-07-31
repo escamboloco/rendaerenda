@@ -65,28 +65,24 @@ como env var na hora de rodar) — mas produção é sempre Postgres real.
 
 ## Deploy no Render
 
-Use o `render.yaml` na raiz do repositório (Blueprint). Arquitetura pensada
-pro **menor custo possível**: só 1 serviço `web` (gunicorn, plano `starter`)
-+ 2 Render Cron Jobs curtos (`rendaerenda-poll-shipments` de hora em hora,
-`rendaerenda-release-deliveries` a cada 30 min — cron cobra por segundo de
-execução, não por hora ligado). **Sem Redis** (cache/rate-limit usam uma
-tabela no próprio Postgres) **e sem worker Celery 24/7** (as tasks
-assíncronas do checkout rodam síncronas no próprio processo do gunicorn —
-`CELERY_TASK_ALWAYS_EAGER = True`, ver `config/settings.py`). **Postgres não
-é provisionado pelo blueprint** — o projeto usa um banco premium já
-existente em produção (o plano `starter` gerenciado pelo blueprint pode não
-estar disponível na conta); `DATABASE_URL` é preenchido manualmente em cada
-serviço.
+Use o `render.yaml` na raiz do repositório (Blueprint). Produção sobe:
 
-Se o volume de pedidos crescer a ponto do checkout ficar lento esperando
-e-mail/NF-e ser emitida de forma síncrona, volte pro modelo com Redis +
-worker Celery dedicado (mais caro, mas desacopla o processamento assíncrono
-do tempo de resposta do webhook).
+- **Postgres** `rendaerenda-db` (`basic-256mb`) — `DATABASE_URL` via `fromDatabase`
+- **Web** `rendaerenda-web` (`starter`) + domínios `rendaerenda.com.br` / `www`
+- **Cron** `rendaerenda-poll-shipments` (1×/h) e `rendaerenda-release-deliveries` (*/30)
+
+**Sem Redis** (cache/rate-limit na tabela Postgres) **e sem worker Celery 24/7**
+(`CELERY_TASK_ALWAYS_EAGER = True`). Cron cobra por segundo de execução.
 
 1. Rode `npm run build:css` e commite `static/css/tailwind.css` (o build do Render é Python puro, sem Node — ver `build.sh`).
-2. No dashboard do Render, crie o Blueprint apontando pro repositório.
-3. Preencha as variáveis marcadas `sync: false` no `render.yaml` (segredos: Asaas, S3, KYC, Correios, SMTP, `SITE_DOMAIN`) em cada um dos 3 serviços que precisar delas — incluindo `DATABASE_URL`, com a **Internal Database URL** do Postgres existente (mais rápida e sem custo de bandwidth do que a External, já que os serviços rodam dentro do próprio Render).
-4. Depois do primeiro deploy, rode `python manage.py createsuperuser` via shell do Render.
+2. Push do repo → Render Dashboard → **New → Blueprint** → selecione o repositório.
+3. Preencha as variáveis `sync: false` (Asaas, S3, KYC, Melhor Envio, SMTP, CNPJ…). Segredos sem valor podem ficar vazios no 1º deploy se ainda não tiver as contas.
+4. Na **Hostinger** (DNS do domínio, sem hospedar o site lá):
+   - `A` `@` → `216.24.57.1`
+   - `CNAME` `www` → `rendaerenda-web.onrender.com` (hostname exato do serviço)
+   - Remova registros `AAAA` de `@`/`www`
+5. Shell do web → `python manage.py createsuperuser`
+6. Webhook Asaas → `https://rendaerenda.com.br/webhooks/asaas/`
 
 ## Checklist antes de expor a público
 

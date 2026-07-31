@@ -130,6 +130,11 @@ class AsaasProvider(PaymentProvider):
         return resp.json()["id"]
 
     def create_seller_subaccount(self, *, seller_name: str, cpf: str, email: str) -> SubaccountResult:
+        """
+        Cria subconta Asaas da vendedora. Guardamos o walletId (nao o
+        account id): e o walletId que o endpoint de split exige.
+        Docs: https://docs.asaas.com/docs/split-de-pagamentos
+        """
         resp = requests.post(
             f"{self.base_url}/accounts",
             headers=self._headers(),
@@ -138,7 +143,8 @@ class AsaasProvider(PaymentProvider):
         )
         resp.raise_for_status()
         data = resp.json()
-        return SubaccountResult(provider_subaccount_id=data["id"], pix_key=data.get("walletId"))
+        wallet_id = data.get("walletId") or data["id"]
+        return SubaccountResult(provider_subaccount_id=wallet_id, pix_key=None)
 
     def create_split_charge(
         self,
@@ -153,6 +159,11 @@ class AsaasProvider(PaymentProvider):
         customer_name: str,
         customer_email: str,
     ) -> ChargeResult:
+        # Split: so a parte da vendedora vai no array. O restante liquido
+        # (comissao + frete/embalagem - taxas Asaas) fica AUTOMATICO na
+        # conta master da plataforma - nao se inclui o proprio walletId.
+        # platform_amount e calculado no Order e usado so no ledger interno.
+        _ = platform_amount
         customer_id = self._get_or_create_customer(cpf=customer_cpf, name=customer_name, email=customer_email)
         resp = requests.post(
             f"{self.base_url}/payments",
@@ -165,7 +176,7 @@ class AsaasProvider(PaymentProvider):
                 "split": [
                     {
                         "walletId": seller_subaccount_id,
-                        "fixedValue": str(seller_amount),
+                        "fixedValue": float(seller_amount),
                     }
                 ],
             },
