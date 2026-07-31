@@ -23,8 +23,14 @@ from decimal import Decimal
 
 import requests
 from django.conf import settings
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+
+def _asaas_due_date() -> str:
+    """Asaas exige dueDate (YYYY-MM-DD) em toda cobrança, inclusive Pix."""
+    return timezone.localdate().isoformat()
 
 
 def asaas_uses_split() -> bool:
@@ -245,6 +251,7 @@ class AsaasProvider(PaymentProvider):
             "customer": customer_id,
             "billingType": self.BILLING_TYPES[method],
             "value": float(total_amount),
+            "dueDate": _asaas_due_date(),
             "externalReference": order_id,
         }
         if asaas_uses_split() and seller_subaccount_id:
@@ -319,6 +326,7 @@ class AsaasProvider(PaymentProvider):
                 "customer": customer_id,
                 "billingType": self.BILLING_TYPES[method],
                 "value": float(amount),
+                "dueDate": _asaas_due_date(),
                 "externalReference": reference_id,
             },
             timeout=15,
