@@ -40,42 +40,45 @@
       Pedido personalizado
     </button>
 
-    <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" @keydown.escape.window="open = false">
-      <div @click.outside="open = false" class="card p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 class="font-semibold">Pedido personalizado para {{ store.display_name }}</h3>
-        <template x-if="sent">
-          <div class="space-y-3 text-center">
-            <p class="text-sm text-emerald-400">Pedido enviado! A vendedora vai responder por aqui.</p>
-            <a href="{% url 'offers:my_requests' %}" class="btn-primary w-full">Acompanhar meus pedidos</a>
-          </div>
-        </template>
-        <template x-if="!sent">
-          <form @submit.prevent="submit()" class="space-y-3">
-            <p class="text-xs text-gray-500">Somente itens físicos. Menções a serviços, encontros ou contatos fora da plataforma são bloqueadas.</p>
-            <div>
-              <label class="input-label">O que você quer?</label>
-              <input type="text" x-model="title" required maxlength="120" placeholder="Ex.: calcinha de renda preta, 3 dias de uso" class="input-field">
+    {# template x-if: sem Alpine o conteudo nao aparece na pagina (evita modal fantasma) #}
+    <template x-if="open">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" @keydown.escape.window="open = false">
+        <div @click.outside="open = false" class="card p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
+          <h3 class="font-semibold">Pedido personalizado para {{ store.display_name }}</h3>
+          <template x-if="sent">
+            <div class="space-y-3 text-center">
+              <p class="text-sm text-emerald-400">Pedido enviado! A vendedora vai responder por aqui.</p>
+              <a href="{% url 'offers:my_requests' %}" class="btn-primary w-full">Acompanhar meus pedidos</a>
             </div>
-            <div>
-              <label class="input-label">Detalhes</label>
-              <textarea x-model="description" required maxlength="2000" rows="4" placeholder="Cor, tamanho, tempo de uso, embalagem..." class="input-field"></textarea>
-            </div>
-            <div>
-              <label class="input-label">Valor oferecido (R$)</label>
-              <input type="number" x-model="price" required step="0.01" min="1" class="input-field">
-            </div>
-            <p x-show="error" x-text="error" class="input-error"></p>
-            <div class="flex gap-2">
-              <button type="button" class="btn-secondary flex-1" @click="open = false">Cancelar</button>
-              <button type="submit" class="btn-primary flex-1" :disabled="loading">
-                <span x-show="!loading">Enviar oferta</span>
-                <span x-show="loading">Enviando…</span>
-              </button>
-            </div>
-          </form>
-        </template>
+          </template>
+          <template x-if="!sent">
+            <form @submit.prevent="submit()" class="space-y-3">
+              <p class="text-xs text-gray-500">Somente itens físicos. Menções a serviços, encontros ou contatos fora da plataforma são bloqueadas.</p>
+              <div>
+                <label class="input-label">O que você quer?</label>
+                <input type="text" x-model="title" required maxlength="120" placeholder="Ex.: calcinha de renda preta, 3 dias de uso" class="input-field">
+              </div>
+              <div>
+                <label class="input-label">Detalhes</label>
+                <textarea x-model="description" required maxlength="2000" rows="4" placeholder="Cor, tamanho, tempo de uso, embalagem..." class="input-field"></textarea>
+              </div>
+              <div>
+                <label class="input-label">Valor oferecido (R$)</label>
+                <input type="number" x-model="price" required step="0.01" min="1" class="input-field">
+              </div>
+              <p x-show="error" x-text="error" class="input-error"></p>
+              <div class="flex gap-2">
+                <button type="button" class="btn-secondary flex-1" @click="open = false">Cancelar</button>
+                <button type="submit" class="btn-primary flex-1" :disabled="loading">
+                  <span x-show="!loading">Enviar oferta</span>
+                  <span x-show="loading">Enviando…</span>
+                </button>
+              </div>
+            </form>
+          </template>
+        </div>
       </div>
-    </div>
+    </template>
   </div>
   {% endif %}
 </section>
@@ -117,40 +120,4 @@
   </div>
 </section>
 {% endif %}
-{% endblock %}
-
-{% block extra_body %}
-<script>
-function customRequestModal(storeSlug) {
-  return {
-    open: false,
-    sent: false,
-    loading: false,
-    error: "",
-    title: "",
-    description: "",
-    price: "",
-    async submit() {
-      this.loading = true; this.error = "";
-      try {
-        const resp = await fetch("{% url 'offers_api:create' %}", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
-          body: JSON.stringify({
-            store_slug: storeSlug, title: this.title,
-            description: this.description, offered_price: this.price,
-          }),
-        });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          this.error = Array.isArray(data) ? data.join(" ") : (data.detail || Object.values(data).flat().join(" ") || "Não foi possível enviar o pedido.");
-          return;
-        }
-        this.sent = true;
-      } catch (e) { this.error = "Erro de conexão. Tente novamente."; }
-      finally { this.loading = false; }
-    },
-  };
-}
-</script>
 {% endblock %}

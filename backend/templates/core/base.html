@@ -122,9 +122,10 @@
     window.CSRF_TOKEN = "{{ csrf_token }}";
     window.MODERATION_REPORT_URL = "{% url 'moderation_api:report_create' %}";
   </script>
+  {# app.js antes do Alpine (defer) — funcoes x-data precisam existir na init #}
   <script src="{% static 'js/app.js' %}" defer></script>
   <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
-  <script src="{% static 'vendor/alpine.min.js' %}" defer></script>
   {% block extra_body %}{% endblock %}
+  <script src="{% static 'vendor/alpine.min.js' %}" defer></script>
 </body>
 </html>
