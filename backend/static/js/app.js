@@ -34,19 +34,21 @@ function reportModal(targetType, objectId) {
 function storeCartCheckout(config) {
   const cfg = config || {};
   const isAuth = !!cfg.auth;
-  const quoteUrl = cfg.quoteUrl || "/api/frete/cotacao/";
   const checkoutUrl = cfg.checkoutUrl || "/api/checkout/";
   return {
     selected: {},
     checkoutOpen: false,
     ignoreOutside: false,
-    cep: "",
-    freightOptions: [],
-    shippingService: "",
-    address: { street: "", number: "", neighborhood: "", city: "", state: "" },
+    address: {
+      cep: "",
+      street: "",
+      number: "",
+      neighborhood: "",
+      city: "",
+      state: "",
+    },
     marketingOptIn: false,
     guest: { name: "", email: "", cpf: "", birth_date: "" },
-    loadingQuote: false,
     loadingCheckout: false,
     error: "",
     charge: null,
@@ -60,12 +62,8 @@ function storeCartCheckout(config) {
     get itemsTotal() {
       return this.selectedList.reduce((sum, item) => sum + Number(item.price), 0);
     },
-    get freightPrice() {
-      const opt = this.freightOptions.find((o) => o.service === this.shippingService);
-      return opt ? Number(opt.price) : 0;
-    },
     get grandTotal() {
-      return this.itemsTotal + this.freightPrice;
+      return this.itemsTotal;
     },
     toggle(id, price, title) {
       if (this.selected[id]) {
@@ -75,64 +73,35 @@ function storeCartCheckout(config) {
       } else {
         this.selected = { ...this.selected, [id]: { id, price, title } };
       }
-      this.freightOptions = [];
-      this.shippingService = "";
       this.charge = null;
     },
     buyOne(id, price, title) {
       this.selected = { [id]: { id, price, title } };
-      this.freightOptions = [];
-      this.shippingService = "";
       this.charge = null;
       this.openCheckout();
     },
     openCheckout() {
       if (!this.count) return;
       this.error = "";
-      // Evita o mesmo clique do botao fechar o modal via click.outside.
       this.ignoreOutside = true;
       this.checkoutOpen = true;
+      document.body.style.overflow = "hidden";
       this.$nextTick(() => {
         setTimeout(() => {
           this.ignoreOutside = false;
-        }, 200);
+        }, 250);
       });
     },
     closeCheckout() {
       if (this.charge || this.ignoreOutside) return;
       this.checkoutOpen = false;
+      document.body.style.overflow = "";
     },
     clear() {
       this.selected = {};
-      this.freightOptions = [];
-      this.shippingService = "";
       this.charge = null;
       this.checkoutOpen = false;
-    },
-    async quoteFreight() {
-      this.error = "";
-      if (!this.count) {
-        this.error = "Selecione pelo menos um item.";
-        return;
-      }
-      this.loadingQuote = true;
-      try {
-        const resp = await fetch(quoteUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
-          body: JSON.stringify({
-            product_ids: this.selectedList.map((i) => i.id),
-            destination_cep: this.cep.replace(/\D/g, ""),
-          }),
-        });
-        if (!resp.ok) throw new Error("quote failed");
-        this.freightOptions = await resp.json();
-        this.shippingService = "";
-      } catch (e) {
-        this.error = "Não foi possível calcular o frete. Confira o CEP.";
-      } finally {
-        this.loadingQuote = false;
-      }
+      document.body.style.overflow = "";
     },
     async checkout() {
       this.error = "";
@@ -140,12 +109,44 @@ function storeCartCheckout(config) {
         this.error = "Selecione pelo menos um item.";
         return;
       }
+      const cep = (this.address.cep || "").replace(/\D/g, "");
+      if (cep.length !== 8) {
+        this.error = "Informe um CEP válido com 8 dígitos.";
+        return;
+      }
+      for (const field of ["street", "number", "neighborhood", "city", "state"]) {
+        if (!(this.address[field] || "").trim()) {
+          this.error = "Preencha o endereço completo.";
+          return;
+        }
+      }
+      if (!isAuth) {
+        if (!(this.guest.name || "").trim() || !(this.guest.email || "").trim()) {
+          this.error = "Informe nome e e-mail.";
+          return;
+        }
+        if ((this.guest.cpf || "").replace(/\D/g, "").length !== 11) {
+          this.error = "Informe um CPF válido.";
+          return;
+        }
+        if (!this.guest.birth_date) {
+          this.error = "Informe a data de nascimento.";
+          return;
+        }
+      }
       this.loadingCheckout = true;
       try {
         const body = {
           items: this.selectedList.map((i) => ({ product_id: i.id, quantity: 1 })),
-          shipping_service: this.shippingService,
-          shipping_address: { cep: this.cep.replace(/\D/g, ""), ...this.address },
+          shipping_service: "pac",
+          shipping_address: {
+            cep,
+            street: this.address.street.trim(),
+            number: this.address.number.trim(),
+            neighborhood: this.address.neighborhood.trim(),
+            city: this.address.city.trim(),
+            state: this.address.state.trim().toUpperCase(),
+          },
           payment_method: "pix",
           marketing_opt_in: !!this.marketingOptIn,
         };
@@ -168,7 +169,6 @@ function storeCartCheckout(config) {
         }
         this.charge = data;
         this.trackUrl = data.track_url || "";
-        // Abre a pagina de cobranca do Asaas (Pix) se houver URL.
         if (data.payment_url) {
           window.open(data.payment_url, "_blank", "noopener");
         }

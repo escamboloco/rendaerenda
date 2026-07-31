@@ -42,6 +42,8 @@ envVarGroups:
         value: "20"
       - key: PACKAGING_FEE
         value: "0"
+      - key: CHECKOUT_FREE_SHIPPING
+        value: "True"
       - key: AUTO_PAYOUT_ON_PAYMENT
         value: "True"
       - key: REQUIRE_SELLER_KYC

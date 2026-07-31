@@ -124,7 +124,8 @@ class CheckoutView(APIView):
             order_items_data.append((product, quantity))
 
         total_weight = sum(p.weight_grams * q for p, q in order_items_data)
-        if products_are_payment_test([p for p, _ in order_items_data]):
+        product_list = [p for p, _ in order_items_data]
+        if getattr(settings, "CHECKOUT_FREE_SHIPPING", True) or products_are_payment_test(product_list):
             freight_options = [test_free_freight_option()]
         else:
             freight_options = calculate_freight_options(
@@ -139,10 +140,14 @@ class CheckoutView(APIView):
         try:
             chosen = next(o for o in freight_options if o.service == payload["shipping_service"])
         except StopIteration:
-            return Response(
-                {"detail": "Opção de frete indisponível — recalcule o frete e tente de novo."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            # Fallback: se o front mandou pac e o frete gratis esta ativo.
+            if freight_options:
+                chosen = freight_options[0]
+            else:
+                return Response(
+                    {"detail": "Opção de frete indisponível."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         shipping_total = Decimal(str(chosen.price))
 
         access_token = secrets.token_urlsafe(32)

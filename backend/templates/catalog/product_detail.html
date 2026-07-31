@@ -98,64 +98,34 @@
             <input type="text" x-model="guest.cpf" placeholder="CPF" maxlength="14" class="input-field">
             <input type="date" x-model="guest.birth_date" class="input-field" title="Data de nascimento (+18)">
           </div>
-          <p class="text-[11px] text-gray-500">Sem cadastro. Precisamos do CPF e da data de nascimento para confirmar que você tem 18+ e processar o Pix.</p>
+          <p class="text-[11px] text-gray-500">Sem cadastro. Use o mesmo CPF no Pix. Maior de 18 anos.</p>
           {% endif %}
 
-          <div class="flex gap-2">
-            <input type="text" x-model="cep" maxlength="9" placeholder="CEP de entrega" class="input-field flex-1">
-            <button type="button" class="btn-secondary shrink-0" @click="quoteFreight()" :disabled="loadingQuote">
-              <span x-show="!loadingQuote">Calcular frete</span>
-              <span x-show="loadingQuote">…</span>
-            </button>
+          <div class="grid grid-cols-2 gap-2">
+            <input type="text" x-model="cep" maxlength="9" placeholder="CEP" class="input-field col-span-2">
+            <input type="text" x-model="address.street" placeholder="Rua" class="input-field col-span-2">
+            <input type="text" x-model="address.number" placeholder="Número" class="input-field">
+            <input type="text" x-model="address.neighborhood" placeholder="Bairro" class="input-field">
+            <input type="text" x-model="address.city" placeholder="Cidade" class="input-field">
+            <input type="text" x-model="address.state" placeholder="UF" maxlength="2" class="input-field">
           </div>
 
-          <div x-show="freightOptions.length" class="space-y-2">
-            <template x-for="option in freightOptions" :key="option.service">
-              <label class="chip w-full justify-between" :class="shippingService === option.service ? 'chip-active' : ''">
-                <span>
-                  <input type="radio" class="mr-1.5" :value="option.service" x-model="shippingService">
-                  <span x-text="option.label"></span> · <span x-text="option.deadline_days + ' dias úteis'"></span>
-                </span>
-                <span x-text="'R$ ' + Number(option.price).toFixed(2)"></span>
-              </label>
-            </template>
+          <div class="rounded-xl bg-white/5 p-3 text-sm flex justify-between font-bold text-brand">
+            <span>Total</span><span>R$ {{ product.price }}</span>
           </div>
 
-          <template x-if="shippingService">
-            <div class="rounded-xl bg-white/5 p-3 text-sm space-y-1">
-              <div class="flex justify-between"><span>Item</span><span>R$ {{ product.price }}</span></div>
-              <div class="flex justify-between text-gray-400"><span>Frete</span><span x-text="'R$ ' + freightPrice.toFixed(2)"></span></div>
-              <div class="flex justify-between font-bold text-brand pt-1 border-t border-white/10"><span>Total</span><span x-text="'R$ ' + ({{ product.price }} + freightPrice).toFixed(2)"></span></div>
-            </div>
-          </template>
-
-          <template x-if="shippingService">
-            <div class="grid grid-cols-2 gap-2">
-              <input type="text" x-model="address.street" placeholder="Rua" class="input-field col-span-2">
-              <input type="text" x-model="address.number" placeholder="Número" class="input-field">
-              <input type="text" x-model="address.neighborhood" placeholder="Bairro" class="input-field">
-              <input type="text" x-model="address.city" placeholder="Cidade" class="input-field">
-              <input type="text" x-model="address.state" placeholder="UF" maxlength="2" class="input-field">
-            </div>
-          </template>
-
-          <template x-if="shippingService">
-            <div class="space-y-2">
-              <p class="text-sm text-gray-300">Pagamento: <span class="font-medium text-white">Pix</span></p>
-              <label class="flex items-start gap-2 text-xs text-gray-400 cursor-pointer">
-                <input type="checkbox" x-model="marketingOptIn" class="mt-0.5">
-                <span>Quero receber novidades e oportunidades por e-mail (opcional). Posso cancelar a qualquer momento.</span>
-              </label>
-            </div>
-          </template>
+          <label class="flex items-start gap-2 text-xs text-gray-400 cursor-pointer">
+            <input type="checkbox" x-model="marketingOptIn" class="mt-0.5">
+            <span>Quero receber novidades por e-mail (opcional).</span>
+          </label>
 
           <p x-show="error" x-text="error" class="input-error"></p>
 
-          <button x-show="shippingService" type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
-            <span x-show="!loadingCheckout">Gerar Pix Asaas</span>
-            <span x-show="loadingCheckout">Gerando cobrança Asaas…</span>
+          <button type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
+            <span x-show="!loadingCheckout">Pagar R$ {{ product.price }} no Asaas</span>
+            <span x-show="loadingCheckout">Gerando Pix Asaas…</span>
           </button>
-          <p x-show="shippingService" class="text-[11px] text-gray-500 text-center">Processado com segurança pelo Asaas</p>
+          <p class="text-[11px] text-gray-500 text-center">Processado com segurança pelo Asaas</p>
         </div>
       </template>
 
@@ -211,45 +181,21 @@
 function productCheckout(productId) {
   return {
     cep: "",
-    freightOptions: [],
-    shippingService: "",
     address: { street: "", number: "", neighborhood: "", city: "", state: "" },
     paymentMethod: "pix",
     marketingOptIn: false,
     guest: { name: "", email: "", cpf: "", birth_date: "" },
-    loadingQuote: false,
     loadingCheckout: false,
     error: "",
     charge: null,
     trackUrl: "",
-    get freightPrice() {
-      const opt = this.freightOptions.find(o => o.service === this.shippingService);
-      return opt ? Number(opt.price) : 0;
-    },
-    async quoteFreight() {
-      this.error = "";
-      this.loadingQuote = true;
-      try {
-        const resp = await fetch("{% url 'shipping:quote' %}", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
-          body: JSON.stringify({ product_ids: [productId], destination_cep: this.cep.replace(/\D/g, "") }),
-        });
-        if (!resp.ok) throw new Error("quote failed");
-        this.freightOptions = await resp.json();
-      } catch (e) {
-        this.error = "Não foi possível calcular o frete. Confira o CEP.";
-      } finally {
-        this.loadingQuote = false;
-      }
-    },
     async checkout() {
       this.error = "";
       this.loadingCheckout = true;
       try {
         const body = {
           items: [{ product_id: productId, quantity: 1 }],
-          shipping_service: this.shippingService,
+          shipping_service: "pac",
           shipping_address: { cep: this.cep.replace(/\D/g, ""), ...this.address },
           payment_method: "pix",
           marketing_opt_in: !!this.marketingOptIn,
