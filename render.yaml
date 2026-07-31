@@ -39,7 +39,7 @@ envVarGroups:
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT
-        value: "20"
+        value: "15"
       - key: PACKAGING_FEE
         value: "0"
       - key: CHECKOUT_FREE_SHIPPING
@@ -55,8 +55,23 @@ envVarGroups:
       # estiver ligada.
       - key: REFUND_ON_PAYER_CPF_MISMATCH
         value: "True"
-      - key: AUTO_PAYOUT_ON_PAYMENT
+      # --- Custodia: o dinheiro fica com a plataforma ate a entrega ---
+      - key: ESCROW_ENABLED
         value: "True"
+      # Repasse imediato so existe com ESCROW_ENABLED=False.
+      - key: AUTO_PAYOUT_ON_PAYMENT
+        value: "False"
+      - key: AUTO_PAYOUT_ON_RELEASE
+        value: "True"
+      # Prazo do comprador para contestar depois de receber (dias).
+      - key: DISPUTE_WINDOW_DAYS
+        value: "7"
+      # Conteudo digital nao tem entrega para rastrear: libera por prazo (h).
+      - key: DIGITAL_RELEASE_HOURS
+        value: "24"
+      # Teto de retencao — o valor nunca fica preso para sempre (dias).
+      - key: ESCROW_MAX_HOLD_DAYS
+        value: "30"
       - key: REQUIRE_SELLER_KYC
         value: "False"
       - key: WALLET_RELEASE_DAYS_AFTER_SHIPPING
@@ -182,6 +197,28 @@ services:
         fromDatabase:
           name: rendaerenda-db
           property: connectionString
+      - key: ASAAS_API_KEY
+        sync: false
+
+  # Repassa por Pix o que ja saiu da custodia (conteudo digital e casos
+  # em que o repasse falhou na hora da liberacao).
+  - type: cron
+    name: rendaerenda-release-escrow
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "*/30 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py release_escrow"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: ASAAS_API_KEY
+        sync: false
 
   # Digest semanal de novidades (segundas 14:00 UTC ≈ 11:00 BRT).
   - type: cron

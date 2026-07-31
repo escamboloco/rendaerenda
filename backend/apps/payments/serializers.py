@@ -34,9 +34,37 @@ def cpf_is_valid(cpf: str) -> bool:
     return True
 
 
+def clean_shipping_address(value):
+    """Normaliza e valida o endereço de entrega. Levanta ValidationError."""
+    if not isinstance(value, dict):
+        raise serializers.ValidationError("Endereço inválido.")
+    cep = _digits(value.get("cep", ""))
+    if len(cep) != 8:
+        raise serializers.ValidationError("Informe um CEP válido com 8 dígitos.")
+    for field in ADDRESS_FIELDS:
+        if not str(value.get(field, "")).strip():
+            raise serializers.ValidationError(f"Informe {ADDRESS_LABELS[field]}.")
+    state = str(value["state"]).strip().upper()[:2]
+    if state not in UF_LIST:
+        raise serializers.ValidationError("UF inválida.")
+    return {
+        "cep": cep,
+        "street": str(value["street"]).strip()[:120],
+        "number": str(value["number"]).strip()[:20],
+        "complement": str(value.get("complement", "")).strip()[:60],
+        "neighborhood": str(value["neighborhood"]).strip()[:80],
+        "city": str(value["city"]).strip()[:80],
+        "state": state,
+    }
+
+
 class CheckoutItemSerializer(serializers.Serializer):
     product_id = serializers.UUIDField()
     quantity = serializers.IntegerField(min_value=1, max_value=20, default=1)
+    # Adicionais opcionais do anúncio ("quer com X?").
+    addon_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list, max_length=10
+    )
 
 
 class CheckoutSerializer(serializers.Serializer):
@@ -49,7 +77,8 @@ class CheckoutSerializer(serializers.Serializer):
     shipping_service = serializers.RegexField(
         r"^(pac|sedex|me-\d+)$", max_length=20, required=False, default="pac"
     )
-    shipping_address = serializers.JSONField()
+    # Opcional: pedido só de conteúdo digital não tem entrega física.
+    shipping_address = serializers.JSONField(required=False, default=dict)
     # Soft-launch: so Pix (cartao exige tokenizacao Asaas, ainda nao ligada).
     payment_method = serializers.ChoiceField(choices=["pix"], default="pix")
 
@@ -61,6 +90,15 @@ class CheckoutSerializer(serializers.Serializer):
     marketing_opt_in = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
+        # Endereço só é exigido quando existe item físico na sacola.
+        if self._needs_shipping(attrs.get("items") or []):
+            try:
+                attrs["shipping_address"] = clean_shipping_address(attrs.get("shipping_address"))
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError({"shipping_address": exc.detail}) from exc
+        else:
+            attrs["shipping_address"] = {}
+
         request = self.context.get("request")
         user = getattr(request, "user", None)
         if bool(user and getattr(user, "is_authenticated", False)):
@@ -105,27 +143,12 @@ class CheckoutSerializer(serializers.Serializer):
             raise serializers.ValidationError("Finalize uma loja por vez.")
         return items
 
-    def validate_shipping_address(self, value):
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("Endereço inválido.")
-        cep = _digits(value.get("cep", ""))
-        if len(cep) != 8:
-            raise serializers.ValidationError("Informe um CEP válido com 8 dígitos.")
-        for field in ADDRESS_FIELDS:
-            if not str(value.get(field, "")).strip():
-                raise serializers.ValidationError(f"Informe {ADDRESS_LABELS[field]}.")
-        state = str(value["state"]).strip().upper()[:2]
-        if state not in UF_LIST:
-            raise serializers.ValidationError("UF inválida.")
-        return {
-            "cep": cep,
-            "street": str(value["street"]).strip()[:120],
-            "number": str(value["number"]).strip()[:20],
-            "complement": str(value.get("complement", "")).strip()[:60],
-            "neighborhood": str(value["neighborhood"]).strip()[:80],
-            "city": str(value["city"]).strip()[:80],
-            "state": state,
-        }
+    @staticmethod
+    def _needs_shipping(items) -> bool:
+        ids = [item["product_id"] for item in items]
+        if not ids:
+            return False
+        return Product.objects.filter(id__in=ids, kind=Product.Kind.PHYSICAL).exists()
 
 
 class OrderItemSerializer(serializers.ModelSerializer):

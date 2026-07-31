@@ -96,20 +96,52 @@
     <a href="{% url 'stores:detail' store.slug %}" class="btn-secondary w-full">Ver outras peças da loja</a>
 
     {% elif can_buy %}
-    <div class="card p-5 space-y-3" x-data="buyButton('{{ product.id }}', '{{ store.slug }}')">
+    {{ addons_json|json_script:"product-addons" }}
+    <div class="card p-5 space-y-4"
+         x-data="productBuyBox({
+           productId: '{{ product.id }}',
+           storeSlug: '{{ store.slug }}',
+           price: {{ product.price|unlocalize }},
+           addons: JSON.parse(document.getElementById('product-addons').textContent)
+         })">
       {% if product.stock == 1 %}
-      <p class="text-xs text-amber-300">Peça única — quem pagar primeiro leva.</p>
+      <p class="text-xs text-amber-300">Última unidade — quem pagar primeiro leva.</p>
       {% else %}
       <p class="text-xs text-gray-500">{{ product.stock }} unidades disponíveis.</p>
       {% endif %}
 
-      <button type="button" class="btn-primary w-full text-base" @click="buyNow()">
-        Comprar agora com Pix
-      </button>
-      <button type="button" class="btn-secondary w-full" @click="add()">
-        <span x-show="!added">Adicionar à sacola</span>
-        <span x-cloak x-show="added">Adicionado ✓</span>
-      </button>
+      {% if addons %}
+      <div class="space-y-2">
+        <p class="input-label">Adicionais deste anúncio</p>
+        {% for addon in addons %}
+        <label class="flex items-start gap-3 rounded-xl border border-surface-border bg-surface-alt px-3 py-2.5 cursor-pointer hover:border-brand/50 transition"
+               :class="isSelected('{{ addon.id }}') ? 'border-brand ring-1 ring-brand/40' : ''">
+          <input type="checkbox" class="mt-0.5" @change="toggleAddon('{{ addon.id }}')">
+          <span class="flex-1 min-w-0">
+            <span class="block text-sm">{{ addon.title }}</span>
+            {% if addon.description %}<span class="block text-[11px] text-gray-500">{{ addon.description }}</span>{% endif %}
+          </span>
+          <span class="text-sm font-semibold text-brand shrink-0">+ R$ {{ addon.price }}</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      <div class="flex items-center justify-between border-t border-surface-border pt-3">
+        <span class="text-sm text-gray-400">Total</span>
+        <span class="text-xl font-extrabold text-brand" x-text="totalLabel"></span>
+      </div>
+      {% endif %}
+
+      <div class="space-y-2">
+        <button type="button" class="btn-primary w-full text-base" @click="buyNow()">
+          Comprar agora com Pix
+        </button>
+        <button type="button" class="btn-secondary w-full" @click="add()">
+          <span x-show="!added">Adicionar à sacola</span>
+          <span x-cloak x-show="added">Adicionado ✓</span>
+        </button>
+      </div>
+
       <p class="text-[11px] text-gray-500 text-center">
         Sem cadastro obrigatório. CPF e nascimento só para confirmar que você é maior de 18.
       </p>
@@ -118,38 +150,142 @@
     <ul class="card p-5 space-y-3 text-xs text-gray-400">
       <li class="flex gap-2.5">
         <span class="text-emerald-400">✓</span>
-        <span><strong class="text-gray-200">Pagamento protegido.</strong> Cobrança feita pelo Asaas, instituição autorizada pelo Banco Central.</span>
+        <span><strong class="text-gray-200">Dinheiro em custódia.</strong> A vendedora só recebe quando você confirmar que está tudo certo.</span>
       </li>
       <li class="flex gap-2.5">
         <span class="text-emerald-400">✓</span>
-        <span><strong class="text-gray-200">Embalagem discreta.</strong> Nada no pacote ou no extrato indica o conteúdo.</span>
+        <span><strong class="text-gray-200">{{ dispute_window_days }} dias para contestar.</strong> Não chegou ou veio diferente? O valor volta pelo mesmo Pix.</span>
       </li>
+      {% if product.requires_shipping %}
       <li class="flex gap-2.5">
         <span class="text-emerald-400">✓</span>
-        <span><strong class="text-gray-200">Envio rastreado.</strong> Você acompanha tudo pelo link enviado por e-mail.</span>
+        <span><strong class="text-gray-200">Embalagem sem identificação.</strong> Envio rastreado e extrato com nome neutro.</span>
       </li>
+      {% else %}
+      <li class="flex gap-2.5">
+        <span class="text-emerald-400">✓</span>
+        <span><strong class="text-gray-200">Entrega na hora.</strong> O conteúdo abre na página do pedido assim que o Pix cai.</span>
+      </li>
+      {% endif %}
     </ul>
     {% endif %}
 
-    <a href="{% url 'stores:detail' store.slug %}" class="card p-4 flex items-center gap-3 hover:border-brand/50 transition">
-      <div class="w-11 h-11 rounded-full bg-white/10 avatar-ring shrink-0 flex items-center justify-center font-bold text-gray-400">
-        {{ store.display_name|slice:":1" }}
+    {# --------------------------------------------------------- vendedora #}
+    <div class="card p-5 space-y-4">
+      <a href="{% url 'stores:detail' store.slug %}" class="flex items-center gap-3 group">
+        <div class="w-11 h-11 rounded-full bg-white/10 avatar-ring shrink-0 flex items-center justify-center font-bold text-gray-400">
+          {{ store.display_name|slice:":1" }}
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="font-medium truncate flex items-center gap-1 group-hover:underline">
+            {{ store.display_name }}
+            <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.2 7.7 8.9a1 1 0 10-1.4 1.4l2 2a1 1 0 001.4 0l4-4z" clip-rule="evenodd"/></svg>
+          </p>
+          <p class="text-xs text-gray-500">
+            {% if store.review_count %}★ {{ store.avg_rating }} · {{ store.review_count }} avaliaç{{ store.review_count|pluralize:"ão,ões" }} · {% endif %}{{ store.sales_count }} venda{{ store.sales_count|pluralize }}
+          </p>
+        </div>
+        <span class="text-xs text-brand shrink-0">Ver loja</span>
+      </a>
+
+      <div class="border-t border-surface-border pt-3 space-y-2">
+        <p class="input-label">Verificações</p>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-gray-400">E-mail</span>
+          <span class="text-emerald-400">confirmado</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-gray-400">Identidade</span>
+          {% if store.owner.is_age_verified %}
+          <span class="text-emerald-400">confirmada</span>
+          {% else %}
+          <span class="text-gray-500">em análise</span>
+          {% endif %}
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-gray-400">Anúncio moderado</span>
+          <span class="text-emerald-400">sim</span>
+        </div>
       </div>
-      <div class="min-w-0 flex-1">
-        <p class="font-medium truncate flex items-center gap-1">
-          {{ store.display_name }}
-          <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.2 7.7 8.9a1 1 0 10-1.4 1.4l2 2a1 1 0 001.4 0l4-4z" clip-rule="evenodd"/></svg>
-        </p>
-        <p class="text-xs text-gray-500">
-          {% if store.review_count %}★ {{ store.avg_rating }} · {{ store.review_count }} avaliaç{{ store.review_count|pluralize:"ão,ões" }}{% else %}Loja verificada{% endif %}
-        </p>
-      </div>
-      <span class="text-xs text-brand shrink-0">Ver loja</span>
-    </a>
+    </div>
 
     {% include "moderation/_report_button.html" with target_type="product" object_id=product.id %}
   </div>
 </div>
+
+{# ------------------------------------------------------------- perguntas #}
+<section class="mt-14 max-w-3xl">
+  <h2 class="text-lg font-bold">Perguntas sobre este anúncio</h2>
+  <p class="text-sm text-gray-500 mt-1 mb-4">
+    Pergunte aqui mesmo — a resposta fica pública e ajuda quem vier depois. Combinar contato fora da
+    plataforma não é permitido.
+  </p>
+
+  <div class="space-y-3">
+    {% for item in questions %}
+    <div class="card p-4 space-y-2">
+      <div class="flex gap-2">
+        <span class="text-xs text-gray-600 shrink-0 mt-0.5">P</span>
+        <p class="text-sm text-gray-200">{{ item.question }}</p>
+      </div>
+      {% if item.answer %}
+      <div class="flex gap-2 border-l-2 border-brand/40 pl-3 ml-1">
+        <span class="text-xs text-brand shrink-0 mt-0.5">R</span>
+        <p class="text-sm text-gray-400">{{ item.answer }}</p>
+      </div>
+      {% else %}
+      <p class="text-xs text-gray-600 pl-5">Aguardando resposta da vendedora.</p>
+      {% endif %}
+    </div>
+    {% empty %}
+    <p class="card p-5 text-sm text-gray-500">Nenhuma pergunta ainda. Seja a primeira pessoa a perguntar.</p>
+    {% endfor %}
+  </div>
+
+  {% if is_authenticated %}
+    {% if request.user != store.owner %}
+    <div class="card p-4 mt-4 space-y-3" x-data="questionForm('{{ product.id }}')">
+      <template x-if="sent">
+        <p class="text-sm text-emerald-400">Pergunta enviada. A vendedora responde por aqui.</p>
+      </template>
+      <template x-if="!sent">
+        <form @submit.prevent="submit()" class="space-y-3">
+          <textarea x-model="text" rows="2" maxlength="300" class="input-field"
+                    placeholder="Ex.: tem em outra cor? quanto tempo de uso?"></textarea>
+          <p x-show="error" x-text="error" class="input-error"></p>
+          <button type="submit" class="btn-primary !py-2 !min-h-0 text-sm" :disabled="loading">
+            <span x-show="!loading">Enviar pergunta</span>
+            <span x-show="loading">Enviando…</span>
+          </button>
+        </form>
+      </template>
+    </div>
+    {% endif %}
+  {% else %}
+  <p class="card p-4 mt-4 text-sm text-gray-400">
+    <a href="{% url 'account_login' %}?next={{ request.path }}" class="text-brand hover:underline">Entre na sua conta</a>
+    para perguntar. Para comprar, não precisa de cadastro.
+  </p>
+  {% endif %}
+</section>
+
+{% if store_reviews %}
+<section class="mt-14 max-w-3xl">
+  <h2 class="text-lg font-bold mb-4">Quem comprou desta loja</h2>
+  <div class="grid sm:grid-cols-2 gap-3">
+    {% for review in store_reviews %}
+    <div class="card p-4 space-y-1.5">
+      <div class="flex items-center justify-between gap-3">
+        {% include "reviews/_stars.html" with rating=review.rating size="w-3.5 h-3.5" %}
+        <span class="text-xs text-gray-500">{{ review.created_at|date:"d/m/Y" }}</span>
+      </div>
+      {% if review.comment %}<p class="text-sm text-gray-400">“{{ review.comment }}”</p>{% endif %}
+      <p class="text-xs text-gray-600">{{ review.buyer.interaction_name }} · compra verificada</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 {% if related_products %}
 <section class="mt-14">

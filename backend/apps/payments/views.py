@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -55,14 +56,32 @@ def order_page(request, token):
     """
     order = get_object_or_404(
         Order.objects.select_related("store", "shipment", "payment").prefetch_related(
-            "items__product__images"
+            "items__product__images", "items__product__assets"
         ),
         access_token=token,
+    )
+    paid = order.status in (Order.Status.PAID, Order.Status.SHIPPED, Order.Status.DELIVERED)
+    # Conteúdo digital só aparece com o pedido pago.
+    digital_assets = []
+    if paid:
+        for item in order.items.all():
+            for asset in item.product.assets.all():
+                digital_assets.append({"product": item.product, "asset": asset})
+
+    shipment = getattr(order, "shipment", None)
+    can_confirm = paid and order.status != Order.Status.DISPUTED and not (
+        shipment and (shipment.buyer_confirmed_at or shipment.buyer_disputed_at)
     )
     return render(
         request,
         "payments/order_detail.html",
-        {"order": order, "payment": getattr(order, "payment", None)},
+        {
+            "order": order,
+            "payment": getattr(order, "payment", None),
+            "digital_assets": digital_assets,
+            "can_confirm": can_confirm,
+            "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
+        },
     )
 
 
@@ -102,28 +121,36 @@ class CartSummaryView(APIView):
             return Response({"detail": "Sacola inválida."}, status=status.HTTP_400_BAD_REQUEST)
 
         wanted: dict[str, int] = {}
+        addon_choice: dict[str, set] = {}
         for item in raw_items[:50]:
             if not isinstance(item, dict):
                 continue
             product_id = str(item.get("id") or item.get("product_id") or "").strip()
+            if not product_id:
+                continue
             try:
                 quantity = max(1, min(int(item.get("qty") or item.get("quantity") or 1), 20))
             except (TypeError, ValueError):
                 quantity = 1
-            if product_id:
-                wanted[product_id] = wanted.get(product_id, 0) + quantity
+            wanted[product_id] = wanted.get(product_id, 0) + quantity
+            raw_addons = item.get("addons") or []
+            if isinstance(raw_addons, list):
+                addon_choice.setdefault(product_id, set()).update(
+                    str(a) for a in raw_addons[:10] if a
+                )
 
         from apps.catalog.models import Product
 
         products = (
             Product.objects.select_related("store")
-            .prefetch_related("images")
+            .prefetch_related("images", "addons")
             .filter(id__in=list(wanted))
         )
         # Filtro no Python porque is_available() depende do estado da loja.
         items, unavailable = [], []
         items_total = Decimal("0.00")
         store = None
+        needs_shipping = False
         for product in products:
             quantity = min(wanted[str(product.id)], product.stock)
             if not product.is_available() or quantity < 1:
@@ -133,20 +160,32 @@ class CartSummaryView(APIView):
             if product.store_id != store.id:
                 unavailable.append({"id": str(product.id), "title": product.title, "other_store": True})
                 continue
+
+            picked = addon_choice.get(str(product.id), set())
+            addons = [a for a in product.addons.all() if a.is_active and str(a.id) in picked]
+            addons_total = sum((a.price for a in addons), Decimal("0.00"))
+            line_total = product.price * quantity + addons_total
             cover = product.images.first()
+            needs_shipping = needs_shipping or product.requires_shipping
             items.append(
                 {
                     "id": str(product.id),
                     "title": product.title,
                     "price": str(product.price),
                     "qty": quantity,
-                    "line_total": str(product.price * quantity),
+                    "kind": product.kind,
+                    "requires_shipping": product.requires_shipping,
+                    "addons": [
+                        {"id": str(a.id), "title": a.title, "price": str(a.price)} for a in addons
+                    ],
+                    "addons_total": str(addons_total),
+                    "line_total": str(line_total),
                     "stock": product.stock,
                     "image": cover.file.url if cover else "",
                     "url": f"/loja/{product.store.slug}/item/{product.slug}/",
                 }
             )
-            items_total += product.price * quantity
+            items_total += line_total
 
         known = {i["id"] for i in items} | {u["id"] for u in unavailable}
         for product_id in wanted:
@@ -160,6 +199,7 @@ class CartSummaryView(APIView):
                 "items_total": str(items_total),
                 "shipping_total": "0.00",
                 "grand_total": str(items_total),
+                "requires_shipping": needs_shipping,
                 "store": (
                     {"slug": store.slug, "name": store.display_name, "url": f"/loja/{store.slug}/"}
                     if store
@@ -208,7 +248,11 @@ class CheckoutView(APIView):
                 )
 
         lines = [
-            CartLine(product_id=str(item["product_id"]), quantity=item["quantity"])
+            CartLine(
+                product_id=str(item["product_id"]),
+                quantity=item["quantity"],
+                addon_ids=tuple(str(a) for a in item.get("addon_ids") or ()),
+            )
             for item in payload["items"]
         ]
 
@@ -218,7 +262,7 @@ class CheckoutView(APIView):
             # pode acontecer com o estoque travado.
             freight = quote_shipping(
                 lines=lines,
-                destination_cep=address["cep"],
+                destination_cep=address.get("cep", ""),
                 preferred_service=payload.get("shipping_service") or "pac",
             )
             order = reserve_order(
@@ -260,6 +304,63 @@ class CheckoutView(APIView):
                 "expires_at": order.expires_at,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class OrderConfirmView(APIView):
+    """
+    POST /api/pedido/<token>/confirmar/ — o comprador libera (ou trava) o
+    dinheiro que está em custódia.
+
+    Autenticado pelo token do pedido: quem comprou sem cadastro também
+    precisa poder confirmar, senão a custódia só sairia pelo prazo.
+      action=confirm  -> libera o valor e dispara o Pix para a vendedora
+      action=dispute  -> trava o valor e manda o caso para a moderação
+    """
+
+    permission_classes = [AllowAny]
+    throttle_scope = "checkout"
+
+    def post(self, request, token):
+        from apps.wallet.services import release_and_payout
+
+        order = get_object_or_404(
+            Order.objects.select_related("shipment", "store"), access_token=token
+        )
+        if order.status not in (Order.Status.PAID, Order.Status.SHIPPED, Order.Status.DELIVERED):
+            return Response(
+                {"detail": "Este pedido ainda não está pago."}, status=status.HTTP_409_CONFLICT
+            )
+        if order.status == Order.Status.DISPUTED:
+            return Response({"detail": "Já existe uma contestação aberta."}, status=status.HTTP_409_CONFLICT)
+
+        shipment = getattr(order, "shipment", None)
+        if shipment and (shipment.buyer_confirmed_at or shipment.buyer_disputed_at):
+            return Response({"detail": "Você já respondeu sobre este pedido."}, status=status.HTTP_409_CONFLICT)
+
+        action = (request.data.get("action") or "").strip()
+        now = timezone.now()
+
+        if action == "confirm":
+            if shipment:
+                shipment.buyer_confirmed_at = now
+                shipment.save(update_fields=["buyer_confirmed_at"])
+            order.status = Order.Status.DELIVERED
+            order.save(update_fields=["status"])
+            release_and_payout(order)
+            return Response({"status": "confirmed"})
+
+        if action == "dispute":
+            if shipment:
+                shipment.buyer_disputed_at = now
+                shipment.save(update_fields=["buyer_disputed_at"])
+            order.status = Order.Status.DISPUTED
+            order.save(update_fields=["status"])
+            logger.warning("Contestacao aberta no pedido %s", order.id)
+            return Response({"status": "disputed"})
+
+        return Response(
+            {"detail": "Ação inválida (use confirm ou dispute)."}, status=status.HTTP_400_BAD_REQUEST
         )
 
 

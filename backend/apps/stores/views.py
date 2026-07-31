@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import Paginator
-from django.db.models import Case, IntegerField, Q, Value, When
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from rest_framework import status
@@ -23,10 +23,18 @@ from .serializers import StoreBoostPurchaseSerializer, StoreOnboardSerializer, S
 
 
 SORT_OPTIONS = {
+    "relevancia": ("-sold_count", "Relevância"),
     "recentes": ("-created_at", "Mais recentes"),
     "menor-preco": ("price", "Menor preço"),
     "maior-preco": ("-price", "Maior preço"),
+    "populares": ("-views_count", "Mais vistos"),
     "melhor-avaliadas": ("-store__bayesian_rating", "Lojas melhor avaliadas"),
+}
+
+KIND_FILTERS = {
+    "fisico": ("physical", "Itens físicos"),
+    "digital": ("digital", "Conteúdo digital"),
+    "encomenda": ("custom", "Sob encomenda"),
 }
 
 
@@ -42,15 +50,18 @@ def public_store_filter(prefix: str = "") -> Q:
     return Q(**{field: Store.Status.ACTIVE}) & (Q(**{plan: True}) | Q(**{expires: now}))
 
 
-def home(request):
+def _product_feed(request, *, default_sort="relevancia", per_page=24):
     """
-    Vitrine principal: peças à venda (não lojas). É o que faz o marketplace
-    parecer marketplace — a pessoa entra e já vê o que pode comprar.
+    Feed de anúncios usado pela vitrine e pela listagem completa.
+
+    A ordem padrão premia quem já vendeu (sold_count) — anúncio parado não
+    ocupa o topo — e loja com impulsionamento pago entra na frente.
     """
     query = request.GET.get("q", "").strip()
     category_slug = request.GET.get("categoria", "").strip()
-    sort_key = request.GET.get("ordem", "recentes")
-    order_by, _ = SORT_OPTIONS.get(sort_key, SORT_OPTIONS["recentes"])
+    kind_key = request.GET.get("tipo", "").strip()
+    sort_key = request.GET.get("ordem", default_sort)
+    order_by, _ = SORT_OPTIONS.get(sort_key, SORT_OPTIONS[default_sort])
 
     products = (
         Product.objects.filter(
@@ -72,6 +83,8 @@ def home(request):
         )
     if category_slug:
         products = products.filter(category__slug=category_slug)
+    if kind_key in KIND_FILTERS:
+        products = products.filter(kind=KIND_FILTERS[kind_key][0])
 
     # Loja com boost ativo aparece antes (é o produto pago da plataforma).
     boosted_ids = set(
@@ -83,28 +96,99 @@ def home(request):
         is_boosted=Case(
             When(store_id__in=boosted_ids, then=Value(1)), default=Value(0), output_field=IntegerField()
         )
-    ).order_by("-is_boosted", order_by)
+    ).order_by("-is_boosted", order_by, "-created_at")
 
-    page = Paginator(products, 24).get_page(request.GET.get("pagina"))
+    page = Paginator(products, per_page).get_page(request.GET.get("pagina"))
 
-    featured_stores = (
-        Store.objects.filter(public_store_filter())
-        .filter(review_count__gt=0)
-        .order_by("-bayesian_rating", "-sales_count")[:8]
+    return {
+        "page_obj": page,
+        "products": page.object_list,
+        "categories": Category.objects.order_by("name"),
+        "active_category": category_slug,
+        "active_kind": kind_key if kind_key in KIND_FILTERS else "",
+        "kind_filters": KIND_FILTERS,
+        "sort_options": SORT_OPTIONS,
+        "active_sort": sort_key if sort_key in SORT_OPTIONS else default_sort,
+        "total_count": page.paginator.count,
+        "query": query,
+    }
+
+
+def home(request):
+    """
+    Vitrine principal: peças à venda (não lojas). É o que faz o marketplace
+    parecer marketplace — a pessoa entra e já vê o que pode comprar.
+    """
+    context = _product_feed(request, per_page=16)
+    context.update(
+        {
+            "featured_stores": (
+                Store.objects.filter(public_store_filter())
+                .filter(review_count__gt=0)
+                .order_by("-bayesian_rating", "-sales_count")[:8]
+            ),
+            "top_sellers": (
+                Product.objects.filter(
+                    public_store_filter("store__"),
+                    status=Product.Status.PUBLISHED,
+                    visibility=Product.Visibility.PUBLIC,
+                    stock__gt=0,
+                    sold_count__gt=0,
+                )
+                .select_related("store")
+                .prefetch_related("images")
+                .order_by("-sold_count")[:8]
+            ),
+            "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
+            "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
+        }
     )
+    return render(request, "stores/home.html", context)
 
+
+def listing(request):
+    """Catálogo completo com filtros — a página para quem já sabe o que quer."""
+    context = _product_feed(request, per_page=24)
+    return render(request, "stores/listing.html", context)
+
+
+def categories_page(request):
+    """Índice de categorias com contagem de anúncios ativos."""
+    categories = Category.objects.annotate(
+        active_count=Count(
+            "products",
+            filter=Q(
+                products__status=Product.Status.PUBLISHED,
+                products__visibility=Product.Visibility.PUBLIC,
+                products__stock__gt=0,
+            ),
+        )
+    ).order_by("-active_count", "name")
+    return render(request, "stores/categories.html", {"categories": categories})
+
+
+def sell_landing(request):
+    """Página de captação de vendedoras: regras, comissão e passo a passo."""
     return render(
         request,
-        "stores/home.html",
+        "stores/sell.html",
         {
-            "page_obj": page,
-            "products": page.object_list,
-            "categories": Category.objects.order_by("name"),
-            "active_category": category_slug,
-            "featured_stores": featured_stores,
-            "sort_options": SORT_OPTIONS,
-            "active_sort": sort_key if sort_key in SORT_OPTIONS else "recentes",
-            "total_count": page.paginator.count,
+            "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
+            "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
+            "release_hours": settings.DELIVERY_CONFIRMATION_WINDOW_HOURS,
+        },
+    )
+
+
+def how_it_works(request):
+    """Explica a custódia: onde o dinheiro fica e quando ele é liberado."""
+    return render(
+        request,
+        "core/how_it_works.html",
+        {
+            "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
+            "release_hours": settings.DELIVERY_CONFIRMATION_WINDOW_HOURS,
+            "digital_hours": settings.DIGITAL_RELEASE_HOURS,
         },
     )
 

@@ -7,20 +7,40 @@
 {% block content %}
 {% if not request.GET.q and not active_category %}
 <section class="hero-glow -mx-4 sm:-mx-6 px-4 sm:px-6 pt-4 pb-10 text-center max-w-3xl mx-auto mb-8 space-y-4 rounded-b-[2rem]">
-  <span class="badge-neutral">+18 · somente adultos verificados</span>
+  <span class="badge-neutral">+18 · marketplace com pagamento em custódia</span>
   <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight leading-[1.1]">
-    Peças íntimas usadas,<br class="hidden sm:block">
-    direto de quem <span class="text-gradient-brand">usou</span>
+    Peças íntimas e conteúdo,<br class="hidden sm:block">
+    direto de quem <span class="text-gradient-brand">produz</span>
   </h1>
   <p class="text-gray-400 max-w-xl mx-auto">
-    Marketplace entre adultos: você escolhe, paga com Pix em menos de um minuto e recebe em casa.
-    Cobrança discreta no extrato, envio rastreado e nada de contato fora da plataforma.
+    Você paga por Pix, a plataforma segura o valor e a vendedora só recebe quando você confirma que
+    chegou. Embalagem neutra, extrato discreto e nenhuma conversa fora daqui.
   </p>
+  <div class="flex flex-wrap justify-center gap-2 pt-1">
+    <a href="{% url 'stores:listing' %}" class="btn-primary">Explorar anúncios</a>
+    <a href="{% url 'stores:how_it_works' %}" class="btn-secondary">Como a proteção funciona</a>
+  </div>
   <div class="flex flex-wrap justify-center gap-2 pt-1 text-xs">
-    <span class="badge-verified">Idade verificada</span>
-    <span class="badge-neutral">Pix instantâneo</span>
-    <span class="badge-neutral">Embalagem discreta</span>
-    <span class="badge-neutral">Sem mensalidade</span>
+    <span class="badge-verified">Dinheiro retido até a entrega</span>
+    <span class="badge-neutral">Vendedoras com identidade conferida</span>
+    <span class="badge-neutral">Embalagem sem identificação</span>
+  </div>
+</section>
+{% endif %}
+
+{% if top_sellers and not request.GET.q and not active_category %}
+<section class="mb-10">
+  <div class="flex items-end justify-between mb-4">
+    <div>
+      <h2 class="text-lg font-bold">Mais vendidos da semana</h2>
+      <p class="text-xs text-gray-500">O que a comunidade está levando agora.</p>
+    </div>
+    <a href="{% url 'stores:listing' %}?ordem=relevancia" class="text-sm text-brand hover:underline shrink-0">Ver todos</a>
+  </div>
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+    {% for product in top_sellers|slice:":4" %}
+      {% include "catalog/_product_card.html" with product=product show_store=True %}
+    {% endfor %}
   </div>
 </section>
 {% endif %}
@@ -100,18 +120,109 @@
 </section>
 {% endif %}
 
-<section class="mt-14 grid sm:grid-cols-3 gap-4">
-  <div class="card p-5 space-y-1.5">
-    <p class="font-semibold text-sm">Pagamento em 1 minuto</p>
-    <p class="text-xs text-gray-500 leading-relaxed">Pix pelo Asaas, sem cadastro obrigatório. O QR aparece na hora e o pedido confirma sozinho.</p>
+{# ------------------------------------------------------ compra protegida #}
+<section class="mt-16 -mx-4 sm:-mx-6 px-4 sm:px-6 py-12 bg-surface-alt/60 border-y border-surface-border">
+  <div class="max-w-5xl mx-auto">
+    <div class="max-w-2xl">
+      <span class="badge-verified">Compra protegida</span>
+      <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight mt-3">
+        O dinheiro não vai direto para a vendedora
+      </h2>
+      <p class="text-gray-400 mt-3 leading-relaxed">
+        Comprar por rede social é pagar e torcer. Aqui o valor do Pix fica retido com a plataforma e só é
+        repassado quando você confirma o recebimento — ou depois de {{ dispute_window_days }} dias sem
+        nenhuma reclamação sua.
+      </p>
+    </div>
+
+    <div class="grid sm:grid-cols-3 gap-4 mt-8">
+      <div class="card p-5 space-y-2">
+        <span class="text-2xl">🔒</span>
+        <p class="font-semibold text-sm">Valor retido até a entrega</p>
+        <p class="text-xs text-gray-500 leading-relaxed">
+          A vendedora enxerga a venda, mas o saldo fica bloqueado na carteira dela até você confirmar.
+        </p>
+      </div>
+      <div class="card p-5 space-y-2">
+        <span class="text-2xl">↩️</span>
+        <p class="font-semibold text-sm">Reembolso pelo mesmo Pix</p>
+        <p class="text-xs text-gray-500 leading-relaxed">
+          Não chegou ou veio diferente? Abra a contestação em {{ dispute_window_days }} dias e o valor volta
+          para a chave que pagou.
+        </p>
+      </div>
+      <div class="card p-5 space-y-2">
+        <span class="text-2xl">🪪</span>
+        <p class="font-semibold text-sm">Identidade conferida</p>
+        <p class="text-xs text-gray-500 leading-relaxed">
+          Documento e selfie antes de anunciar, moderação em cada anúncio e denúncia com um clique.
+        </p>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-4 gap-4 mt-4">
+      <div class="card p-4 space-y-1">
+        <p class="font-semibold text-xs">Extrato neutro</p>
+        <p class="text-[11px] text-gray-500">A cobrança não cita o site nem o produto.</p>
+      </div>
+      <div class="card p-4 space-y-1">
+        <p class="font-semibold text-xs">Pacote sem identificação</p>
+        <p class="text-[11px] text-gray-500">Nada por fora entrega o conteúdo.</p>
+      </div>
+      <div class="card p-4 space-y-1">
+        <p class="font-semibold text-xs">Envio com rastreio</p>
+        <p class="text-[11px] text-gray-500">Você acompanha pelo link do pedido.</p>
+      </div>
+      <div class="card p-4 space-y-1">
+        <p class="font-semibold text-xs">Zero rastreador</p>
+        <p class="text-[11px] text-gray-500">Nenhum script de terceiro no seu navegador.</p>
+      </div>
+    </div>
+
+    <a href="{% url 'stores:how_it_works' %}" class="btn-secondary mt-6">Ver como funciona em detalhe</a>
   </div>
-  <div class="card p-5 space-y-1.5">
-    <p class="font-semibold text-sm">Privacidade em primeiro lugar</p>
-    <p class="text-xs text-gray-500 leading-relaxed">Nome neutro no extrato, embalagem discreta e nenhum rastreador de terceiro no site.</p>
+</section>
+
+{# --------------------------------------------------------- como funciona #}
+<section class="mt-14">
+  <h2 class="text-xl font-bold mb-1">Da escolha à entrega</h2>
+  <p class="text-sm text-gray-500 mb-5">Quatro passos, sem cadastro obrigatório.</p>
+  <ol class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <li class="card p-5 space-y-2">
+      <span class="w-7 h-7 rounded-full bg-brand/15 text-brand font-bold flex items-center justify-center text-xs">1</span>
+      <p class="font-semibold text-sm">Escolha o anúncio</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Filtre por categoria, veja a reputação da loja e pergunte antes de comprar.</p>
+    </li>
+    <li class="card p-5 space-y-2">
+      <span class="w-7 h-7 rounded-full bg-brand/15 text-brand font-bold flex items-center justify-center text-xs">2</span>
+      <p class="font-semibold text-sm">Pague por Pix</p>
+      <p class="text-xs text-gray-500 leading-relaxed">O QR aparece na hora. O valor fica em custódia, não na conta da vendedora.</p>
+    </li>
+    <li class="card p-5 space-y-2">
+      <span class="w-7 h-7 rounded-full bg-brand/15 text-brand font-bold flex items-center justify-center text-xs">3</span>
+      <p class="font-semibold text-sm">Receba e confira</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Item físico chega com rastreio; conteúdo digital abre na página do pedido.</p>
+    </li>
+    <li class="card p-5 space-y-2">
+      <span class="w-7 h-7 rounded-full bg-emerald-400/15 text-emerald-400 font-bold flex items-center justify-center text-xs">4</span>
+      <p class="font-semibold text-sm">Libere o pagamento</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Confirmou, a vendedora recebe. Deu problema, você contesta e o valor fica travado.</p>
+    </li>
+  </ol>
+</section>
+
+{# -------------------------------------------------------- para vendedoras #}
+<section class="mt-14 card p-6 sm:p-8 flex flex-wrap items-center justify-between gap-5">
+  <div class="max-w-xl">
+    <h2 class="text-xl font-bold">Quer vender aqui?</h2>
+    <p class="text-sm text-gray-400 mt-2">
+      Abrir loja é grátis e sem mensalidade — a plataforma só ganha quando você vende, e a comissão entra
+      por cima do valor que você pediu. Seu nome real nunca aparece para quem compra.
+    </p>
   </div>
-  <div class="card p-5 space-y-1.5">
-    <p class="font-semibold text-sm">Só entre adultos</p>
-    <p class="text-xs text-gray-500 leading-relaxed">Verificação de idade obrigatória, CPF do pagador conferido e moderação humana em todo anúncio.</p>
+  <div class="flex gap-3">
+    <a href="{% url 'stores:sell' %}" class="btn-secondary">Saber mais</a>
+    <a href="{% url 'stores:onboard_page' %}" class="btn-primary">Abrir loja</a>
   </div>
 </section>
 {% endblock %}

@@ -171,9 +171,11 @@ document.addEventListener("alpine:init", () => {
       return found ? Number(found.qty) : 0;
     },
 
-    /* storeSlug garante "uma loja por pedido" — regra do backend. */
-    add(productId, storeSlug, quantity) {
+    /* storeSlug garante "uma loja por pedido" — regra do backend.
+       addonIds são os adicionais escolhidos no anúncio ("quer com X?"). */
+    add(productId, storeSlug, quantity, addonIds) {
       const qty = Number(quantity || 1);
+      const addons = Array.isArray(addonIds) ? addonIds.filter(Boolean) : [];
       if (this.items.length && storeSlug && this.storeSlug && storeSlug !== this.storeSlug) {
         const replace = window.confirm(
           "Sua sacola tem itens de outra loja e cada pedido é fechado com uma loja só. Quer esvaziar e começar esta?"
@@ -185,8 +187,11 @@ document.addEventListener("alpine:init", () => {
       const existing = this.items.find((item) => item.id === productId);
       if (existing) {
         existing.qty = Number(existing.qty) + qty;
+        if (addons.length) {
+          existing.addons = [...new Set([...(existing.addons || []), ...addons])];
+        }
       } else {
-        this.items.push({ id: productId, qty });
+        this.items.push({ id: productId, qty, addons });
       }
       this.persist();
       this.justAdded = productId;
@@ -270,7 +275,7 @@ document.addEventListener("alpine:init", () => {
 
 /* -------------------------------------------------------------- componentes */
 
-/* Botao "Adicionar" / "Comprar agora" dos cards e da pagina de produto. */
+/* Botao "Adicionar" / "Comprar agora" dos cards de anuncio. */
 function buyButton(productId, storeSlug) {
   return {
     added: false,
@@ -286,6 +291,88 @@ function buyButton(productId, storeSlug) {
     buyNow() {
       if (Alpine.store("cart").add(productId, storeSlug, 1)) {
         window.location.href = "/finalizar/";
+      }
+    },
+  };
+}
+
+/* Caixa de compra da pagina do anuncio: adicionais + total ao vivo. */
+function productBuyBox(config) {
+  const cfg = config || {};
+  return {
+    productId: cfg.productId,
+    storeSlug: cfg.storeSlug,
+    basePrice: Number(cfg.price || 0),
+    addons: cfg.addons || [],
+    selected: [],
+    added: false,
+
+    toggleAddon(id) {
+      this.selected = this.selected.includes(id)
+        ? this.selected.filter((item) => item !== id)
+        : [...this.selected, id];
+    },
+
+    isSelected(id) {
+      return this.selected.includes(id);
+    },
+
+    get total() {
+      return this.addons
+        .filter((addon) => this.selected.includes(addon.id))
+        .reduce((sum, addon) => sum + Number(addon.price), this.basePrice);
+    },
+
+    get totalLabel() {
+      return money(this.total);
+    },
+
+    add() {
+      if (Alpine.store("cart").add(this.productId, this.storeSlug, 1, this.selected)) {
+        this.added = true;
+        Alpine.store("cart").openDrawer();
+        setTimeout(() => {
+          this.added = false;
+        }, 1600);
+      }
+    },
+
+    buyNow() {
+      if (Alpine.store("cart").add(this.productId, this.storeSlug, 1, this.selected)) {
+        window.location.href = "/finalizar/";
+      }
+    },
+  };
+}
+
+/* Perguntas publicas no anuncio. */
+function questionForm(productId) {
+  return {
+    text: "",
+    loading: false,
+    sent: false,
+    error: "",
+    async submit() {
+      this.error = "";
+      if (this.text.trim().length < 5) {
+        this.error = "Escreva sua pergunta.";
+        return;
+      }
+      this.loading = true;
+      try {
+        const { ok, data } = await postJSON(`/api/anuncios/${productId}/perguntas/`, {
+          question: this.text,
+        });
+        if (!ok) {
+          this.error = errorMessage(data, "Não foi possível enviar a pergunta.");
+          return;
+        }
+        this.sent = true;
+        this.text = "";
+      } catch (e) {
+        this.error = "Falha de conexão. Tente de novo.";
+      } finally {
+        this.loading = false;
       }
     },
   };
@@ -442,8 +529,14 @@ function checkoutFunnel(config) {
       return Object.keys(this.fieldErrors).length === 0;
     },
 
+    /* Sacola só de conteúdo digital não tem entrega física. */
+    get needsShipping() {
+      return !this.summary || this.summary.requires_shipping !== false;
+    },
+
     validateAddress() {
       this.fieldErrors = {};
+      if (!this.needsShipping) return true;
       if (onlyDigits(this.address.cep).length !== 8) this.fieldErrors.cep = "CEP incompleto.";
       if (!this.address.street.trim()) this.fieldErrors.street = "Informe a rua.";
       if (!this.address.number.trim()) this.fieldErrors.number = "Informe o número.";
@@ -475,17 +568,23 @@ function checkoutFunnel(config) {
       this.loading = true;
       try {
         const body = {
-          items: this.cart.items.map((item) => ({ product_id: item.id, quantity: item.qty })),
+          items: this.cart.items.map((item) => ({
+            product_id: item.id,
+            quantity: item.qty,
+            addon_ids: item.addons || [],
+          })),
           shipping_service: "pac",
-          shipping_address: {
-            cep: onlyDigits(this.address.cep),
-            street: this.address.street.trim(),
-            number: this.address.number.trim(),
-            complement: this.address.complement.trim(),
-            neighborhood: this.address.neighborhood.trim(),
-            city: this.address.city.trim(),
-            state: this.address.state.trim().toUpperCase(),
-          },
+          shipping_address: this.needsShipping
+            ? {
+                cep: onlyDigits(this.address.cep),
+                street: this.address.street.trim(),
+                number: this.address.number.trim(),
+                complement: this.address.complement.trim(),
+                neighborhood: this.address.neighborhood.trim(),
+                city: this.address.city.trim(),
+                state: this.address.state.trim().toUpperCase(),
+              }
+            : {},
           payment_method: "pix",
           marketing_opt_in: !!this.marketingOptIn,
         };
@@ -613,6 +712,37 @@ function orderTracker(token, awaitingPayment) {
       setTimeout(() => {
         this.copied = false;
       }, 2500);
+    },
+  };
+}
+
+/* Liberacao da custodia na pagina do pedido. */
+function orderRelease(token) {
+  return {
+    loading: false,
+    error: "",
+    async send(action) {
+      this.loading = true;
+      this.error = "";
+      try {
+        const { ok, data } = await postJSON(`/api/pedido/${token}/confirmar/`, { action });
+        if (!ok) {
+          this.error = errorMessage(data, "Não foi possível registrar sua resposta.");
+          return;
+        }
+        window.location.reload();
+      } catch (e) {
+        this.error = "Falha de conexão. Tente de novo.";
+      } finally {
+        this.loading = false;
+      }
+    },
+    confirm() {
+      this.send("confirm");
+    },
+    dispute() {
+      if (!window.confirm("Abrir contestação? O pagamento fica travado até a moderação analisar.")) return;
+      this.send("dispute");
     },
   };
 }

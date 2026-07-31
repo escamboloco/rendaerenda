@@ -74,20 +74,57 @@ Regra de ouro: **nenhuma chamada de rede dentro de transação de banco.**
 `reserve_order()` trava o estoque numa transação curta; a cobrança no Asaas
 acontece depois. Se o Asaas falhar, o pedido é cancelado e o estoque volta.
 
+## Modelo de negócio
+
+Marketplace +18 de **itens** e **conteúdo** — nunca de serviço presencial.
+
+| Peça | Como funciona |
+|---|---|
+| Comissão | `PLATFORM_COMMISSION_PERCENT` (15% por padrão) **por cima** do valor que a vendedora pediu. Ela recebe o líquido inteiro; quem compra paga a diferença |
+| Custódia | O Pix fica com a plataforma. A vendedora só saca depois que o comprador confirma o recebimento (ou depois do prazo) |
+| Disputa | `DISPUTE_WINDOW_DAYS` (7) para contestar. Contestou, o valor trava até a moderação decidir |
+| Mensalidade | Nenhuma. Abrir loja e anunciar é grátis |
+| Tipos de anúncio | `physical` (correio), `digital` (arquivo entregue pelo site), `custom` (sob encomenda) |
+| Adicionais | `ProductAddon` — extras pagos escolhidos no anúncio, cobrados no mesmo pedido, com a mesma regra de comissão |
+| Frete | Pago por quem compra e repassado inteiro à vendedora, que posta. `CHECKOUT_FREE_SHIPPING=True` zera no lançamento |
+
 ## Fluxo de uma compra
 
-1. A pessoa monta a sacola (localStorage guarda só `id` + quantidade).
+1. A pessoa monta a sacola (localStorage guarda só `id`, quantidade e
+   adicionais escolhidos).
 2. `/finalizar/` recalcula tudo no servidor (`POST /api/sacola/`) — preço
    nunca vem do navegador.
 3. `POST /api/checkout/` reserva o estoque, cria a cobrança Pix e devolve
-   QR + copia-e-cola + link de acompanhamento.
+   QR + copia-e-cola + link de acompanhamento. Sacola só de conteúdo
+   digital pula endereço e frete.
 4. A tela consulta `GET /api/pedido/<token>/status/` a cada 4s. Esse endpoint
    **consulta o Asaas diretamente**, então a compra confirma mesmo se o
    webhook não estiver configurado ou falhar.
 5. `POST /webhooks/asaas/` confirma em background (caminho normal).
-6. Confirmado: crédito no ledger + Pix automático para a vendedora + e-mails.
-   Tudo idempotente — webhook repetido não paga duas vezes.
-7. Não pagou até `expires_at`? `manage.py expire_orders` devolve o item.
+6. Confirmado: crédito **retido** no ledger + e-mails. Conteúdo digital
+   já fica disponível na página do pedido.
+7. `POST /api/pedido/<token>/confirmar/` (o botão "recebi") libera a
+   custódia e dispara o Pix para a vendedora. Sem resposta, os crons
+   `release_deliveries` / `release_escrow` liberam no prazo.
+8. Não pagou até `expires_at`? `manage.py expire_orders` devolve o item
+   para a vitrine.
+
+Tudo idempotente: webhook repetido não credita duas vezes e
+`Order.payout_sent_at` impede repasse duplicado.
+
+## Páginas públicas
+
+| Rota | O que é |
+|---|---|
+| `/` | Vitrine: destaques, mais vendidos, categorias, provas de segurança |
+| `/anuncios/` | Catálogo completo com filtros (tipo, categoria, ordenação) |
+| `/categorias/` | Índice de categorias + o que não é permitido |
+| `/como-funciona/` | Explicação da custódia, prazos e privacidade |
+| `/vender/` | Landing de captação de vendedoras |
+| `/loja/<slug>/` | Loja da vendedora |
+| `/loja/<slug>/item/<slug>/` | Anúncio: galeria, adicionais, perguntas, reputação |
+| `/finalizar/` | Funil de checkout em 3 passos |
+| `/pedido/<token>/` | Pedido: Pix, status ao vivo, download digital, confirmar/contestar |
 
 ## Integração Asaas — passo a passo
 

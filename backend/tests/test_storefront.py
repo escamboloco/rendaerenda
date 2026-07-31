@@ -12,6 +12,7 @@ from .base import ApiTestCase
 from .factories import make_product, make_store
 
 
+@override_settings(PLATFORM_COMMISSION_PERCENT=Decimal("20"))
 class StorefrontTests(ApiTestCase):
     def setUp(self):
         super().setUp()
@@ -62,6 +63,7 @@ class StorefrontTests(ApiTestCase):
         self.assertEqual(self.client.get(reverse("payments_pages:checkout_page")).status_code, 200)
 
 
+@override_settings(PLATFORM_COMMISSION_PERCENT=Decimal("20"))
 class CartSummaryTests(ApiTestCase):
     """O preço do checkout vem do servidor — nunca do navegador."""
 

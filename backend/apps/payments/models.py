@@ -56,13 +56,17 @@ class Order(models.Model):
         help_text="Legado — modelo atual nao soma embalagem; frete vai inteiro pra vendedora.",
     )
 
-    shipping_address = models.JSONField()
+    # Vazio ({}) em pedido só de conteúdo digital — não existe entrega física.
+    shipping_address = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     # Ate quando o Pix deste pedido pode ser pago. Passou disso sem
     # pagamento, o pedido expira e o estoque volta para a vitrine.
     expires_at = models.DateTimeField(null=True, blank=True)
     canceled_reason = models.CharField(max_length=80, blank=True)
+    # Quando o dinheiro saiu da custódia para a vendedora. Trava de
+    # idempotência do repasse: preenchido, nunca mais paga de novo.
+    payout_sent_at = models.DateTimeField(null=True, blank=True)
     # Trava de idempotencia: garante que o estoque so volta uma vez,
     # mesmo com webhook repetido + cron de expiracao rodando junto.
     stock_restored = models.BooleanField(default=False)
@@ -115,8 +119,17 @@ class Order(models.Model):
 
     @property
     def payout_total(self) -> Decimal:
-        """Soma do que a vendedora declarou querer receber pelos itens."""
-        return sum((item.unit_payout_amount * item.quantity for item in self.items.all()), Decimal("0.00"))
+        """Soma do que a vendedora declarou querer receber (itens + adicionais)."""
+        return sum((item.line_payout for item in self.items.all()), Decimal("0.00"))
+
+    @property
+    def requires_shipping(self) -> bool:
+        """Pedido só de conteúdo digital não tem endereço, frete nem rastreio."""
+        return any(item.product.requires_shipping for item in self.items.all())
+
+    @property
+    def is_digital_only(self) -> bool:
+        return not self.requires_shipping
 
     @property
     def seller_amount(self) -> Decimal:
@@ -139,6 +152,20 @@ class OrderItem(models.Model):
         max_digits=8, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))], default=Decimal("0.01")
     )
     quantity = models.PositiveSmallIntegerField(default=1)
+
+    # Adicionais escolhidos ("quer com X?"). Guardados como snapshot: o
+    # que foi combinado nao muda se a vendedora editar o anuncio depois.
+    addons = models.JSONField(default=list, blank=True)
+    addons_price = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
+    addons_payout = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
+
+    @property
+    def line_price(self) -> Decimal:
+        return self.unit_price * self.quantity + self.addons_price
+
+    @property
+    def line_payout(self) -> Decimal:
+        return self.unit_payout_amount * self.quantity + self.addons_payout
 
 
 class Payment(models.Model):

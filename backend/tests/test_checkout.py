@@ -213,16 +213,23 @@ class OrderStatusPollingTests(ApiTestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.PAID)
         self.assertEqual(Payment.objects.get().status, Payment.Status.CONFIRMED)
-        # Repasse Pix disparado uma unica vez.
-        self.assertEqual(len(self.provider.withdrawals), 1)
-        self.assertEqual(self.provider.withdrawals[0]["amount"], self.order.seller_amount)
+        # Custódia: o crédito entra retido e nada é repassado ainda.
+        from apps.wallet.models import WalletEntry
 
-    def test_polling_twice_does_not_pay_the_seller_twice(self):
+        credit = WalletEntry.objects.get(order=self.order, kind=WalletEntry.Kind.SALE_CREDIT)
+        self.assertEqual(credit.amount, self.order.seller_amount)
+        self.assertEqual(self.provider.withdrawals, [])
+
+    def test_polling_twice_does_not_credit_twice(self):
+        from apps.wallet.models import WalletEntry
+
         self.provider.paid = True
         self.client.get(self.status_url())
         self.client.get(self.status_url())
 
-        self.assertEqual(len(self.provider.withdrawals), 1)
+        self.assertEqual(
+            WalletEntry.objects.filter(order=self.order, kind=WalletEntry.Kind.SALE_CREDIT).count(), 1
+        )
 
     def test_payer_with_another_cpf_is_refunded(self):
         self.provider.paid = True

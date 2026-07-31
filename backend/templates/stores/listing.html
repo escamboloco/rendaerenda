@@ -1,0 +1,106 @@
+{% extends "core/base.html" %}
+{% block title %}Anúncios — Renda &amp; Renda{% endblock %}
+{% block description %}Todos os anúncios do marketplace: peças íntimas usadas, conteúdo digital e itens sob encomenda, com pagamento em custódia e envio discreto.{% endblock %}
+{% block robots %}index, follow{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+
+{% block content %}
+<nav class="text-xs text-gray-500 mb-4 flex items-center gap-1.5">
+  <a href="{% url 'stores:home' %}" class="hover:text-gray-300">Início</a>
+  <span>/</span>
+  <span class="text-gray-400">Anúncios</span>
+</nav>
+
+<div class="flex flex-wrap items-end justify-between gap-3 mb-6">
+  <div>
+    <h1 class="text-2xl font-extrabold tracking-tight">Anúncios do marketplace</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      {% if query %}<span class="text-gray-300">{{ total_count }}</span> resultado{{ total_count|pluralize }} para “{{ query }}”
+      {% else %}<span class="text-gray-300">{{ total_count }}</span> anúncio{{ total_count|pluralize }} com pagamento protegido{% endif %}
+    </p>
+  </div>
+  <form method="get" class="flex items-center gap-2">
+    {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+    {% if active_category %}<input type="hidden" name="categoria" value="{{ active_category }}">{% endif %}
+    {% if active_kind %}<input type="hidden" name="tipo" value="{{ active_kind }}">{% endif %}
+    <label for="ordem" class="text-xs text-gray-500">Ordenar</label>
+    <select name="ordem" id="ordem" onchange="this.form.submit()" class="input-field !py-2 !px-3 text-sm w-auto">
+      {% for key, option in sort_options.items %}
+      <option value="{{ key }}" {% if active_sort == key %}selected{% endif %}>{{ option.1 }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="grid lg:grid-cols-[15rem_minmax(0,1fr)] gap-6 items-start">
+
+  {# ------------------------------------------------------------- filtros #}
+  <aside class="card p-5 space-y-5 lg:sticky lg:top-24">
+    <div>
+      <p class="input-label">Tipo de anúncio</p>
+      <ul class="space-y-1.5 text-sm">
+        <li>
+          <a href="?{% if query %}q={{ query }}&{% endif %}{% if active_category %}categoria={{ active_category }}{% endif %}"
+             class="{% if not active_kind %}text-white font-medium{% else %}text-gray-400 hover:text-gray-200{% endif %}">Todos</a>
+        </li>
+        {% for key, kind in kind_filters.items %}
+        <li>
+          <a href="?tipo={{ key }}{% if query %}&q={{ query }}{% endif %}{% if active_category %}&categoria={{ active_category }}{% endif %}"
+             class="{% if active_kind == key %}text-white font-medium{% else %}text-gray-400 hover:text-gray-200{% endif %}">{{ kind.1 }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="border-t border-surface-border pt-4">
+      <p class="input-label">Categoria</p>
+      <ul class="space-y-1.5 text-sm max-h-72 overflow-y-auto">
+        <li>
+          <a href="?{% if query %}q={{ query }}&{% endif %}{% if active_kind %}tipo={{ active_kind }}{% endif %}"
+             class="{% if not active_category %}text-white font-medium{% else %}text-gray-400 hover:text-gray-200{% endif %}">Todas</a>
+        </li>
+        {% for category in categories %}
+        <li>
+          <a href="?categoria={{ category.slug }}{% if query %}&q={{ query }}{% endif %}{% if active_kind %}&tipo={{ active_kind }}{% endif %}"
+             class="{% if active_category == category.slug %}text-white font-medium{% else %}text-gray-400 hover:text-gray-200{% endif %}">{{ category.name }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="border-t border-surface-border pt-4 space-y-2 text-[11px] text-gray-500">
+      <p class="text-gray-300 text-xs font-semibold">Toda compra aqui tem</p>
+      <p>✓ Pagamento em custódia até você confirmar</p>
+      <p>✓ Embalagem sem identificação</p>
+      <p>✓ Vendedora com identidade conferida</p>
+      <a href="{% url 'stores:how_it_works' %}" class="text-brand hover:underline inline-block pt-1">Como funciona</a>
+    </div>
+  </aside>
+
+  {# -------------------------------------------------------------- grade #}
+  <div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+      {% for product in products %}
+        {% include "catalog/_product_card.html" with product=product show_store=True %}
+      {% empty %}
+      <div class="col-span-full card p-10 text-center space-y-3">
+        <p class="text-gray-400">Nenhum anúncio com esses filtros.</p>
+        <a href="{% url 'stores:listing' %}" class="btn-secondary text-sm">Limpar filtros</a>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <nav class="flex items-center justify-center gap-2 mt-10 text-sm">
+      {% if page_obj.has_previous %}
+      <a class="btn-secondary !py-2 !min-h-0" href="?pagina={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if active_category %}&categoria={{ active_category }}{% endif %}{% if active_kind %}&tipo={{ active_kind }}{% endif %}&ordem={{ active_sort }}">Anterior</a>
+      {% endif %}
+      <span class="text-gray-500">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+      <a class="btn-secondary !py-2 !min-h-0" href="?pagina={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if active_category %}&categoria={{ active_category }}{% endif %}{% if active_kind %}&tipo={{ active_kind }}{% endif %}&ordem={{ active_sort }}">Próxima</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

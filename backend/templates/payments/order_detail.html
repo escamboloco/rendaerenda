@@ -80,6 +80,54 @@
   </div>
   {% endif %}
 
+  {# --------------------------------------------------- conteúdo digital #}
+  {% if digital_assets %}
+  <section class="card p-5 space-y-3 border-emerald-900/40">
+    <div>
+      <p class="font-semibold">Seu conteúdo está liberado</p>
+      <p class="text-xs text-gray-500 mt-0.5">Os links são pessoais: só funcionam com o endereço deste pedido.</p>
+    </div>
+    <ul class="space-y-2">
+      {% for entry in digital_assets %}
+      <li>
+        <a href="{% url 'catalog:download_asset' order.access_token entry.asset.id %}"
+           class="btn-secondary w-full justify-start text-sm">
+          ⬇ {{ entry.asset.label|default:entry.product.title }}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {# ----------------------------------------- custódia: confirmar/contestar #}
+  {% if can_confirm %}
+  <section class="card p-5 space-y-3" x-data="orderRelease('{{ order.access_token }}')">
+    <div>
+      <p class="font-semibold">O pagamento está retido</p>
+      <p class="text-sm text-gray-400 mt-1">
+        A vendedora só recebe quando você confirmar. Recebeu tudo certo? Confirme e libere.
+        Deu problema, conteste em até {{ dispute_window_days }} dias e o valor fica travado para análise.
+      </p>
+    </div>
+    <p x-cloak x-show="error" x-text="error" class="input-error"></p>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="btn-primary flex-1" @click="confirm()" :disabled="loading">
+        <span x-show="!loading">Recebi, liberar pagamento</span>
+        <span x-cloak x-show="loading">Enviando…</span>
+      </button>
+      <button type="button" class="btn-secondary !text-red-300" @click="dispute()" :disabled="loading">
+        Tive um problema
+      </button>
+    </div>
+  </section>
+  {% elif order.status == 'disputed' %}
+  <section class="card p-5 text-sm text-amber-200 border-amber-900/50">
+    Contestação registrada. O valor continua retido e a moderação vai analisar o caso — você recebe a
+    resposta por e-mail.
+  </section>
+  {% endif %}
+
   {# ------------------------------------------------------------- itens #}
   <section class="card p-5 space-y-3">
     <p class="font-semibold text-sm">Itens</p>

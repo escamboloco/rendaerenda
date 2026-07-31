@@ -77,7 +77,7 @@ class AsaasWebhookTests(ApiTestCase):
 
     # --------------------------------------------------------- confirmacao
 
-    def test_payment_received_confirms_order_and_pays_seller(self):
+    def test_payment_received_confirms_order_and_holds_the_money(self):
         response = self.send("PAYMENT_RECEIVED")
 
         self.assertEqual(response.status_code, 200)
@@ -88,29 +88,32 @@ class AsaasWebhookTests(ApiTestCase):
         self.assertIsNotNone(self.order.paid_at)
         self.assertIsNone(self.order.expires_at)
         self.assertEqual(self.payment.status, Payment.Status.CONFIRMED)
-        self.assertEqual(len(self.provider.withdrawals), 1)
+        # Custódia: a vendedora só recebe depois da entrega confirmada.
+        self.assertEqual(self.provider.withdrawals, [])
+        self.assertIsNone(self.order.payout_sent_at)
 
     def test_payment_confirmed_event_also_works(self):
         self.assertTrue(self.send("PAYMENT_CONFIRMED").json()["confirmed_now"])
 
-    def test_duplicate_webhook_does_not_pay_the_seller_twice(self):
+    def test_duplicate_webhook_does_not_credit_twice(self):
         self.send("PAYMENT_RECEIVED")
         second = self.send("PAYMENT_CONFIRMED")
 
         self.assertEqual(second.status_code, 200)
         self.assertFalse(second.json()["confirmed_now"])
-        self.assertEqual(len(self.provider.withdrawals), 1)
         self.assertEqual(
             WalletEntry.objects.filter(order=self.order, kind=WalletEntry.Kind.SALE_CREDIT).count(), 1
         )
 
-    def test_seller_receives_payout_plus_shipping_only(self):
+    def test_credit_is_payout_plus_shipping_only(self):
         self.send("PAYMENT_RECEIVED")
         self.order.refresh_from_db()
 
-        payout = self.provider.withdrawals[0]["amount"]
-        self.assertEqual(payout, self.order.payout_total + self.order.shipping_total)
-        self.assertEqual(self.order.grand_total - payout, self.order.platform_amount)
+        credit = WalletEntry.objects.get(
+            order=self.order, kind=WalletEntry.Kind.SALE_CREDIT
+        ).amount
+        self.assertEqual(credit, self.order.payout_total + self.order.shipping_total)
+        self.assertEqual(self.order.grand_total - credit, self.order.platform_amount)
 
     def test_store_sales_counter_increases_once(self):
         self.send("PAYMENT_RECEIVED")
@@ -148,6 +151,9 @@ class AsaasWebhookTests(ApiTestCase):
         self.assertEqual(self.order.status, Order.Status.REFUNDED)
         self.assertEqual(self.provider.refunds, [self.payment.provider_charge_id])
         self.assertEqual(self.provider.withdrawals, [])
+        self.assertFalse(
+            WalletEntry.objects.filter(order=self.order, kind=WalletEntry.Kind.SALE_CREDIT).exists()
+        )
 
     @override_settings(REFUND_ON_PAYER_CPF_MISMATCH=False)
     def test_mismatch_can_be_flagged_instead_of_refunded(self):

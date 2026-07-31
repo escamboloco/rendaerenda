@@ -8,6 +8,7 @@ urlpatterns = [
     path("checkout/", views.CheckoutView.as_view(), name="checkout"),
     path("sacola/", views.CartSummaryView.as_view(), name="cart_summary"),
     path("pedido/<str:token>/status/", views.OrderStatusView.as_view(), name="order_status"),
+    path("pedido/<str:token>/confirmar/", views.OrderConfirmView.as_view(), name="order_confirm"),
 ]
 
 page_urlpatterns = [

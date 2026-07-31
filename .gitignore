@@ -1,0 +1,10 @@
+# Banco local: o runserver de desenvolvimento roda com a raiz do repo como
+# cwd (ver .claude/launch.json), entao um sqlite pode nascer aqui. Nunca e
+# codigo-fonte e pode conter dados de teste — nao versionar.
+db.sqlite3
+*.sqlite3
+
+.env
+__pycache__/
+*.pyc
+.DS_Store

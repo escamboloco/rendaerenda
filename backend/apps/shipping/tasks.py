@@ -160,7 +160,7 @@ def release_confirmed_deliveries():
     contestacao (DELIVERY_CONFIRMATION_WINDOW_HOURS, 24h por padrao)
     passou desde a entrega sem contestacao. docs/checkout.md.
     """
-    from apps.wallet.services import release_sale
+    from apps.wallet.services import release_and_payout
 
     window = timedelta(hours=settings.DELIVERY_CONFIRMATION_WINDOW_HOURS)
     cutoff = timezone.now() - window
@@ -174,8 +174,8 @@ def release_confirmed_deliveries():
     ).select_related("order").distinct()
 
     for shipment in to_release:
-        release_sale(shipment.order)
-        logger.info("Saldo liberado para o pedido %s", shipment.order_id)
+        if release_and_payout(shipment.order):
+            logger.info("Custodia liberada e repasse disparado para o pedido %s", shipment.order_id)
 
 
 def models_q_confirmed_or_expired(cutoff):

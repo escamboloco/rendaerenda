@@ -15,9 +15,9 @@ import apps.reviews.urls as reviews_urls
 import apps.stores.urls as stores_urls
 import apps.subscriptions.urls as subscriptions_urls
 import apps.wallet.urls as wallet_urls
-from apps.core.sitemaps import StaticViewSitemap, StoreSitemap
+from apps.core.sitemaps import ProductSitemap, StaticViewSitemap, StoreSitemap
 
-sitemaps = {"stores": StoreSitemap, "static": StaticViewSitemap}
+sitemaps = {"products": ProductSitemap, "stores": StoreSitemap, "static": StaticViewSitemap}
 
 api_urlpatterns = [
     path("", include((accounts_urls.urlpatterns, "accounts"))),

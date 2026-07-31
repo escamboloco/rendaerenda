@@ -18,27 +18,36 @@ para o público, e como conferir. O checklist **jurídico** é o da seção 7 de
 | 6 | SMTP real (`EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`) | Sem isso os e-mails caem no log e ninguém recebe o link do pedido |
 | 7 | Toda loja ativa com `pix_key` preenchida | Admin → Lojas; sem chave o repasse não sai |
 | 8 | Cron `expire-orders` rodando | Render → Cron → último run OK. Sem ele, carrinho abandonado tira peça única do ar para sempre |
-| 9 | `manage.py createcachetable` executado | Sem a tabela, o rate limit quebra |
-| 10 | `SEED_PAYMENT_TEST=False` depois do primeiro teste de pagamento | Senão a loja de teste com itens de R$ 5 fica pública |
+| 9 | Crons `release-deliveries` e `release-escrow` rodando | Sem eles o dinheiro fica preso na custódia e a vendedora nunca recebe |
+| 10 | `manage.py createcachetable` executado | Sem a tabela, o rate limit quebra |
+| 11 | `SEED_PAYMENT_TEST=False` depois do primeiro teste de pagamento | Senão a loja de teste com itens de R$ 5 fica pública |
 
 ## 2. Teste de fumaça (fazer com dinheiro real, valor baixo)
 
 1. Abrir o site anônimo → confirmar age gate.
-2. Adicionar item à sacola → `/finalizar/`.
+2. Adicionar item à sacola (com um adicional, se houver) → `/finalizar/`.
 3. Preencher dados de guest + CEP (o endereço deve autopreencher).
 4. Gerar o Pix → **conferir se o QR aparece**.
 5. Pagar de uma conta com **o mesmo CPF** informado.
 6. A tela deve confirmar sozinha em até ~10s (polling), sem recarregar.
 7. Conferir:
    - pedido `paid` no admin;
-   - `WalletEntry` de crédito criado uma única vez;
-   - `WithdrawalRequest` com `provider_transfer_id` (Pix saiu para a vendedora);
+   - `WalletEntry` de crédito criado **uma vez** e **retido** (`available_at` no futuro);
+   - `Order.payout_sent_at` ainda vazio — a vendedora não pode ter recebido;
    - e-mail de confirmação recebido;
    - estoque do item zerado e fora da vitrine.
 8. Repetir o webhook manualmente (reenviar pelo painel do Asaas) e conferir
-   que **não** aparece um segundo crédito nem um segundo repasse.
-9. Criar um pedido e não pagar → rodar `manage.py expire_orders` → o item
-   volta para a vitrine.
+   que **não** aparece um segundo crédito.
+9. Na página do pedido, clicar em "Recebi, liberar pagamento" e conferir:
+   - `WithdrawalRequest` com `provider_transfer_id` (o Pix saiu);
+   - `Order.payout_sent_at` preenchido;
+   - clicar de novo devolve 409, sem segundo Pix.
+10. Repetir com um anúncio digital: o checkout não deve pedir endereço e o
+    arquivo tem que abrir na página do pedido só depois do pagamento.
+11. Criar um pedido e não pagar → rodar `manage.py expire_orders` → o item
+    volta para a vitrine.
+12. Abrir uma contestação em outro pedido e conferir que `release_escrow`
+    **não** repassa o valor.
 
 ## 3. Pagamento por CPF divergente
 
@@ -63,6 +72,9 @@ Antes de abrir para volume, decida:
 | Cartão de crédito | Só Pix implementado | Perde conversão de quem não usa Pix |
 | Boost de loja | `StoreBoostPurchaseView` cria o boost sem cobrar | Receita não realizada — desative a compra ou implemente a cobrança |
 | Mídia em disco do Render | `/var/data` com 5 GB | Disco cheio derruba upload; migrar para S3 antes de escalar |
+| Painel da vendedora para tipo/adicionais/arquivos | Só pelo admin do Django | A vendedora não consegue criar anúncio digital nem adicional sozinha |
+| Chat comprador↔vendedora | Só perguntas públicas no anúncio | Combinado de item sob encomenda fica sem canal privado |
+| Reembolso do valor em custódia | A contestação trava o repasse, mas o estorno é manual no painel do Asaas | Devolução depende de ação humana |
 
 ## 5. Monitoramento mínimo
 

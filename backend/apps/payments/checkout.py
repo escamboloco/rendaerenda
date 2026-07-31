@@ -54,6 +54,8 @@ class CheckoutError(Exception):
 class CartLine:
     product_id: str
     quantity: int
+    # Ids dos adicionais escolhidos para este item ("quer com X?").
+    addon_ids: tuple[str, ...] = ()
 
 
 def order_ttl_minutes() -> int:
@@ -84,6 +86,11 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
     products = list(Product.objects.select_related("store").filter(id__in=ids))
     if not products:
         raise CheckoutError("Um dos itens da sacola não está mais disponível.")
+
+    products = [p for p in products if p.requires_shipping]
+    if not products:
+        # Sacola só de conteúdo digital: nada a enviar.
+        return test_free_freight_option()
 
     if getattr(settings, "CHECKOUT_FREE_SHIPPING", True) or products_are_payment_test(products):
         return test_free_freight_option()
@@ -149,8 +156,11 @@ def reserve_order(
     # Agrupa linhas repetidas do mesmo produto: sem isso, dois itens iguais
     # no carrinho passariam duas validacoes de estoque de 1 unidade cada.
     wanted: dict[str, int] = {}
+    chosen_addons: dict[str, set[str]] = {}
     for line in lines:
-        wanted[str(line.product_id)] = wanted.get(str(line.product_id), 0) + int(line.quantity)
+        key = str(line.product_id)
+        wanted[key] = wanted.get(key, 0) + int(line.quantity)
+        chosen_addons.setdefault(key, set()).update(str(a) for a in (line.addon_ids or ()))
 
     products = {
         str(p.id): p
@@ -169,8 +179,10 @@ def reserve_order(
     if not store.is_public():
         raise CheckoutError("Esta loja não está disponível no momento.")
 
+    addons_by_product = _load_addons(chosen_addons)
+
     items_total = ZERO
-    reserved: list[tuple[Product, int]] = []
+    reserved: list[tuple[Product, int, list]] = []
     for product_id, quantity in wanted.items():
         product = products[product_id]
         if not product.is_available():
@@ -185,8 +197,15 @@ def reserve_order(
                 if product.stock
                 else f"“{product.title}” acabou de ser vendido."
             )
-        items_total += product.price * quantity
-        reserved.append((product, quantity))
+        addons = addons_by_product.get(product_id, [])
+        items_total += product.price * quantity + sum((a.price for a in addons), ZERO)
+        reserved.append((product, quantity, addons))
+
+    needs_shipping = any(product.requires_shipping for product, _, _ in reserved)
+    if not needs_shipping:
+        # Pedido só de conteúdo digital: sem endereço, sem frete, sem envio.
+        shipping_address = {}
+        shipping_total = ZERO
 
     order = Order.objects.create(
         buyer=buyer,
@@ -211,23 +230,53 @@ def reserve_order(
                 unit_price=product.price,
                 unit_payout_amount=product.payout_amount,
                 quantity=quantity,
+                addons=[
+                    {"id": str(a.id), "title": a.title, "price": str(a.price), "payout": str(a.payout_amount)}
+                    for a in addons
+                ],
+                addons_price=sum((a.price for a in addons), ZERO),
+                addons_payout=sum((a.payout_amount for a in addons), ZERO),
             )
-            for product, quantity in reserved
+            for product, quantity, addons in reserved
         ]
     )
 
-    for product, quantity in reserved:
+    for product, quantity, _ in reserved:
         Product.objects.filter(pk=product.pk).update(stock=F("stock") - quantity)
         product.refresh_from_db(fields=["stock"])
         if product.stock == 0 and product.status == Product.Status.PUBLISHED:
             Product.objects.filter(pk=product.pk).update(status=Product.Status.SOLD)
 
-    Shipment.objects.create(
-        order=order,
-        service=shipping_service,
-        estimated_delivery_days=shipping_deadline_days,
-    )
+    if needs_shipping:
+        Shipment.objects.create(
+            order=order,
+            service=shipping_service,
+            estimated_delivery_days=shipping_deadline_days,
+        )
     return order
+
+
+def _load_addons(chosen: dict[str, set[str]]) -> dict[str, list]:
+    """
+    Carrega os adicionais escolhidos conferindo que cada um pertence mesmo
+    ao produto da linha — o navegador manda só o id, o preço vem daqui.
+    """
+    from apps.catalog.models import ProductAddon
+
+    all_ids = {addon_id for ids in chosen.values() for addon_id in ids}
+    if not all_ids:
+        return {}
+    found = ProductAddon.objects.filter(id__in=all_ids, is_active=True)
+    by_product: dict[str, list] = {}
+    valid_ids = set()
+    for addon in found:
+        product_id = str(addon.product_id)
+        if str(addon.id) in chosen.get(product_id, set()):
+            by_product.setdefault(product_id, []).append(addon)
+            valid_ids.add(str(addon.id))
+    if valid_ids != all_ids:
+        raise CheckoutError("Um dos adicionais escolhidos não está mais disponível.")
+    return by_product
 
 
 # --------------------------------------------------------------------------
@@ -347,8 +396,10 @@ def confirm_paid_order(payment: Payment, webhook_payload: dict | None = None) ->
 
     try:
         increment_sales_count(order.store)
+        for item in order.items.all():
+            Product.objects.filter(pk=item.product_id).update(sold_count=F("sold_count") + item.quantity)
     except Exception:
-        logger.exception("Falha ao atualizar contador de vendas da loja %s", order.store_id)
+        logger.exception("Falha ao atualizar contadores de venda do pedido %s", order.id)
 
     _dispatch_paid_notifications(order)
     return True

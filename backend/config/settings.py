@@ -254,11 +254,26 @@ REST_FRAMEWORK = {
 # (Product.payout_amount) - ela nunca "perde" a comissao; o comprador que paga
 # a mais. Sem assinatura/mensalidade: navegar, anunciar e comprar sao
 # gratuitos - a plataforma só ganha em cima da venda.
-PLATFORM_COMMISSION_PERCENT = config("PLATFORM_COMMISSION_PERCENT", default=20, cast=int)
+PLATFORM_COMMISSION_PERCENT = config("PLATFORM_COMMISSION_PERCENT", default=Decimal("15"), cast=Decimal)
 WALLET_RELEASE_DAYS_AFTER_SHIPPING = config("WALLET_RELEASE_DAYS_AFTER_SHIPPING", default=3, cast=int)
-# Janela pós-entrega pra comprador confirmar ou contestar antes da liberação
-# automática do saldo pra vendedora (docs/checkout.md).
-DELIVERY_CONFIRMATION_WINDOW_HOURS = config("DELIVERY_CONFIRMATION_WINDOW_HOURS", default=24, cast=int)
+
+# --- Custódia (o dinheiro fica com a plataforma até a entrega) ---
+# É a promessa central da vitrine: o comprador não paga direto na mão de
+# ninguém. O crédito da venda nasce retido e só vira sacável quando o
+# comprador confirma o recebimento ou a janela de contestação vence.
+ESCROW_ENABLED = config("ESCROW_ENABLED", default=True, cast=bool)
+# Janela pós-entrega para confirmar ou contestar antes da liberação
+# automática do saldo para a vendedora.
+DELIVERY_CONFIRMATION_WINDOW_HOURS = config("DELIVERY_CONFIRMATION_WINDOW_HOURS", default=168, cast=int)
+# Conteúdo digital não tem entrega para rastrear: libera por prazo.
+DIGITAL_RELEASE_HOURS = config("DIGITAL_RELEASE_HOURS", default=24, cast=int)
+# Teto de retenção: mesmo sem confirmação nem rastreio, o valor não fica
+# preso para sempre.
+ESCROW_MAX_HOLD_DAYS = config("ESCROW_MAX_HOLD_DAYS", default=30, cast=int)
+# Prazo do comprador para abrir disputa depois de receber.
+DISPUTE_WINDOW_DAYS = config("DISPUTE_WINDOW_DAYS", default=7, cast=int)
+# Pix automático no momento da LIBERAÇÃO da custódia.
+AUTO_PAYOUT_ON_RELEASE = config("AUTO_PAYOUT_ON_RELEASE", default=True, cast=bool)
 # Legado — modelo simplificado nao soma embalagem (frete inteiro pra vendedora).
 PACKAGING_FEE = config("PACKAGING_FEE", default=Decimal("0.00"), cast=Decimal)
 # Soft-launch: checkout sem cotacao de frete (frete R$ 0, serviço pac).
@@ -278,8 +293,9 @@ ASAAS_WEBHOOK_TOKEN = config("ASAAS_WEBHOOK_TOKEN", default="")
 # "pf" = conta pessoa fisica (sem subconta/split: cobra tudo e repassa Pix).
 # "pj" = conta CNPJ com split + subcontas (modelo definitivo).
 ASAAS_ACCOUNT_TYPE = config("ASAAS_ACCOUNT_TYPE", default="pf").lower()
-# True = no webhook, dispara Pix automatico pra chave da vendedora.
-AUTO_PAYOUT_ON_PAYMENT = config("AUTO_PAYOUT_ON_PAYMENT", default=True, cast=bool)
+# Pix imediato na confirmacao do pagamento. So vale com ESCROW_ENABLED=False —
+# com custodia ligada, o repasse acontece na liberacao (AUTO_PAYOUT_ON_RELEASE).
+AUTO_PAYOUT_ON_PAYMENT = config("AUTO_PAYOUT_ON_PAYMENT", default=False, cast=bool)
 # Soft-launch: abrir loja sem KYC aprovado (ainda exige idade +18 no site).
 REQUIRE_SELLER_KYC = config("REQUIRE_SELLER_KYC", default=False, cast=bool)
 

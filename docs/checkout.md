@@ -1,5 +1,16 @@
 # Checkout, pagamento, frete e liberação — Renda & Renda
 
+> **Atualização (jul/2026): o modelo mudou para pagamento em custódia.**
+> A seção 1 abaixo descreve o modelo anterior (repasse Pix imediato na
+> confirmação do pagamento). Hoje o valor fica retido com a plataforma e
+> só é repassado quando o comprador confirma o recebimento — ou quando o
+> prazo vence sem contestação. A comissão padrão passou de 20% para 15%,
+> e o catálogo aceita conteúdo digital e adicionais pagos.
+> A referência atual do fluxo é `backend/README.md`
+> (seções "Modelo de negócio" e "Fluxo de uma compra") e o checklist
+> operacional é `docs/PRODUCAO.md`. O resto deste documento (pesquisa de
+> PSP, logística e fiscal) continua valendo.
+
 > Documento técnico + pesquisa. Consolida as decisões do novo modelo de
 > negócio e o passo a passo de integração. Como todo o resto do projeto,
 > **nada entra em produção sem o aval jurídico** de `docs/BASE_JURIDICA.md`
