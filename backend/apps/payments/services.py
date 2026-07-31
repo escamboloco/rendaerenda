@@ -44,6 +44,7 @@ class ChargeResult:
     provider_charge_id: str
     payment_url: str | None
     pix_qr_code: str | None
+    pix_copy_paste: str | None = None
 
 
 def _digits(value: str | None) -> str:
@@ -140,30 +141,40 @@ class AsaasProvider(PaymentProvider):
     def _headers(self):
         return {"access_token": self.api_key, "Content-Type": "application/json"}
 
-    def _fetch_pix_qr(self, payment_id: str) -> str | None:
-        """Asaas costuma exigir GET separado pro QR Pix (payload base64 ou URL)."""
+    def _fetch_pix(self, payment_id: str) -> tuple[str | None, str | None]:
+        """Retorna (imagem data-URL ou None, copia-e-cola Pix)."""
         resp = requests.get(
             f"{self.base_url}/payments/{payment_id}/pixQrCode",
             headers=self._headers(),
             timeout=15,
         )
         if resp.status_code >= 400:
-            return None
+            return None, None
         data = resp.json()
         encoded = data.get("encodedImage")
-        if encoded:
-            return f"data:image/png;base64,{encoded}"
-        return data.get("payload") or data.get("pixQrCode")
+        image = f"data:image/png;base64,{encoded}" if encoded else None
+        payload = data.get("payload") or data.get("pixCopiaECola") or data.get("pixQrCode")
+        if payload and str(payload).startswith("data:image"):
+            return payload, None
+        return image, payload
 
     def _charge_result(self, data: dict, method: str) -> ChargeResult:
         payment_id = data["id"]
         qr = data.get("pixQrCode")
-        if method == "pix" and not qr:
-            qr = self._fetch_pix_qr(payment_id)
+        copy_paste = data.get("pixCopiaECola") or data.get("payload")
+        if method == "pix" and (not qr or not str(qr).startswith("data:image")):
+            image, payload = self._fetch_pix(payment_id)
+            if image:
+                qr = image
+            elif payload and not qr:
+                qr = None
+            if payload:
+                copy_paste = payload
         return ChargeResult(
             provider_charge_id=payment_id,
             payment_url=data.get("invoiceUrl"),
-            pix_qr_code=qr,
+            pix_qr_code=qr if qr and str(qr).startswith("data:image") else (qr if qr and str(qr).startswith("http") else None),
+            pix_copy_paste=copy_paste if copy_paste and not str(copy_paste).startswith("data:image") else None,
         )
 
     def _get_or_create_customer(self, *, cpf: str, name: str, email: str) -> str:

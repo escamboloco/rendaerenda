@@ -1,0 +1,19 @@
+Olá!
+
+Você tem uma nova venda na loja {{ order.store.display_name }}.
+
+Pedido #{{ order.id|slice:":8" }}
+- Valor dos itens (seu líquido + taxa da plataforma): R$ {{ order.items_total }}
+- Frete (repassado a você): R$ {{ order.shipping_total }}
+- Seu repasse estimado: R$ {{ order.seller_amount }}
+
+Entregar em:
+{{ shipping_line }}
+
+Comprador: {{ order.payer_name }}
+E-mail do comprador: {{ order.payer_email }}
+
+Poste o item e registre o rastreio no painel da vendedora assim que puder.
+
+{{ site_name }}
+Este e-mail não lista o título do item por privacidade.

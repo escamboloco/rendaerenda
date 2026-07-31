@@ -1,0 +1,22 @@
+Olá{% if subscriber_name and subscriber_name != "olá" %}, {{ subscriber_name }}{% endif %}!
+
+Resumo da semana em {{ site_name }}:
+
+- Novos anúncios publicados: {{ new_products }}
+- Lojas ativas: {{ active_stores }}
+
+{% if categories %}Categorias com mais itens:
+{% for row in categories %}- {{ row.category__name }} ({{ row.total }})
+{% endfor %}{% endif %}
+{% if top_stores %}Lojas em destaque:
+{% for store in top_stores %}- {{ store.display_name }}
+{% endfor %}{% endif %}
+Confira as novidades e oportunidades por aqui:
+{{ home_url }}
+
+—
+Você recebeu este e-mail porque optou por novidades no checkout ou cadastro.
+Para cancelar: {{ unsubscribe_url }}
+
+{{ site_name }}
+Este e-mail não lista itens individuais por privacidade.

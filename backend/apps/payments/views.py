@@ -186,11 +186,21 @@ class CheckoutView(APIView):
             method=payload["payment_method"],
         )
 
+        if payload.get("marketing_opt_in"):
+            from apps.core.models import MarketingSubscriber
+
+            MarketingSubscriber.subscribe(
+                email=customer_email,
+                name=customer_name,
+                source="checkout",
+            )
+
         return Response(
             {
                 "order": OrderSerializer(order).data,
                 "payment_url": charge.payment_url,
                 "pix_qr_code": charge.pix_qr_code,
+                "pix_copy_paste": getattr(charge, "pix_copy_paste", None),
                 "access_token": access_token,
                 "track_url": f"/pedido/{access_token}/",
             },
@@ -236,7 +246,11 @@ def asaas_webhook(request):
         from django.utils import timezone
 
         from .services import verify_payer_cpf
-        from .tasks import emit_invoice_for_order, send_order_confirmation_email
+        from .tasks import (
+            emit_invoice_for_order,
+            send_order_confirmation_email,
+            send_seller_new_sale_email,
+        )
 
         if not verify_payer_cpf(payment, payload):
             payment.status = Payment.Status.REFUNDED
@@ -256,13 +270,29 @@ def asaas_webhook(request):
         order.save(update_fields=["status", "paid_at"])
 
         # Credita ledger e, se AUTO_PAYOUT_ON_PAYMENT, Pix imediato pra vendedora.
-        credit_and_auto_payout(order)
+        try:
+            credit_and_auto_payout(order)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Falha no repasse Pix do pedido %s — pedido permanece pago.", order.id
+            )
 
         from apps.stores.services import increment_sales_count
 
         increment_sales_count(order.store)
-        send_order_confirmation_email.delay(str(order.id))
-        emit_invoice_for_order.delay(str(order.id))
+        # E-mail/NF nunca podem derrubar o webhook apos o pedido ja estar PAID.
+        try:
+            send_order_confirmation_email.delay(str(order.id))
+            send_seller_new_sale_email.delay(str(order.id))
+            emit_invoice_for_order.delay(str(order.id))
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "Falha ao enfileirar e-mails/NF do pedido %s", order.id
+            )
         # Vendedora posta sozinha — nao compramos etiqueta pela plataforma.
 
     elif event in ("PAYMENT_REFUNDED", "PAYMENT_CHARGEBACK_REQUESTED"):

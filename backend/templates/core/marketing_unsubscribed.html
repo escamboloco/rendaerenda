@@ -1,0 +1,20 @@
+{% extends "core/base.html" %}
+{% block title %}E-mail — {{ site_name|default:"Renda & Renda" }}{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="max-w-sm mx-auto card p-6 space-y-4 text-center">
+  {% if done %}
+  <h1 class="text-xl font-bold">Inscrição cancelada</h1>
+  <p class="text-sm text-gray-400">Você não receberá mais e-mails de novidades. Pedidos e confirmações de compra continuam normalmente.</p>
+  {% else %}
+  <h1 class="text-xl font-bold">Cancelar novidades</h1>
+  <p class="text-sm text-gray-400">Confirma que não quer mais receber e-mails de oportunidades e novos anúncios?</p>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn-primary w-full">Sim, cancelar</button>
+  </form>
+  {% endif %}
+  <a href="/" class="text-sm text-brand underline">Voltar ao site</a>
+</div>
+{% endblock %}

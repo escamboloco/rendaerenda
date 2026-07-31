@@ -52,7 +52,21 @@ def robots_txt(request):
         "Disallow: /vendedora/",
         "Disallow: /carteira/",
         "Disallow: /verificacao-idade/",
+        "Disallow: /email/",
         "",
         f"Sitemap: {request.scheme}://{request.get_host()}/sitemap.xml",
     ]
     return HttpResponse("\n".join(lines), content_type="text/plain")
+
+
+@require_http_methods(["GET", "POST"])
+def marketing_unsubscribe(request, token: str):
+    from django.shortcuts import get_object_or_404
+
+    from .models import MarketingSubscriber
+
+    subscriber = get_object_or_404(MarketingSubscriber, unsubscribe_token=token)
+    if request.method == "POST" or request.GET.get("confirm") == "1":
+        subscriber.unsubscribe()
+        return render(request, "core/marketing_unsubscribed.html", {"done": True})
+    return render(request, "core/marketing_unsubscribed.html", {"done": False, "token": token})

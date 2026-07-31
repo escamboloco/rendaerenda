@@ -10,4 +10,9 @@ pip install -r requirements.txt
 
 python manage.py collectstatic --noinput
 python manage.py migrate
-python manage.py createcachetable
+python manage.py createcachetable || true
+
+# Loja + 3 produtos teste (R$ 5) para a primeira venda. Idempotente.
+if [ "${SEED_PAYMENT_TEST:-}" = "True" ] || [ "${SEED_PAYMENT_TEST:-}" = "true" ] || [ "${SEED_PAYMENT_TEST:-}" = "1" ]; then
+  python manage.py seed_payment_test --force --pix-key="${PIX_TEST_KEY:-}"
+fi

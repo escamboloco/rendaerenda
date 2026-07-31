@@ -137,17 +137,19 @@
           </template>
 
           <template x-if="shippingService">
-            <select x-model="paymentMethod" class="input-field">
-              <option value="pix">Pix</option>
-              <option value="credit_card">Cartão de crédito</option>
-              <option value="boleto">Boleto</option>
-            </select>
+            <div class="space-y-2">
+              <p class="text-sm text-gray-300">Pagamento: <span class="font-medium text-white">Pix</span></p>
+              <label class="flex items-start gap-2 text-xs text-gray-400 cursor-pointer">
+                <input type="checkbox" x-model="marketingOptIn" class="mt-0.5">
+                <span>Quero receber novidades e oportunidades por e-mail (opcional). Posso cancelar a qualquer momento.</span>
+              </label>
+            </div>
           </template>
 
           <p x-show="error" x-text="error" class="input-error"></p>
 
           <button x-show="shippingService" type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
-            <span x-show="!loadingCheckout">Pagar agora</span>
+            <span x-show="!loadingCheckout">Pagar com Pix</span>
             <span x-show="loadingCheckout">Processando…</span>
           </button>
         </div>
@@ -155,12 +157,20 @@
 
       <template x-if="charge">
         <div class="text-center space-y-3">
-          <p class="text-sm text-gray-300">Pedido criado! Finalize o pagamento:</p>
+          <p class="text-sm text-gray-300">Pedido criado! Pague com Pix (use o <strong class="text-white">mesmo CPF</strong> informado):</p>
           <div x-show="charge.pix_qr_code" class="bg-white p-3 rounded-xl inline-block">
             <img :src="charge.pix_qr_code" alt="QR Code Pix" class="w-40 h-40">
           </div>
-          <a x-show="charge.payment_url" :href="charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir cobrança</a>
+          <template x-if="charge.pix_copy_paste">
+            <div class="text-left space-y-1">
+              <p class="text-xs text-gray-500">Pix copia e cola</p>
+              <textarea class="input-field text-xs font-mono h-24" readonly x-model="charge.pix_copy_paste" @click="$event.target.select()"></textarea>
+              <button type="button" class="btn-secondary w-full text-sm" @click="navigator.clipboard.writeText(charge.pix_copy_paste)">Copiar código Pix</button>
+            </div>
+          </template>
+          <a x-show="charge.payment_url" :href="charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir cobrança Asaas</a>
           <a x-show="trackUrl" :href="trackUrl" class="block text-sm text-brand underline">Acompanhar pedido</a>
+          <p class="text-[11px] text-gray-500">Após o pagamento, a confirmação chega no e-mail informado.</p>
         </div>
       </template>
     </div>
@@ -201,6 +211,7 @@ function productCheckout(productId) {
     shippingService: "",
     address: { street: "", number: "", neighborhood: "", city: "", state: "" },
     paymentMethod: "pix",
+    marketingOptIn: false,
     guest: { name: "", email: "", cpf: "", birth_date: "" },
     loadingQuote: false,
     loadingCheckout: false,
@@ -236,7 +247,8 @@ function productCheckout(productId) {
           items: [{ product_id: productId, quantity: 1 }],
           shipping_service: this.shippingService,
           shipping_address: { cep: this.cep.replace(/\D/g, ""), ...this.address },
-          payment_method: this.paymentMethod,
+          payment_method: "pix",
+          marketing_opt_in: !!this.marketingOptIn,
         };
         {% if not is_authenticated %}
         body.guest_name = this.guest.name;

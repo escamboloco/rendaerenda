@@ -71,6 +71,9 @@ envVarGroups:
         value: "Renda & Renda <no-reply@rendaerenda.com.br>"
       - key: MEDIA_ROOT
         value: "/var/data/media"
+      # Cria loja teste com 3 itens a R$ 5 em todo deploy (idempotente).
+      - key: SEED_PAYMENT_TEST
+        value: "True"
 
 services:
   - type: web
@@ -109,6 +112,9 @@ services:
         sync: false
       - key: EMAIL_HOST_PASSWORD
         sync: false
+      # Pix da loja teste (CPF/e-mail/telefone/EVP). Sem isso o checkout bloqueia.
+      - key: PIX_TEST_KEY
+        sync: false
 
   - type: cron
     name: rendaerenda-poll-shipments
@@ -143,3 +149,26 @@ services:
         fromDatabase:
           name: rendaerenda-db
           property: connectionString
+
+  # Digest semanal de novidades (segundas 14:00 UTC ≈ 11:00 BRT).
+  - type: cron
+    name: rendaerenda-marketing-digest
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "0 14 * * 1"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py send_marketing_digest --days=7"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false

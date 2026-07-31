@@ -19,12 +19,15 @@ class CheckoutSerializer(serializers.Serializer):
     items = CheckoutItemSerializer(many=True)
     shipping_service = serializers.RegexField(r"^(pac|sedex|me-\d+)$", max_length=20)
     shipping_address = serializers.JSONField()
-    payment_method = serializers.ChoiceField(choices=["pix", "credit_card", "debit_card", "boleto"])
+    # Soft-launch: so Pix (cartao/boleto exigem tokenizacao Asaas ainda nao wired).
+    payment_method = serializers.ChoiceField(choices=["pix"], default="pix")
 
     guest_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     guest_email = serializers.EmailField(required=False, allow_blank=True)
     guest_cpf = serializers.CharField(max_length=14, required=False, allow_blank=True)
     guest_birth_date = serializers.DateField(required=False, allow_null=True)
+    # Opt-in explicito LGPD — default False (nunca pre-marcado).
+    marketing_opt_in = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
         request = self.context.get("request")

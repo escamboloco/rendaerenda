@@ -17,15 +17,22 @@ logger = logging.getLogger(__name__)
 def send_shipment_posted_email(shipment_id: str):
     """Avisa o comprador que o item foi postado, com o codigo de rastreio."""
     shipment = Shipment.objects.select_related("order__buyer").get(id=shipment_id)
-    send_mail(
-        subject=f"Seu pedido #{str(shipment.order_id)[:8]} foi postado",
-        message=render_to_string(
-            "emails/shipment_posted.txt",
-            {"shipment": shipment, "order": shipment.order, "site_name": settings.SITE_NAME},
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[shipment.order.buyer.email],
-    )
+    recipient = shipment.order.payer_email
+    if not recipient:
+        logger.warning("Pedido %s sem e-mail do comprador — e-mail de postagem pulado.", shipment.order_id)
+        return
+    try:
+        send_mail(
+            subject=f"Seu pedido #{str(shipment.order_id)[:8]} foi postado",
+            message=render_to_string(
+                "emails/shipment_posted.txt",
+                {"shipment": shipment, "order": shipment.order, "site_name": settings.SITE_NAME},
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[recipient],
+        )
+    except Exception:
+        logger.exception("Falha ao enviar e-mail de postagem do pedido %s", shipment.order_id)
 
 
 @shared_task(bind=True, max_retries=5, default_retry_delay=120)

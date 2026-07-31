@@ -340,3 +340,8 @@ ACCOUNT_EMAIL_VERIFICATION = config(
 ACCOUNT_RATE_LIMITS = {
     "login_failed": "10/5m/ip,10/5m/key",
 }
+
+# Chave Pix da loja de teste (seed_payment_test). Em producao preencha no Render.
+PIX_TEST_KEY = config("PIX_TEST_KEY", default="")
+# Se True no build/deploy, cria/atualiza a loja teste com 3 produtos a R$ 5.
+SEED_PAYMENT_TEST = config("SEED_PAYMENT_TEST", default=False, cast=bool)

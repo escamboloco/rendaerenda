@@ -13,4 +13,5 @@ page_urlpatterns = [
     path("robots.txt", views.robots_txt, name="robots_txt"),
     path("termos-de-uso/", views.legal_page, {"doc": "termos-de-uso"}, name="terms"),
     path("privacidade/", views.legal_page, {"doc": "privacidade"}, name="privacy"),
+    path("email/descadastrar/<str:token>/", views.marketing_unsubscribe, name="marketing_unsubscribe"),
 ]

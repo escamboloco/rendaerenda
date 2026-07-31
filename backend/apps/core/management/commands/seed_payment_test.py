@@ -81,7 +81,11 @@ class Command(BaseCommand):
         if target_price < Decimal("1.00"):
             raise CommandError("Preço mínimo é R$ 1,00.")
 
-        pix_key = (options["pix_key"] or "").strip() or SELLER_CPF
+        pix_key = (
+            (options["pix_key"] or "").strip()
+            or (getattr(settings, "PIX_TEST_KEY", "") or "").strip()
+            or SELLER_CPF
+        )
         payout = payout_from_price(target_price)
 
         seller, created = User.objects.get_or_create(
