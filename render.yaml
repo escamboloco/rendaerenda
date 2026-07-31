@@ -3,9 +3,8 @@
 # PRODUCAO — rendaerenda.com.br (modelo intermediario simples)
 # Sobe: Postgres + Web + 2 Cron Jobs.
 #
-# Variaveis sync:false = so o ESSENCIAL pra subir e vender:
-#   Asaas (split) + Melhor Envio (cotacao frete) + e-mail + S3 (fotos).
-# KYC/SMS/NFS-e/Correios ficam opcionais (defaults vazios no settings).
+# Variaveis sync:false = essenciais: Asaas + Melhor Envio + e-mail.
+# Fotos ficam no disco persistente do web (/var/data) — sem AWS.
 #
 # Como usar:
 #   1. Push deste arquivo.
@@ -70,8 +69,8 @@ envVarGroups:
         value: "True"
       - key: DEFAULT_FROM_EMAIL
         value: "Renda & Renda <no-reply@rendaerenda.com.br>"
-      - key: AWS_S3_SIGNED_URL_EXPIRE_SECONDS
-        value: "300"
+      - key: MEDIA_ROOT
+        value: "/var/data/media"
 
 services:
   - type: web
@@ -83,6 +82,11 @@ services:
     buildCommand: "bash build.sh"
     startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 60"
     healthCheckPath: /healthz/
+    # Disco persistente pras fotos (sobrevive a redeploy). Cobra ~US$0.25/GB/mes.
+    disk:
+      name: rendaerenda-media
+      mountPath: /var/data
+      sizeGB: 5
     domains:
       - rendaerenda.com.br
       - www.rendaerenda.com.br
@@ -104,14 +108,6 @@ services:
       - key: EMAIL_HOST_USER
         sync: false
       - key: EMAIL_HOST_PASSWORD
-        sync: false
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_STORAGE_BUCKET_NAME
-        sync: false
-      - key: AWS_S3_ENDPOINT_URL
         sync: false
 
   - type: cron

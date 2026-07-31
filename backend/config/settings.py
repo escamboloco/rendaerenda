@@ -110,11 +110,13 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# Producao no Render: disco persistente montado em /var/data (ver render.yaml).
+# Dev local: backend/media/. Nao guardar fotos no Postgres.
+MEDIA_ROOT = Path(config("MEDIA_ROOT", default=str(BASE_DIR / "media")))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --- Midia sensivel: nunca publica direto, sempre via S3 assinado ---
+# S3 opcional. Vazio = FileSystemStorage (disco do Render / pasta local).
 AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID", default="")
 AWS_SECRET_ACCESS_KEY = config("AWS_SECRET_ACCESS_KEY", default="")
 AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME", default="")
@@ -122,20 +124,16 @@ AWS_S3_ENDPOINT_URL = config("AWS_S3_ENDPOINT_URL", default="")
 AWS_QUERYSTRING_AUTH = True
 AWS_QUERYSTRING_EXPIRE = config("AWS_S3_SIGNED_URL_EXPIRE_SECONDS", default=300, cast=int)
 AWS_DEFAULT_ACL = None
+USE_S3_MEDIA = bool(AWS_STORAGE_BUCKET_NAME)
 
-# Django 5.1 REMOVEU DEFAULT_FILE_STORAGE/STATICFILES_STORAGE (eram
-# silenciosamente ignorados) - a configuracao de storage vive no dict
-# STORAGES. Uploads vao pro S3 assinado quando o bucket esta configurado;
-# sem bucket (dev local), caem em MEDIA_ROOT e sao servidos pelo runserver
-# (ver config/urls.py). Producao SEM bucket = uploads em disco efemero do
-# Render - configure o S3 antes de abrir ao publico.
 STORAGES = {
     "default": {
         "BACKEND": (
             "storages.backends.s3boto3.S3Boto3Storage"
-            if AWS_STORAGE_BUCKET_NAME
+            if USE_S3_MEDIA
             else "django.core.files.storage.FileSystemStorage"
         ),
+        "OPTIONS": {} if USE_S3_MEDIA else {"location": str(MEDIA_ROOT)},
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
@@ -161,10 +159,8 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 # de CDN externo, tanto por seguranca (CSP sem excecoes) quanto por
 # privacidade (nenhuma requisicao de terceiro no navegador da compradora).
 CSP_DEFAULT_SRC = ("'self'",)
-CSP_IMG_SRC = ("'self'", "data:", f"https://{AWS_STORAGE_BUCKET_NAME}" if AWS_STORAGE_BUCKET_NAME else "'self'")
-# Vídeos de produto (apps.catalog.models.ProductVideo) servidos do mesmo
-# bucket privado com URL assinada.
-CSP_MEDIA_SRC = ("'self'", f"https://{AWS_STORAGE_BUCKET_NAME}" if AWS_STORAGE_BUCKET_NAME else "'self'")
+CSP_IMG_SRC = ("'self'", "data:", f"https://{AWS_STORAGE_BUCKET_NAME}" if USE_S3_MEDIA else "'self'")
+CSP_MEDIA_SRC = ("'self'", f"https://{AWS_STORAGE_BUCKET_NAME}" if USE_S3_MEDIA else "'self'")
 # 'unsafe-eval' e exigido pelo Alpine.js (build padrao, nao o build "csp")
 # pra avaliar expressoes como x-show/x-data - sem isso, TODA diretiva
 # Alpine falha silenciosamente (fica no estado inicial: x-cloak nunca vira
