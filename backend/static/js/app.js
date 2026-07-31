@@ -168,6 +168,10 @@ function storeCartCheckout(config) {
         }
         this.charge = data;
         this.trackUrl = data.track_url || "";
+        // Abre a pagina de cobranca do Asaas (Pix) se houver URL.
+        if (data.payment_url) {
+          window.open(data.payment_url, "_blank", "noopener");
+        }
       } catch (e) {
         this.error = "Falha de conexão. Tente de novo.";
       } finally {

@@ -270,25 +270,33 @@
       </div>
 
       <div x-show="charge" class="text-center space-y-3">
-        <p class="text-sm text-gray-300">Pedido criado. Pague com Pix usando o <strong class="text-white">mesmo CPF</strong>:</p>
+        <p class="text-xs uppercase tracking-wide text-emerald-400 font-semibold">Pagamento via Asaas</p>
+        <p class="text-sm text-gray-300">Cobrança gerada no Asaas. Pague com Pix usando o <strong class="text-white">mesmo CPF</strong> do pedido.</p>
+        <a x-show="charge && charge.payment_url"
+           :href="charge && charge.payment_url"
+           target="_blank"
+           rel="noopener"
+           class="btn-primary w-full">
+          Abrir pagamento Asaas
+        </a>
         <div x-show="charge && charge.pix_qr_code" class="bg-white p-3 rounded-xl inline-block">
-          <img :src="charge && charge.pix_qr_code" alt="QR Code Pix" class="w-44 h-44">
+          <img :src="charge && charge.pix_qr_code" alt="QR Code Pix Asaas" class="w-44 h-44">
         </div>
         <div x-show="charge && charge.pix_copy_paste" class="text-left space-y-1">
-          <p class="text-xs text-gray-500">Pix copia e cola</p>
-          <textarea class="input-field text-xs font-mono h-24" readonly x-text="charge && charge.pix_copy_paste" @focus="$event.target.select()"></textarea>
+          <p class="text-xs text-gray-500">Pix copia e cola (Asaas)</p>
+          <textarea class="input-field text-xs font-mono h-24" readonly :value="charge && charge.pix_copy_paste" @focus="$event.target.select()"></textarea>
           <button type="button" class="btn-secondary w-full text-sm" @click="navigator.clipboard.writeText(charge.pix_copy_paste)">Copiar código Pix</button>
         </div>
-        <a x-show="charge && charge.payment_url" :href="charge && charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir cobrança</a>
         <a x-show="trackUrl" :href="trackUrl" class="block text-sm text-brand underline">Acompanhar pedido</a>
       </div>
     </div>
 
     <div class="px-5 py-4 border-t border-surface-border shrink-0" x-show="!charge && shippingService">
       <button type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
-        <span x-show="!loadingCheckout" x-text="'Pagar R$ ' + grandTotal.toFixed(2) + ' no Pix'"></span>
-        <span x-show="loadingCheckout">Processando…</span>
+        <span x-show="!loadingCheckout" x-text="'Gerar Pix Asaas — R$ ' + grandTotal.toFixed(2)"></span>
+        <span x-show="loadingCheckout">Gerando cobrança Asaas…</span>
       </button>
+      <p class="text-[11px] text-gray-500 text-center mt-2">Processado com segurança pelo Asaas</p>
     </div>
   </div>
 </div>

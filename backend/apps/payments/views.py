@@ -94,6 +94,16 @@ class CheckoutView(APIView):
             )
         }
         store = next(iter(products.values())).store
+        if not (getattr(settings, "ASAAS_API_KEY", "") or "").strip():
+            return Response(
+                {
+                    "detail": (
+                        "Pagamento Asaas não configurado. "
+                        "Defina ASAAS_API_KEY no ambiente do servidor."
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         if not store.pix_key:
             return Response(
                 {"detail": "Esta loja ainda não cadastrou chave Pix para receber."},
@@ -169,17 +179,42 @@ class CheckoutView(APIView):
         )
 
         provider = get_payment_provider()
-        charge = provider.create_split_charge(
-            order_id=str(order.id),
-            method=payload["payment_method"],
-            total_amount=order.grand_total,
-            seller_subaccount_id=store.psp_subaccount_id,
-            seller_amount=order.seller_amount,
-            platform_amount=order.platform_amount,
-            customer_cpf=customer_cpf,
-            customer_name=customer_name,
-            customer_email=customer_email,
-        )
+        try:
+            charge = provider.create_split_charge(
+                order_id=str(order.id),
+                method=payload["payment_method"],
+                total_amount=order.grand_total,
+                seller_subaccount_id=store.psp_subaccount_id,
+                seller_amount=order.seller_amount,
+                platform_amount=order.platform_amount,
+                customer_cpf=customer_cpf,
+                customer_name=customer_name,
+                customer_email=customer_email,
+            )
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).exception("Falha ao criar cobrança Asaas do pedido %s", order.id)
+            order.status = Order.Status.CANCELED
+            order.save(update_fields=["status"])
+            # Devolve estoque
+            for product, quantity in order_items_data:
+                product.stock += quantity
+                if product.status == Product.Status.SOLD and product.stock > 0:
+                    product.status = Product.Status.PUBLISHED
+                product.save(update_fields=["stock", "status"])
+            detail = "Não foi possível gerar a cobrança no Asaas. Tente de novo em instantes."
+            resp = getattr(exc, "response", None)
+            if resp is not None:
+                try:
+                    err = resp.json()
+                    errors = err.get("errors") or []
+                    if errors and isinstance(errors, list):
+                        detail = errors[0].get("description") or detail
+                except Exception:
+                    pass
+            return Response({"detail": detail}, status=status.HTTP_502_BAD_GATEWAY)
+
         Payment.objects.create(
             order=order,
             provider_charge_id=charge.provider_charge_id,
@@ -201,6 +236,7 @@ class CheckoutView(APIView):
                 "payment_url": charge.payment_url,
                 "pix_qr_code": charge.pix_qr_code,
                 "pix_copy_paste": getattr(charge, "pix_copy_paste", None),
+                "provider": "asaas",
                 "access_token": access_token,
                 "track_url": f"/pedido/{access_token}/",
             },

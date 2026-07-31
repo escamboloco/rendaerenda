@@ -152,28 +152,29 @@
           <p x-show="error" x-text="error" class="input-error"></p>
 
           <button x-show="shippingService" type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
-            <span x-show="!loadingCheckout">Pagar com Pix</span>
-            <span x-show="loadingCheckout">Processando…</span>
+            <span x-show="!loadingCheckout">Gerar Pix Asaas</span>
+            <span x-show="loadingCheckout">Gerando cobrança Asaas…</span>
           </button>
+          <p x-show="shippingService" class="text-[11px] text-gray-500 text-center">Processado com segurança pelo Asaas</p>
         </div>
       </template>
 
       <template x-if="charge">
         <div class="text-center space-y-3">
-          <p class="text-sm text-gray-300">Pedido criado! Pague com Pix (use o <strong class="text-white">mesmo CPF</strong> informado):</p>
+          <p class="text-xs uppercase tracking-wide text-emerald-400 font-semibold">Pagamento via Asaas</p>
+          <p class="text-sm text-gray-300">Pague com Pix usando o <strong class="text-white">mesmo CPF</strong> informado:</p>
+          <a x-show="charge.payment_url" :href="charge.payment_url" target="_blank" rel="noopener" class="btn-primary w-full">Abrir pagamento Asaas</a>
           <div x-show="charge.pix_qr_code" class="bg-white p-3 rounded-xl inline-block">
-            <img :src="charge.pix_qr_code" alt="QR Code Pix" class="w-40 h-40">
+            <img :src="charge.pix_qr_code" alt="QR Code Pix Asaas" class="w-40 h-40">
           </div>
           <template x-if="charge.pix_copy_paste">
             <div class="text-left space-y-1">
-              <p class="text-xs text-gray-500">Pix copia e cola</p>
+              <p class="text-xs text-gray-500">Pix copia e cola (Asaas)</p>
               <textarea class="input-field text-xs font-mono h-24" readonly x-model="charge.pix_copy_paste" @click="$event.target.select()"></textarea>
               <button type="button" class="btn-secondary w-full text-sm" @click="navigator.clipboard.writeText(charge.pix_copy_paste)">Copiar código Pix</button>
             </div>
           </template>
-          <a x-show="charge.payment_url" :href="charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir cobrança Asaas</a>
           <a x-show="trackUrl" :href="trackUrl" class="block text-sm text-brand underline">Acompanhar pedido</a>
-          <p class="text-[11px] text-gray-500">Após o pagamento, a confirmação chega no e-mail informado.</p>
         </div>
       </template>
     </div>
@@ -271,6 +272,9 @@ function productCheckout(productId) {
         }
         this.charge = data;
         this.trackUrl = data.track_url || "";
+        if (data.payment_url) {
+          window.open(data.payment_url, "_blank", "noopener");
+        }
       } catch (e) {
         this.error = "Falha de conexão. Tente de novo.";
       } finally {
