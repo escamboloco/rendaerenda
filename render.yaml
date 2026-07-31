@@ -59,6 +59,9 @@ envVarGroups:
         value: "asaas"
       - key: ASAAS_API_URL
         value: "https://api.asaas.com/v3"
+      # pf = sem split (repasse Pix); trocar para "pj" quando tiver CNPJ + subcontas
+      - key: ASAAS_ACCOUNT_TYPE
+        value: "pf"
       - key: EMAIL_BACKEND
         value: "django.core.mail.backends.smtp.EmailBackend"
       - key: EMAIL_PORT

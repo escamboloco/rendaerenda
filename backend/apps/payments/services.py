@@ -1,26 +1,21 @@
 """
-Camada de integracao com a Instituicao de Pagamento (PSP). O principio
-de arquitetura aqui e o que resolve o problema juridico descrito em
-docs/BASE_JURIDICA.md: A PLATAFORMA NUNCA CUSTODIA DINHEIRO. Quem
-recebe, retem e libera o dinheiro e o PSP (Asaas ou Iugu), atraves de:
+Camada de integracao com a Instituicao de Pagamento (PSP / Asaas).
 
-  1. Uma subconta por vendedora (criada no onboarding da loja).
-  2. Split automatico configurado por cobranca: X% cai direto na
-     subconta da vendedora, o resto na conta master da plataforma.
-  3. Saque via Pix feito pela propria vendedora dentro da conta dela
-     no PSP (nos so espelhamos o saldo aqui - ver apps.wallet).
+Dois modos (settings.ASAAS_ACCOUNT_TYPE):
 
-Regra "pagamento so pelo CPF do titular": toda cobranca e criada em um
-customer do PSP amarrado ao CPF da conta (get_or_create por cpfCnpj);
-no cartao o Asaas valida titularidade, e no Pix o CPF de quem pagou
-chega no webhook/consulta - qualquer divergencia gera estorno
-automatico (ver apps.payments.views.asaas_webhook + verify_payer_cpf).
+  pf — Conta pessoa fisica. Sem subconta/split (bloqueado pelo Bacen).
+       Cobra 100% na sua conta; no webhook repassa a parte da vendedora
+       via Pix (POST /transfers). Voce custodia o valor por alguns
+       segundos/minutos ate o Pix sair.
 
-Trocar de provider = trocar a classe usada em `get_payment_provider()`.
-Nao ha dependencia direta de Asaas/Iugu fora deste arquivo.
+  pj — Conta CNPJ. Subconta por vendedora + split na cobranca (preferido).
+
+Regra CPF do pagador: customer Asaas amarrado ao CPF; Pix divergente
+gera estorno (verify_payer_cpf).
 """
 from __future__ import annotations
 
+import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -28,6 +23,13 @@ from decimal import Decimal
 
 import requests
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+
+def asaas_uses_split() -> bool:
+    """True so com conta PJ (subcontas + split nativo)."""
+    return getattr(settings, "ASAAS_ACCOUNT_TYPE", "pf") == "pj"
 
 
 @dataclass
@@ -125,9 +127,8 @@ class PaymentProvider(ABC):
 
 class AsaasProvider(PaymentProvider):
     """
-    Requer conta Asaas aprovada por escrito para o nicho (vestuario
-    intimo usado entre particulares - NAO conteudo adulto digital).
-    Docs: https://docs.asaas.com/docs/split-de-pagamentos
+    Conta Asaas (PF ou PJ). Nicho: vestuario intimo usado entre particulares
+    — NAO pornografia. Pedir aceite por escrito.
     """
 
     BILLING_TYPES = {"pix": "PIX", "credit_card": "CREDIT_CARD", "debit_card": "DEBIT_CARD", "boleto": "BOLETO"}
@@ -139,13 +140,33 @@ class AsaasProvider(PaymentProvider):
     def _headers(self):
         return {"access_token": self.api_key, "Content-Type": "application/json"}
 
+    def _fetch_pix_qr(self, payment_id: str) -> str | None:
+        """Asaas costuma exigir GET separado pro QR Pix (payload base64 ou URL)."""
+        resp = requests.get(
+            f"{self.base_url}/payments/{payment_id}/pixQrCode",
+            headers=self._headers(),
+            timeout=15,
+        )
+        if resp.status_code >= 400:
+            return None
+        data = resp.json()
+        encoded = data.get("encodedImage")
+        if encoded:
+            return f"data:image/png;base64,{encoded}"
+        return data.get("payload") or data.get("pixQrCode")
+
+    def _charge_result(self, data: dict, method: str) -> ChargeResult:
+        payment_id = data["id"]
+        qr = data.get("pixQrCode")
+        if method == "pix" and not qr:
+            qr = self._fetch_pix_qr(payment_id)
+        return ChargeResult(
+            provider_charge_id=payment_id,
+            payment_url=data.get("invoiceUrl"),
+            pix_qr_code=qr,
+        )
+
     def _get_or_create_customer(self, *, cpf: str, name: str, email: str) -> str:
-        """
-        Um customer Asaas por CPF da conta. E o que amarra TODA cobranca ao
-        titular: cartao de credito com CPF de titular diferente do customer
-        e recusado pelo proprio PSP quando `creditCardHolderInfo.cpfCnpj`
-        diverge, e o Pix e conferido por nos no webhook.
-        """
         resp = requests.get(
             f"{self.base_url}/customers",
             headers=self._headers(),
@@ -168,10 +189,13 @@ class AsaasProvider(PaymentProvider):
 
     def create_seller_subaccount(self, *, seller_name: str, cpf: str, email: str) -> SubaccountResult:
         """
-        Cria subconta Asaas da vendedora. Guardamos o walletId (nao o
-        account id): e o walletId que o endpoint de split exige.
-        Docs: https://docs.asaas.com/docs/split-de-pagamentos
+        PJ: cria subconta Asaas (walletId).
+        PF: no-op — Bacen nao permite subconta em conta fisica.
         """
+        if not asaas_uses_split():
+            logger.info("Asaas PF: pulando subconta para %s (%s)", seller_name, cpf[-4:])
+            return SubaccountResult(provider_subaccount_id="", pix_key=None, api_key="")
+
         resp = requests.post(
             f"{self.base_url}/accounts",
             headers=self._headers(),
@@ -200,34 +224,37 @@ class AsaasProvider(PaymentProvider):
         customer_name: str,
         customer_email: str,
     ) -> ChargeResult:
-        # Split: parte da vendedora (item + frete). O restante liquido
-        # (comissao 30% - taxas Asaas) fica AUTOMATICO na conta master.
+        """
+        PJ: cobranca com split (seller_amount na wallet da vendedora).
+        PF: cobranca integral na sua conta; repasse Pix depois no webhook.
+        """
         _ = platform_amount
         customer_id = self._get_or_create_customer(cpf=customer_cpf, name=customer_name, email=customer_email)
+        body: dict = {
+            "customer": customer_id,
+            "billingType": self.BILLING_TYPES[method],
+            "value": float(total_amount),
+            "externalReference": order_id,
+        }
+        if asaas_uses_split() and seller_subaccount_id:
+            body["split"] = [
+                {
+                    "walletId": seller_subaccount_id,
+                    "fixedValue": float(seller_amount),
+                }
+            ]
+        else:
+            # Guarda o valor devido a vendedora na descricao (auditoria).
+            body["description"] = f"Pedido {order_id} | repasse vendedora R$ {seller_amount}"
+
         resp = requests.post(
             f"{self.base_url}/payments",
             headers=self._headers(),
-            json={
-                "customer": customer_id,
-                "billingType": self.BILLING_TYPES[method],
-                "value": float(total_amount),
-                "externalReference": order_id,
-                "split": [
-                    {
-                        "walletId": seller_subaccount_id,
-                        "fixedValue": float(seller_amount),
-                    }
-                ],
-            },
+            json=body,
             timeout=15,
         )
         resp.raise_for_status()
-        data = resp.json()
-        return ChargeResult(
-            provider_charge_id=data["id"],
-            payment_url=data.get("invoiceUrl"),
-            pix_qr_code=data.get("pixQrCode"),
-        )
+        return self._charge_result(resp.json(), method)
 
     def request_seller_withdrawal(
         self,
@@ -238,24 +265,34 @@ class AsaasProvider(PaymentProvider):
         pix_key_type: str = "CPF",
         api_key: str | None = None,
     ) -> str:
-        # Preferir apiKey da subconta (saque do saldo dela). Fallback: conta master.
-        headers = {"access_token": api_key or self.api_key, "Content-Type": "application/json"}
+        """
+        PJ + apiKey da subconta: saque do saldo dela.
+        PF (padrao agora): Pix saindo da SUA conta Asaas para a chave dela.
+        """
         key_type = (pix_key_type or detect_pix_key_type(pix_key)).upper()
         payload = {
             "value": float(amount),
             "pixAddressKey": pix_key,
             "pixAddressKeyType": key_type,
+            "operationType": "PIX",
         }
-        # Com apiKey da subconta o saque e da propria carteira; sem ela,
-        # tentamos via walletId na conta master (nem sempre suportado).
-        if not api_key:
-            payload["walletId"] = seller_subaccount_id
+
+        if asaas_uses_split() and api_key:
+            headers = {"access_token": api_key, "Content-Type": "application/json"}
+        else:
+            # Conta PF/master: transferencias Pix saem do saldo da propria conta.
+            headers = self._headers()
+            if asaas_uses_split() and seller_subaccount_id and not api_key:
+                payload["walletId"] = seller_subaccount_id
+
         resp = requests.post(
             f"{self.base_url}/transfers",
             headers=headers,
             json=payload,
             timeout=15,
         )
+        if resp.status_code >= 400:
+            logger.error("Asaas transfer falhou: %s %s", resp.status_code, resp.text)
         resp.raise_for_status()
         return resp.json()["id"]
 
@@ -276,12 +313,7 @@ class AsaasProvider(PaymentProvider):
             timeout=15,
         )
         resp.raise_for_status()
-        data = resp.json()
-        return ChargeResult(
-            provider_charge_id=data["id"],
-            payment_url=data.get("invoiceUrl"),
-            pix_qr_code=data.get("pixQrCode"),
-        )
+        return self._charge_result(resp.json(), method)
 
     def get_payer_document(self, *, provider_charge_id: str, webhook_payload: dict | None = None) -> str | None:
         # 1) Tenta extrair do proprio payload do webhook (menos uma chamada).

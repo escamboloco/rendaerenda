@@ -20,7 +20,7 @@ from apps.wallet.services import credit_and_auto_payout
 
 from .models import Order, OrderItem, Payment
 from .serializers import CheckoutSerializer, OrderSerializer
-from .services import _adult_from_birth, _digits, get_payment_provider
+from .services import _adult_from_birth, _digits, asaas_uses_split, get_payment_provider
 
 
 @login_required
@@ -90,9 +90,14 @@ class CheckoutView(APIView):
             )
         }
         store = next(iter(products.values())).store
-        if not store.psp_subaccount_id or not store.pix_key:
+        if not store.pix_key:
             return Response(
-                {"detail": "Esta loja ainda não está apta a receber pagamentos."},
+                {"detail": "Esta loja ainda não cadastrou chave Pix para receber."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if asaas_uses_split() and not store.psp_subaccount_id:
+            return Response(
+                {"detail": "Esta loja ainda não está apta a receber pagamentos (subconta Asaas)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

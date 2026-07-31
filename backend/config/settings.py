@@ -262,7 +262,10 @@ PAYMENT_PROVIDER = config("PAYMENT_PROVIDER", default="asaas")
 ASAAS_API_KEY = config("ASAAS_API_KEY", default="")
 ASAAS_API_URL = config("ASAAS_API_URL", default="https://api.asaas.com/v3")
 ASAAS_WEBHOOK_TOKEN = config("ASAAS_WEBHOOK_TOKEN", default="")
-# True = no webhook, apos split, dispara Pix automatico pra chave da vendedora.
+# "pf" = conta pessoa fisica (sem subconta/split: cobra tudo e repassa Pix).
+# "pj" = conta CNPJ com split + subcontas (modelo definitivo).
+ASAAS_ACCOUNT_TYPE = config("ASAAS_ACCOUNT_TYPE", default="pf").lower()
+# True = no webhook, dispara Pix automatico pra chave da vendedora.
 AUTO_PAYOUT_ON_PAYMENT = config("AUTO_PAYOUT_ON_PAYMENT", default=True, cast=bool)
 # Soft-launch: abrir loja sem KYC aprovado (ainda exige idade +18 no site).
 REQUIRE_SELLER_KYC = config("REQUIRE_SELLER_KYC", default=False, cast=bool)

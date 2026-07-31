@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.payments.models import Order
-from apps.payments.services import detect_pix_key_type, get_payment_provider
+from apps.payments.services import asaas_uses_split, detect_pix_key_type, get_payment_provider
 from apps.stores.models import Store
 
 from .models import WalletEntry, WithdrawalRequest
@@ -39,18 +39,28 @@ def release_sale(order: Order):
 
 
 def credit_and_auto_payout(order: Order):
-    """Credita a venda e, se configurado, dispara Pix automatico pra vendedora."""
+    """
+    Credita a venda e dispara Pix pra vendedora.
+    PF: Pix sai da conta Asaas da plataforma (repasse).
+    PJ: Pix sai da subconta apos o split.
+    """
     credit_sale(order)
     if not getattr(settings, "AUTO_PAYOUT_ON_PAYMENT", True):
         return
     store = order.store
-    if not store.pix_key or not store.psp_subaccount_id:
-        logger.warning("Pedido %s: loja sem Pix/subconta — split ficou na carteira Asaas.", order.id)
+    if not store.pix_key:
+        logger.warning("Pedido %s: loja sem chave Pix — valor ficou na conta Asaas da plataforma.", order.id)
+        return
+    if asaas_uses_split() and not store.psp_subaccount_id:
+        logger.warning("Pedido %s: loja sem subconta Asaas (modo PJ).", order.id)
         return
     try:
         request_withdrawal(store, order.seller_amount)
     except Exception:
-        logger.exception("Falha no Pix automatico do pedido %s — saldo ficou na subconta Asaas.", order.id)
+        logger.exception(
+            "Falha no Pix automatico do pedido %s — valor na conta Asaas (repasse manual no painel).",
+            order.id,
+        )
 
 
 @transaction.atomic

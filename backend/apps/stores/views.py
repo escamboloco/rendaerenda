@@ -126,6 +126,7 @@ class StoreOnboardView(APIView):
         pix_key_type = (payload.get("pix_key_type") or detect_pix_key_type(pix_key)).upper()
 
         provider = get_payment_provider()
+        # PF: create_seller_subaccount e no-op. PJ: cria walletId no Asaas.
         subaccount = provider.create_seller_subaccount(
             seller_name=payload["display_name"],
             cpf=user.cpf,
@@ -139,7 +140,7 @@ class StoreOnboardView(APIView):
             bio=payload.get("bio", ""),
             plan=plan,
             plan_expires_at=(timezone.now() + timedelta(days=plan.duration_days)) if plan else None,
-            psp_subaccount_id=subaccount.provider_subaccount_id,
+            psp_subaccount_id=subaccount.provider_subaccount_id or "",
             psp_api_key=subaccount.api_key or "",
             pix_key=pix_key,
             pix_key_type=pix_key_type,
