@@ -6,9 +6,9 @@
 
 1.2. **A Plataforma não vende nada.** Não é vendedora, não é dona, não fabrica, não estoca, não garante qualidade, autenticidade, higiene ou legalidade dos itens anunciados. **Apenas conecta Vendedora e Comprador.** A relação de compra e venda do item forma-se exclusivamente entre eles.
 
-1.3. A cobrança da taxa de intermediação e do valor do item é feita por Instituição de Pagamento licenciada pelo Banco Central ("PSP" — Asaas), com **split automático**: a Vendedora recebe o valor que pediu pelo item **mais o frete**; a Plataforma recebe apenas a **comissão de 30%** sobre o valor do item (embutida no preço exibido ao Comprador). A Plataforma não custodia o valor destinado à Vendedora.
+1.3. A cobrança da taxa de intermediação e do valor do item é feita por Instituição de Pagamento licenciada pelo Banco Central ("PSP" — Asaas), com **split automático**: a Vendedora recebe o valor que pediu pelo item **mais o frete**; a Plataforma recebe apenas a **comissão de 20%** sobre o valor do item (embutida no preço exibido ao Comprador). A Plataforma não custodia o valor destinado à Vendedora.
 
-1.4. Remuneração da Plataforma: **somente a comissão de 30%** sobre o valor do item em cada venda concluída. Anunciar e comprar **não exigem assinatura**. Pacotes de destaque ("boost") são opcionais e pagos à parte, quando oferecidos.
+1.4. Remuneração da Plataforma: **somente a comissão de 20%** sobre o valor do item em cada venda concluída. Anunciar e comprar **não exigem assinatura**. Pacotes de destaque ("boost") são opcionais e pagos à parte, quando oferecidos.
 
 ## 2. Cadastro e verificação de idade
 
@@ -44,7 +44,7 @@
 
 5.3. Após a confirmação do pagamento pelo PSP, o split credita a parte da Vendedora e a Plataforma dispara o **repasse automático via Pix** para a chave cadastrada pela Vendedora, sujeita às regras e prazos do PSP (liquidação Pix, análise antifraude etc.).
 
-5.4. O Comprador paga: **preço do anúncio** (já com a comissão de 30% embutida) **+ frete**. A Vendedora recebe: **valor que ela definiu receber pelo item + frete**.
+5.4. O Comprador paga: **preço do anúncio** (já com a comissão de 20% embutida) **+ frete**. A Vendedora recebe: **valor que ela definiu receber pelo item + frete**.
 
 ## 6. Responsabilidade
 

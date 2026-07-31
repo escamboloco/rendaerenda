@@ -39,7 +39,7 @@ envVarGroups:
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT
-        value: "30"
+        value: "20"
       - key: PACKAGING_FEE
         value: "0"
       - key: AUTO_PAYOUT_ON_PAYMENT

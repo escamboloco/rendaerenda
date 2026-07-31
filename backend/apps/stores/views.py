@@ -78,7 +78,15 @@ def ranking_page(request):
 @login_required
 def onboard_page(request):
     if hasattr(request.user, "store"):
-        return render(request, "stores/onboard.html", {"already_has_store": True, "store": request.user.store})
+        return render(
+            request,
+            "stores/onboard.html",
+            {
+                "already_has_store": True,
+                "store": request.user.store,
+                "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
+            },
+        )
 
     seller_kyc = getattr(request.user, "seller_kyc", None)
     return render(
@@ -88,6 +96,7 @@ def onboard_page(request):
             "already_has_store": False,
             "seller_kyc": seller_kyc,
             "require_seller_kyc": settings.REQUIRE_SELLER_KYC,
+            "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
         },
     )
 

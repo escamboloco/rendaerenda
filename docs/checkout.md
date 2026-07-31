@@ -14,14 +14,14 @@
 |---|---|
 | Comprador precisava de conta + telefone | **Compra guest** — nome, e-mail, CPF, nascimento (+18), endereço e pagamento |
 | Plataforma comprava etiqueta e ficava com o frete | **Vendedora posta sozinha**; frete cotado no checkout e **repassado a ela** |
-| Comissão 30% + frete pra plataforma | **Só 30% pra plataforma**; vendedora recebe **item (payout) + frete** |
+| Comissão 30% + frete pra plataforma | **Só 20% pra plataforma**; vendedora recebe **item (payout) + frete** |
 | Saque manual / retido | **Pix automático** na chave cadastrada pela vendedora após confirmação do pagamento |
 
 ### Exemplo de cálculo
 
 ```
 Vendedora quer receber:  R$ 100,00   (payout_amount)
-Comissão da plataforma:  R$  30,00   (30% por cima)
+Comissão da plataforma:  R$  20,00   (20% por cima)
 ─────────────────────────────────
 Preço do anúncio:        R$ 130,00   (price)   ← o que o comprador vê no item
 + Frete (ex. PAC):       R$  18,50
@@ -222,7 +222,7 @@ PAYMENT_PROVIDER=asaas
 ASAAS_API_KEY=...            ASAAS_WEBHOOK_TOKEN=...
 SHIPPING_PROVIDER=melhor_envio
 MELHOR_ENVIO_TOKEN=...       MELHOR_ENVIO_SANDBOX=True
-PLATFORM_COMMISSION_PERCENT=30
+PLATFORM_COMMISSION_PERCENT=20
 PACKAGING_FEE=3.90
 DELIVERY_CONFIRMATION_WINDOW_HOURS=24
 PHONE_CPF_BUREAU_URL=...     PHONE_CPF_BUREAU_API_KEY=...

@@ -244,10 +244,10 @@ REST_FRAMEWORK = {
 
 # --- Regras de negocio do projeto (docs/BASE_JURIDICA.md, docs/checkout.md) ---
 # Comissao aplicada POR CIMA do valor liquido que a vendedora pede
-# (Product.payout_amount) - ela nunca "perde" 30%, o comprador que paga
+# (Product.payout_amount) - ela nunca "perde" a comissao; o comprador que paga
 # a mais. Sem assinatura/mensalidade: navegar, anunciar e comprar sao
 # gratuitos - a plataforma só ganha em cima da venda.
-PLATFORM_COMMISSION_PERCENT = config("PLATFORM_COMMISSION_PERCENT", default=30, cast=int)
+PLATFORM_COMMISSION_PERCENT = config("PLATFORM_COMMISSION_PERCENT", default=20, cast=int)
 WALLET_RELEASE_DAYS_AFTER_SHIPPING = config("WALLET_RELEASE_DAYS_AFTER_SHIPPING", default=3, cast=int)
 # Janela pós-entrega pra comprador confirmar ou contestar antes da liberação
 # automática do saldo pra vendedora (docs/checkout.md).

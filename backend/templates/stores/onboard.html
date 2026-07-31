@@ -5,7 +5,7 @@
 <div class="max-w-lg mx-auto space-y-6">
   <div class="text-center">
     <h1 class="text-2xl font-bold">Abrir minha loja</h1>
-    <p class="text-gray-400 text-sm mt-1">Anunciar é grátis. Você define quanto quer receber; o site acrescenta 30% no preço. No pagamento, o frete também vai para você.</p>
+    <p class="text-gray-400 text-sm mt-1">Anunciar é grátis. Você define quanto quer receber; o site acrescenta {{ commission_percent }}% no preço. No pagamento, o frete também vai para você.</p>
   </div>
 
   {% if already_has_store %}
@@ -70,7 +70,7 @@
         </select>
       </div>
       <div class="card px-4 py-3 text-sm text-gray-400">
-        Quando o comprador pagar, o Asaas faz o split: <strong class="text-gray-200">você recebe o valor do item + frete</strong>; a plataforma fica com 30%. O Pix cai na chave cadastrada aqui.
+        Quando o comprador pagar, o Asaas faz o split: <strong class="text-gray-200">você recebe o valor do item + frete</strong>; a plataforma fica com {{ commission_percent }}%. O Pix cai na chave cadastrada aqui.
       </div>
       <p x-show="error" x-text="error" class="input-error"></p>
       <button type="submit" class="btn-primary w-full" :disabled="loading">

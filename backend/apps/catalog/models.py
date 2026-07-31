@@ -15,7 +15,7 @@ def _commission_multiplier() -> Decimal:
 def price_from_payout(payout_amount: Decimal) -> Decimal:
     """
     Preço exibido ao comprador = valor que a vendedora quer receber + comissão
-    da plataforma (settings.PLATFORM_COMMISSION_PERCENT, 30% por padrão) por
+    da plataforma (settings.PLATFORM_COMMISSION_PERCENT, 20% por padrão) por
     cima. A vendedora declara o LÍQUIDO que quer; o preço público é sempre
     derivado disso no servidor - nunca aceito direto do cliente.
     """

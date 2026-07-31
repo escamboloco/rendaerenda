@@ -214,6 +214,15 @@ def asaas_webhook(request):
     Webhook Asaas. No PAYMENT_CONFIRMED: marca pago, split ja feito pelo
     Asaas, e dispara Pix automatico pra chave da vendedora.
     """
+    if request.method == "GET":
+        # Navegador abre com GET — nao e erro. Asaas so usa POST.
+        return JsonResponse(
+            {
+                "ok": True,
+                "service": "asaas-webhook",
+                "hint": "Endpoint ativo. O Asaas deve enviar POST com o header Asaas-Access-Token.",
+            }
+        )
     if request.method != "POST":
         return HttpResponse(status=405)
 
