@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load l10n %}
 {% block title %}{{ store.display_name }} — Renda &amp; Renda{% endblock %}
 {% block description %}{{ store.bio|default:"Loja verificada no Renda &amp; Renda."|truncatechars:150 }}{% endblock %}
 {% block robots %}index, follow{% endblock %}
@@ -110,12 +111,12 @@
           <input type="checkbox"
                  class="rounded border-surface-border"
                  :checked="!!selected['{{ product.id }}']"
-                 @change="toggle('{{ product.id }}', {{ product.price }}, '{{ product.title|escapejs }}')">
+                 @change="toggle('{{ product.id }}', {{ product.price|unlocalize }}, '{{ product.title|escapejs }}')">
           Incluir na compra
         </label>
         <button type="button"
                 class="btn-primary w-full !py-2 !min-h-0 text-sm"
-                @click="buyOne('{{ product.id }}', {{ product.price }}, '{{ product.title|escapejs }}')">
+                @click="buyOne('{{ product.id }}', {{ product.price|unlocalize }}, '{{ product.title|escapejs }}')">
           Comprar
         </button>
       </div>

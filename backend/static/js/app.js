@@ -1,3 +1,9 @@
+function csrfHeaders(json) {
+  const headers = { "X-CSRFToken": (window.getCsrfToken && window.getCsrfToken()) || window.CSRF_TOKEN || "" };
+  if (json !== false) headers["Content-Type"] = "application/json";
+  return headers;
+}
+
 function reportModal(targetType, objectId) {
   return {
     open: false,
@@ -12,7 +18,8 @@ function reportModal(targetType, objectId) {
       try {
         const resp = await fetch(window.MODERATION_REPORT_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+          credentials: "same-origin",
+          headers: csrfHeaders(),
           body: JSON.stringify({
             target_type: targetType,
             object_id: objectId,
@@ -158,7 +165,8 @@ function storeCartCheckout(config) {
         }
         const resp = await fetch(checkoutUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+          credentials: "same-origin",
+          headers: csrfHeaders(),
           body: JSON.stringify(body),
         });
         const data = await resp.json().catch(() => ({}));
@@ -196,7 +204,8 @@ function customRequestModal(storeSlug) {
       try {
         const resp = await fetch("/api/pedidos-personalizados/", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
+          credentials: "same-origin",
+          headers: csrfHeaders(),
           body: JSON.stringify({
             store_slug: storeSlug,
             title: this.title,
