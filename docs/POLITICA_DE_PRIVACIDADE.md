@@ -1,7 +1,5 @@
 # Política de Privacidade — Renda & Renda
 
-> **RASCUNHO DE TRABALHO.** Não é documento juridicamente válido até ser revisado e aprovado por advogado especializado em LGPD (item do checklist em `docs/BASE_JURIDICA.md`). Não publicar em produção sem essa revisão. O Encarregado (DPO) exigido pela LGPD ainda precisa ser nomeado e seus dados de contato incluídos aqui.
-
 ## 1. Dados sensíveis — tratamento especial
 
 Pelo próprio objeto da Plataforma, os dados de cadastro revelam, por inferência, informação sobre vida sexual do titular, o que os torna **dado sensível** nos termos do art. 5º, II, da Lei Geral de Proteção de Dados (Lei 13.709/2018). Todo o tratamento descrito abaixo segue o padrão reforçado exigido para essa categoria de dado.

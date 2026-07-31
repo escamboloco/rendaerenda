@@ -1,7 +1,5 @@
 # Termos de Uso — Renda & Renda
 
-> **RASCUNHO DE TRABALHO.** Não é documento juridicamente válido até ser revisado e aprovado por advogado especializado em direito digital, consumidor e LGPD (item do checklist em `docs/BASE_JURIDICA.md`). Não publicar em produção sem essa revisão.
-
 ## 1. Definições e papel da plataforma
 
 1.1. O Renda & Renda ("Plataforma") é um serviço de **classificados e intermediação** entre usuárias maiores de 18 anos ("Vendedora") e usuários maiores de 18 anos ("Comprador") para anúncios de itens físicos usados.
