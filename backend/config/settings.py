@@ -300,17 +300,23 @@ CORREIOS_ORIGIN_CEP = config("CORREIOS_ORIGIN_CEP", default="")
 
 # --- E-mail transacional (verificacao de conta, recuperacao de senha) ---
 # Sem conteudo explicito no corpo/assunto (docs/BASE_JURIDICA.md). Em DEBUG
-# usa o console para nao exigir SMTP local; em producao exige config real.
-EMAIL_BACKEND = config(
-    "EMAIL_BACKEND",
-    default="django.core.mail.backends.console.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend",
-)
+# usa o console. Em producao, SMTP so se EMAIL_HOST + USER estiverem setados;
+# senao cai no console pra nao quebrar o cadastro com 500.
 EMAIL_HOST = config("EMAIL_HOST", default="")
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="Renda & Renda <no-reply@rendaerenda.com.br>")
+_EMAIL_CONFIGURED = bool(EMAIL_HOST and EMAIL_HOST_USER)
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default=(
+        "django.core.mail.backends.smtp.EmailBackend"
+        if (not DEBUG and _EMAIL_CONFIGURED)
+        else "django.core.mail.backends.console.EmailBackend"
+    ),
+)
 
 LOGIN_URL = "/contas/login/"
 LOGIN_REDIRECT_URL = "/"
@@ -324,10 +330,13 @@ ACCOUNT_AUTHENTICATION_METHOD = "email"
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_UNIQUE_EMAIL = True
-# "optional" ate termos de servico de e-mail transacional estarem contratados;
-# trocar para "mandatory" antes do lancamento (docs/BASE_JURIDICA.md nao exige,
-# mas reduz cadastro com e-mail invalido).
-ACCOUNT_EMAIL_VERIFICATION = config("ACCOUNT_EMAIL_VERIFICATION", default="optional")
+# Sem SMTP configurado: "none" (allauth com "optional" ainda TENTA enviar
+# e-mail e o SMTP quebrado vira Server Error 500 no /contas/signup/).
+# Com SMTP ok: "optional". Trocar para "mandatory" no lancamento se quiser.
+ACCOUNT_EMAIL_VERIFICATION = config(
+    "ACCOUNT_EMAIL_VERIFICATION",
+    default="optional" if _EMAIL_CONFIGURED else "none",
+)
 ACCOUNT_RATE_LIMITS = {
     "login_failed": "10/5m/ip,10/5m/key",
 }

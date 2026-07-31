@@ -1,5 +1,9 @@
+import logging
+
 from allauth.account.adapter import DefaultAccountAdapter
 from django.core.exceptions import PermissionDenied
+
+logger = logging.getLogger(__name__)
 
 
 class AgeGatedAccountAdapter(DefaultAccountAdapter):
@@ -37,3 +41,17 @@ class AgeGatedAccountAdapter(DefaultAccountAdapter):
         if commit:
             user.save()
         return user
+
+    def send_mail(self, template_prefix, email, context):
+        """
+        SMTP mal configurado nao pode derrubar cadastro/login com 500.
+        O usuario e criado; o e-mail fica so no log ate o SMTP estar ok.
+        """
+        try:
+            return super().send_mail(template_prefix, email, context)
+        except Exception:
+            logger.exception(
+                "Falha ao enviar e-mail '%s' para %s — cadastro segue sem bloquear.",
+                template_prefix,
+                email,
+            )

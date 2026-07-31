@@ -52,6 +52,11 @@ class User(AbstractUser):
     def interaction_name(self) -> str:
         return self.public_alias or f"Usuário {str(self.id)[:8]}"
 
+    @property
+    def has_store(self) -> bool:
+        # Reverse OneToOne: acessar .store sem loja levanta DoesNotExist (500 no template).
+        return hasattr(self, "store")
+
     def ban(self, reason: str):
         # Banimento por CPF (nao so e-mail), conforme docs/BASE_JURIDICA.md secao 3.
         self.is_banned = True

@@ -61,8 +61,8 @@ envVarGroups:
       # pf = sem split (repasse Pix); trocar para "pj" quando tiver CNPJ + subcontas
       - key: ASAAS_ACCOUNT_TYPE
         value: "pf"
-      - key: EMAIL_BACKEND
-        value: "django.core.mail.backends.smtp.EmailBackend"
+      # EMAIL_BACKEND: omitido — settings escolhe SMTP só se EMAIL_HOST+USER
+      # estiverem preenchidos; senao console (evita 500 no cadastro).
       - key: EMAIL_PORT
         value: "587"
       - key: EMAIL_USE_TLS

@@ -50,7 +50,7 @@
           <a href="{% url 'payments_pages:my_purchases' %}" class="nav-link hidden sm:inline">Compras</a>
           <a href="{% url 'offers:my_requests' %}" class="nav-link hidden sm:inline">Pedidos</a>
           {% if request.user.role == 'seller' %}
-            {% if request.user.store %}
+            {% if request.user.has_store %}
               <a href="{% url 'catalog:create' %}" class="nav-link hidden sm:inline">Anunciar</a>
             {% endif %}
             <a href="{% url 'wallet:dashboard' %}" class="nav-link hidden sm:inline">Carteira</a>
