@@ -16,8 +16,8 @@
   {# --- Open Graph (nome de marca neutro, sem imagens explícitas na prévia) --- #}
   <meta property="og:site_name" content="Renda &amp; Renda">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="{% block og_title %}{{ self.title }}{% endblock %}">
-  <meta property="og:description" content="{% block og_description %}{{ self.description }}{% endblock %}">
+  <meta property="og:title" content="{% block og_title %}Renda &amp; Renda{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}Classificados +18 entre adultos verificados.{% endblock %}">
   <meta name="theme-color" content="#0e0a14">
   <meta name="csrf-token" content="{{ csrf_token }}">
 
@@ -25,11 +25,14 @@
   <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-surface text-gray-100 font-sans min-h-screen flex flex-col">
+{# x-data no body: o header e o drawer da sacola usam $store.cart, e o Alpine
+   so processa diretivas dentro de uma arvore com x-data. Componentes
+   aninhados (x-data proprio) continuam funcionando normalmente. #}
+<body x-data class="bg-surface text-gray-100 font-sans min-h-screen flex flex-col">
 
   <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 bg-brand text-white px-3 py-2 rounded-lg text-sm">Pular para o conteúdo</a>
 
-  <header class="sticky top-0 z-40 border-b border-surface-border bg-surface/90 backdrop-blur">
+  <header class="sticky top-0 z-40 border-b border-surface-border bg-surface/95 backdrop-blur">
     <div class="container-page py-3 flex items-center gap-3">
       <a href="{% url 'stores:home' %}" class="font-extrabold text-lg tracking-tight shrink-0">
         Renda<span class="text-gradient-brand font-black">&amp;</span>Renda
@@ -37,7 +40,7 @@
 
       <form action="{% url 'stores:home' %}" method="get" class="hidden sm:flex flex-1 max-w-md">
         <div class="relative w-full">
-          <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Buscar lojas ou itens…"
+          <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Buscar peças, categorias ou lojas…"
                  class="input-field pl-10 py-2.5" aria-label="Buscar">
           <svg class="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M11 19a8 8 0 100-16 8 8 0 000 16z"/>
@@ -46,26 +49,37 @@
       </form>
 
       <nav class="ml-auto flex items-center gap-1 sm:gap-3 text-sm">
-        <a href="{% url 'stores:ranking' %}" class="nav-link hidden sm:inline">Ranking</a>
+        <a href="{% url 'stores:ranking' %}" class="nav-link hidden md:inline">Ranking</a>
         {% if request.user.is_authenticated %}
-          <a href="{% url 'payments_pages:my_purchases' %}" class="nav-link hidden sm:inline">Compras</a>
-          <a href="{% url 'offers:my_requests' %}" class="nav-link hidden sm:inline">Pedidos</a>
+          <a href="{% url 'payments_pages:my_purchases' %}" class="nav-link hidden md:inline">Compras</a>
+          <a href="{% url 'offers:my_requests' %}" class="nav-link hidden lg:inline">Pedidos</a>
           {% if request.user.role == 'seller' %}
             {% if request.user.has_store %}
-              <a href="{% url 'catalog:create' %}" class="nav-link hidden sm:inline">Anunciar</a>
+              <a href="{% url 'catalog:create' %}" class="nav-link hidden lg:inline">Anunciar</a>
             {% endif %}
-            <a href="{% url 'wallet:dashboard' %}" class="nav-link hidden sm:inline">Carteira</a>
+            <a href="{% url 'wallet:dashboard' %}" class="nav-link hidden md:inline">Carteira</a>
           {% endif %}
           <a href="{% url 'accounts_pages:profile_page' %}" class="nav-link">Conta</a>
-          <a href="{% url 'account_logout' %}" class="nav-link">Sair</a>
+          <a href="{% url 'account_logout' %}" class="nav-link hidden sm:inline">Sair</a>
         {% else %}
           <a href="{% url 'account_login' %}" class="nav-link">Entrar</a>
-          <a href="{% url 'account_signup' %}" class="btn-primary !py-2 !px-4 !min-h-0">Cadastrar</a>
+          <a href="{% url 'account_signup' %}" class="btn-primary !py-2 !px-4 !min-h-0 hidden sm:inline-flex">Criar conta</a>
         {% endif %}
+
+        {# Sacola — sempre visível, é o caminho para o checkout #}
+        <button type="button" class="relative ml-1 p-2.5 rounded-xl border border-surface-border bg-surface-alt hover:border-brand/60 transition"
+                @click="$store.cart.openDrawer()" aria-label="Abrir sacola">
+          <svg class="w-5 h-5 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12l-1 13H7L6 7zm3 0a3 3 0 016 0"/>
+          </svg>
+          <span x-cloak x-show="$store.cart.count > 0"
+                class="absolute -top-1.5 -right-1.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-brand text-white text-[11px] font-bold flex items-center justify-center"
+                x-text="$store.cart.count"></span>
+        </button>
       </nav>
     </div>
     <form action="{% url 'stores:home' %}" method="get" class="sm:hidden container-page pb-3">
-      <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Buscar lojas ou itens…" class="input-field py-2.5" aria-label="Buscar">
+      <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Buscar peças ou lojas…" class="input-field py-2.5" aria-label="Buscar">
     </form>
   </header>
 
@@ -83,6 +97,61 @@
     {% block content %}{% endblock %}
   </main>
 
+  {# ---------------------------------------------------------- sacola (drawer) #}
+  <div x-cloak x-show="$store.cart.open" class="fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label="Sacola">
+    <div class="absolute inset-0 bg-black/70" @click="$store.cart.closeDrawer()"></div>
+    <aside class="absolute right-0 top-0 h-full w-full max-w-sm bg-surface-card border-l border-surface-border flex flex-col"
+           @keydown.escape.window="$store.cart.closeDrawer()">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-surface-border">
+        <p class="font-bold">Sua sacola <span class="text-gray-500 font-normal text-sm" x-text="'(' + $store.cart.count + ')'"></span></p>
+        <button type="button" class="text-gray-400 hover:text-white text-sm" @click="$store.cart.closeDrawer()">Fechar</button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+        <template x-if="$store.cart.isEmpty">
+          <div class="text-center py-14 space-y-3">
+            <p class="text-gray-400 text-sm">Sua sacola está vazia.</p>
+            <a href="{% url 'stores:home' %}" class="btn-secondary text-sm">Ver peças disponíveis</a>
+          </div>
+        </template>
+
+        <template x-for="item in ($store.cart.summary ? $store.cart.summary.items : [])" :key="item.id">
+          <div class="flex gap-3 items-center">
+            <a :href="item.url" class="w-16 h-16 rounded-xl bg-white/5 overflow-hidden shrink-0">
+              <template x-if="item.image">
+                <img :src="item.image" :alt="item.title" class="w-full h-full object-cover">
+              </template>
+            </a>
+            <div class="flex-1 min-w-0">
+              <a :href="item.url" class="text-sm font-medium truncate block hover:underline" x-text="item.title"></a>
+              <p class="text-brand font-bold text-sm" x-text="money(item.line_total)"></p>
+              <div class="flex items-center gap-2 mt-1">
+                <button type="button" class="w-7 h-7 rounded-lg border border-surface-border text-gray-300 hover:border-brand/60"
+                        @click="$store.cart.setQty(item.id, item.qty - 1)" aria-label="Diminuir">–</button>
+                <span class="text-sm w-5 text-center" x-text="item.qty"></span>
+                <button type="button" class="w-7 h-7 rounded-lg border border-surface-border text-gray-300 hover:border-brand/60 disabled:opacity-40"
+                        :disabled="item.qty >= item.stock"
+                        @click="$store.cart.setQty(item.id, item.qty + 1)" aria-label="Aumentar">+</button>
+                <button type="button" class="ml-auto text-xs text-gray-500 hover:text-red-300" @click="$store.cart.remove(item.id)">Remover</button>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <p x-cloak x-show="$store.cart.error" x-text="$store.cart.error" class="input-error"></p>
+      </div>
+
+      <div x-cloak x-show="!$store.cart.isEmpty" class="border-t border-surface-border px-5 py-4 space-y-3">
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-gray-400">Total</span>
+          <span class="text-xl font-extrabold text-brand" x-text="money($store.cart.total)"></span>
+        </div>
+        <p class="text-[11px] text-gray-500">Frete incluso neste lançamento. Pagamento por Pix, com cobrança discreta no extrato.</p>
+        <a href="{% url 'payments_pages:checkout_page' %}" class="btn-primary w-full">Ir para o pagamento</a>
+      </div>
+    </aside>
+  </div>
+
   <footer class="border-t border-surface-border mt-12">
     <div class="container-page py-8 grid grid-cols-2 sm:grid-cols-4 gap-6 text-sm">
       <div class="col-span-2 sm:col-span-1">
@@ -90,21 +159,27 @@
         <p class="text-gray-500 text-xs leading-relaxed">Classificados +18 de itens íntimos usados, entre adultos verificados. Pagamentos processados por instituição de pagamento licenciada pelo Banco Central — a plataforma nunca custodia o dinheiro.</p>
       </div>
       <div>
-        <p class="text-gray-300 font-semibold mb-2 text-xs uppercase tracking-wide">Legal</p>
+        <p class="text-gray-300 font-semibold mb-2 text-xs uppercase tracking-wide">Comprar</p>
+        <ul class="space-y-1.5 text-gray-500">
+          <li><a href="{% url 'stores:home' %}" class="hover:text-gray-300">Vitrine</a></li>
+          <li><a href="{% url 'stores:ranking' %}" class="hover:text-gray-300">Ranking de lojas</a></li>
+          <li><a href="{% url 'payments_pages:checkout_page' %}" class="hover:text-gray-300">Minha sacola</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="text-gray-300 font-semibold mb-2 text-xs uppercase tracking-wide">Vender</p>
+        <ul class="space-y-1.5 text-gray-500">
+          <li><a href="{% url 'stores:onboard_page' %}" class="hover:text-gray-300">Abrir minha loja</a></li>
+          <li><a href="{% url 'account_signup' %}" class="hover:text-gray-300">Criar conta</a></li>
+        </ul>
+      </div>
+      <div>
+        <p class="text-gray-300 font-semibold mb-2 text-xs uppercase tracking-wide">Legal &amp; +18</p>
         <ul class="space-y-1.5 text-gray-500">
           <li><a href="{% url 'core_pages:terms' %}" class="hover:text-gray-300">Termos de Uso</a></li>
-          <li><a href="{% url 'core_pages:privacy' %}" class="hover:text-gray-300">Política de Privacidade</a></li>
+          <li><a href="{% url 'core_pages:privacy' %}" class="hover:text-gray-300">Privacidade</a></li>
         </ul>
-      </div>
-      <div>
-        <p class="text-gray-300 font-semibold mb-2 text-xs uppercase tracking-wide">Comunidade</p>
-        <ul class="space-y-1.5 text-gray-500">
-          <li><a href="{% url 'account_signup' %}" class="hover:text-gray-300">Vender na plataforma</a></li>
-        </ul>
-      </div>
-      <div>
-        <p class="text-gray-300 font-semibold mb-2 text-xs uppercase tracking-wide">+18</p>
-        <p class="text-gray-500 text-xs leading-relaxed">Verificação de idade obrigatória no cadastro. Denuncie qualquer conteúdo suspeito pelo botão em cada anúncio.</p>
+        <p class="text-gray-600 text-[11px] leading-relaxed mt-2">Verificação de idade obrigatória. Denuncie conteúdo suspeito pelo botão em cada anúncio.</p>
       </div>
     </div>
     <div class="border-t border-surface-border py-4 text-center text-xs text-gray-600">
@@ -121,23 +196,6 @@
 
   <script>
     window.MODERATION_REPORT_URL = "{% url 'moderation_api:report_create' %}";
-    window.getCsrfToken = function getCsrfToken() {
-      function valid(t) {
-        return typeof t === "string" && (t.length === 64 || t.length === 32);
-      }
-      var match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
-      if (match && match[1]) {
-        var fromCookie = decodeURIComponent(match[1]);
-        if (valid(fromCookie)) return fromCookie;
-      }
-      var meta = document.querySelector('meta[name="csrf-token"]');
-      if (meta && valid(meta.content)) return meta.content;
-      if (valid(window.CSRF_TOKEN)) return window.CSRF_TOKEN;
-      return (meta && meta.content) || "";
-    };
-    window.CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]')
-      ? document.querySelector('meta[name="csrf-token"]').content
-      : "";
   </script>
   {# app.js antes do Alpine (defer) — funcoes x-data precisam existir na init #}
   <script src="{% static 'js/app.js' %}" defer></script>

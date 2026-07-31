@@ -1,0 +1,131 @@
+{% extends "core/base.html" %}
+{% block title %}Pedido {{ order.short_id }} — Renda &amp; Renda{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-4"
+     x-data="orderTracker('{{ order.access_token }}', {{ order.is_open_for_payment|yesno:'true,false' }})">
+
+  <div class="flex items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-bold">Pedido {{ order.short_id }}</h1>
+      <p class="text-xs text-gray-500">{{ order.created_at|date:"d/m/Y H:i" }} · {{ order.store.display_name }}</p>
+    </div>
+    <span class="badge {% if order.status == 'paid' or order.status == 'shipped' or order.status == 'delivered' %}badge-verified{% elif order.status == 'awaiting_payment' %}badge-pending{% else %}badge-neutral{% endif %}">
+      {{ order.get_status_display }}
+    </span>
+  </div>
+
+  {# ------------------------------------------------ pagamento em aberto #}
+  {% if order.is_open_for_payment %}
+  <section class="card p-5 space-y-4">
+    <div>
+      <h2 class="font-semibold">Pague com Pix para confirmar</h2>
+      <p class="text-sm text-gray-400 mt-1">
+        Use o <strong class="text-white">mesmo CPF</strong> informado na compra — Pix de terceiro é estornado
+        automaticamente por exigência de verificação de idade.
+      </p>
+    </div>
+
+    {% if payment.pix_qr_code %}
+    <div class="flex justify-center">
+      <div class="bg-white p-3 rounded-2xl">
+        <img src="{{ payment.pix_qr_code }}" alt="QR Code Pix" class="w-52 h-52 block">
+      </div>
+    </div>
+    {% endif %}
+
+    {% if payment.pix_copy_paste %}
+    {{ payment.pix_copy_paste|json_script:"pix-payload" }}
+    <div class="space-y-2">
+      <p class="input-label">Pix copia e cola</p>
+      <textarea readonly rows="3" class="input-field font-mono text-xs" @focus="$event.target.select()">{{ payment.pix_copy_paste }}</textarea>
+      <button type="button" class="btn-primary w-full"
+              @click="copy(JSON.parse(document.getElementById('pix-payload').textContent))">
+        <span x-show="!copied">Copiar código Pix</span>
+        <span x-cloak x-show="copied">Código copiado ✓</span>
+      </button>
+    </div>
+    {% endif %}
+
+    {% if payment.payment_url %}
+    <a href="{{ payment.payment_url }}" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir a página do Asaas</a>
+    {% endif %}
+
+    <div class="flex items-center justify-center gap-2 text-xs text-gray-500">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      Confirmamos automaticamente assim que o Pix cair.
+    </div>
+  </section>
+  {% elif order.status == 'paid' %}
+  <div class="card p-4 text-sm text-emerald-200 border-emerald-900/40">
+    Pagamento confirmado. A loja foi avisada e vai postar o item.
+  </div>
+  {% elif order.status == 'shipped' %}
+  <div class="card p-4 text-sm text-sky-200 border-sky-900/40">
+    Pedido enviado. O código de rastreio está abaixo.
+  </div>
+  {% elif order.status == 'delivered' %}
+  <div class="card p-4 text-sm text-emerald-200 border-emerald-900/40">
+    Entregue. Obrigado pela compra!
+  </div>
+  {% elif order.status == 'expired' %}
+  <div class="card p-4 text-sm text-amber-200 border-amber-900/50">
+    Este pedido expirou sem pagamento e as peças voltaram para a vitrine.
+    <a href="{% url 'stores:detail' order.store.slug %}" class="text-brand hover:underline">Ver a loja de novo</a>.
+  </div>
+  {% elif order.status == 'refunded' %}
+  <div class="card p-4 text-sm text-amber-200 border-amber-900/50">
+    Pagamento estornado. Se o Pix saiu de um CPF diferente do titular do pedido, o estorno é automático.
+  </div>
+  {% endif %}
+
+  {# ------------------------------------------------------------- itens #}
+  <section class="card p-5 space-y-3">
+    <p class="font-semibold text-sm">Itens</p>
+    {% for item in order.items.all %}
+    <div class="flex gap-3 items-center">
+      <div class="w-12 h-12 rounded-lg bg-white/5 overflow-hidden shrink-0">
+        {% with cover=item.product.images.first %}
+        {% if cover %}<img src="{{ cover.file.url }}" alt="" class="w-full h-full object-cover">{% endif %}
+        {% endwith %}
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="text-sm truncate">{{ item.product.title }}</p>
+        <p class="text-xs text-gray-500">{{ item.quantity }}x R$ {{ item.unit_price }}</p>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="border-t border-surface-border pt-3 space-y-1 text-sm">
+      <div class="flex justify-between text-gray-400"><span>Itens</span><span>R$ {{ order.items_total }}</span></div>
+      <div class="flex justify-between text-gray-400"><span>Frete</span><span>R$ {{ order.shipping_total }}</span></div>
+      <div class="flex justify-between font-bold pt-1"><span>Total</span><span class="text-brand">R$ {{ order.grand_total }}</span></div>
+    </div>
+  </section>
+
+  {% if order.shipment and order.shipment.tracking_code %}
+  <section class="card p-5 space-y-1 text-sm">
+    <p class="font-semibold">Rastreio</p>
+    <p class="font-mono text-gray-300">{{ order.shipment.tracking_code }}</p>
+    {% if order.shipment.last_tracking_event %}
+    <p class="text-xs text-gray-500">{{ order.shipment.last_tracking_event }}</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if order.shipping_address %}
+  <section class="card p-5 text-sm space-y-1">
+    <p class="font-semibold">Entrega</p>
+    <p class="text-gray-400">{{ order.shipping_address.street }}, {{ order.shipping_address.number }}{% if order.shipping_address.complement %} — {{ order.shipping_address.complement }}{% endif %}</p>
+    <p class="text-gray-400">{{ order.shipping_address.neighborhood }} — {{ order.shipping_address.city }}/{{ order.shipping_address.state }}</p>
+    <p class="text-gray-400">CEP {{ order.shipping_address.cep }}</p>
+  </section>
+  {% endif %}
+
+  <p class="text-xs text-gray-500">
+    A loja é responsável pelo envio. Guarde este link para acompanhar — por privacidade, os e-mails
+    não citam o título dos itens.
+  </p>
+</div>
+{% endblock %}

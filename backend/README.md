@@ -25,65 +25,127 @@ python manage.py runserver
 Sem Redis nem worker Celery: cache e rate-limit usam uma tabela no próprio
 Postgres (`django.core.cache.backends.db.DatabaseCache`), e toda task Celery
 roda síncrona no mesmo processo (`CELERY_TASK_ALWAYS_EAGER = True` sempre,
-ver `config/settings.py`) — arquitetura de menor custo no Render (só o
-serviço `web` + 2 Cron Jobs curtos, ver seção de deploy abaixo). Para checar
-sem Postgres instalado (ex.: sanity check rápido), use
-`DATABASE_URL=sqlite:///db.sqlite3` + `USE_LOCMEM_CACHE=True` no `.env` (ou
-como env var na hora de rodar) — mas produção é sempre Postgres real.
+ver `config/settings.py`) — arquitetura de menor custo no Render. Para checar
+sem Postgres instalado, use `DATABASE_URL=sqlite:///db.sqlite3` +
+`USE_LOCMEM_CACHE=True` — mas produção é sempre Postgres real.
 
 **Sempre que mexer em `templates/**/*.html` ou `static/css/input.css`, rode `npm run build:css` de novo antes de commitar** — o build do Render não roda `npm` (ver `build.sh`), então o CSS compilado precisa estar atualizado no repo.
+
+## Testes
+
+```bash
+DJANGO_SECRET_KEY=test DJANGO_DEBUG=True DATABASE_URL=sqlite:///test.sqlite3 USE_LOCMEM_CACHE=True python manage.py test tests
+```
+
+A suíte em `tests/` cobre o caminho do dinheiro: preço/comissão, reserva de
+estoque, oversell, expiração de pedido, idempotência do webhook (repasse
+nunca sai duas vezes), estorno por CPF divergente, polling de status,
+sacola e age gate. **Nenhum teste toca a rede** — o provider de pagamento é
+substituído por um dublê em `tests/factories.py`. Se um teste começar a
+chamar o Asaas de verdade, é sinal de que alguém importou
+`get_payment_provider` direto em vez de chamar `services.get_payment_provider()`.
 
 ## Apps
 
 | App | Responsabilidade |
 |---|---|
 | `accounts` | Usuário, verificação de idade (Lei 15.211/2025), KYC de vendedora, formulário de cadastro |
-| `stores` | Loja da vendedora, plano de assinatura da loja, onboarding, boost |
+| `stores` | Loja da vendedora, vitrine, ranking, onboarding, boost |
 | `catalog` | Produtos (itens físicos), imagens, página de produto |
-| `subscriptions` | Assinatura mensal obrigatória do comprador, checkout, NF de serviço |
-| `payments` | Pedido, checkout, split via PSP (Asaas) amarrado ao CPF do titular, NF de comissão, e-mails de confirmação |
-| `wallet` | Saldo (ledger) da vendedora, dashboard, saque — sempre para a chave Pix = CPF da titular, registro de postagem/rastreio |
-| `shipping` | Cotação de frete e rastreio via API dos Correios (PAC/SEDEX) |
-| `moderation` | Fila de moderação prévia + denúncias (botão em toda página de conteúdo) |
-| `offers` | Pedidos personalizados: comprador oferece valor por um item, vendedora aceita/recusa/contrapropõe |
-| `core` | Age gate, SEO (sitemap/robots/legal), middleware de segurança, filtro de logs |
+| `subscriptions` | Assinatura opcional do comprador, checkout, NF de serviço |
+| `payments` | Pedido, checkout, integração Asaas, webhook, NF de comissão, e-mails |
+| `wallet` | Ledger da vendedora, dashboard, saque/repasse Pix |
+| `shipping` | Cotação de frete e rastreio (Correios / Melhor Envio) |
+| `moderation` | Fila de moderação prévia + denúncias |
+| `offers` | Pedidos personalizados |
+| `core` | Age gate, SEO, consulta de CEP, middleware de segurança, filtro de logs |
+
+### Como o app de pagamentos está organizado
+
+```
+apps/payments/
+  asaas.py      HTTP puro com o Asaas: timeout, erro traduzido, sem regra de negócio
+  services.py   Tradução domínio <-> PSP (comissão, split, repasse, CPF do pagador)
+  checkout.py   Regra de negócio: reservar estoque, cobrar, confirmar, expirar
+  views.py      HTTP: API de checkout, sacola, status do pedido, webhook
+```
+
+Regra de ouro: **nenhuma chamada de rede dentro de transação de banco.**
+`reserve_order()` trava o estoque numa transação curta; a cobrança no Asaas
+acontece depois. Se o Asaas falhar, o pedido é cancelado e o estoque volta.
+
+## Fluxo de uma compra
+
+1. A pessoa monta a sacola (localStorage guarda só `id` + quantidade).
+2. `/finalizar/` recalcula tudo no servidor (`POST /api/sacola/`) — preço
+   nunca vem do navegador.
+3. `POST /api/checkout/` reserva o estoque, cria a cobrança Pix e devolve
+   QR + copia-e-cola + link de acompanhamento.
+4. A tela consulta `GET /api/pedido/<token>/status/` a cada 4s. Esse endpoint
+   **consulta o Asaas diretamente**, então a compra confirma mesmo se o
+   webhook não estiver configurado ou falhar.
+5. `POST /webhooks/asaas/` confirma em background (caminho normal).
+6. Confirmado: crédito no ledger + Pix automático para a vendedora + e-mails.
+   Tudo idempotente — webhook repetido não paga duas vezes.
+7. Não pagou até `expires_at`? `manage.py expire_orders` devolve o item.
+
+## Integração Asaas — passo a passo
+
+1. Conta Asaas aprovada **com o nicho declarado por escrito**
+   (vestuário íntimo usado entre pessoas físicas — ver `docs/BASE_JURIDICA.md` § 5).
+2. `ASAAS_API_KEY` = chave de produção (ou sandbox + `ASAAS_API_URL=https://api-sandbox.asaas.com/v3`).
+3. `ASAAS_WEBHOOK_TOKEN` = um segredo forte gerado por você.
+   **Sem essa variável o webhook responde 503 de propósito** — endpoint
+   aberto deixaria qualquer um marcar pedido como pago.
+4. No painel do Asaas → Integrações → Webhooks:
+   - URL: `https://rendaerenda.com.br/webhooks/asaas/`
+   - Token de autenticação: o mesmo `ASAAS_WEBHOOK_TOKEN`
+   - Eventos: `PAYMENT_RECEIVED`, `PAYMENT_CONFIRMED`, `PAYMENT_REFUNDED`,
+     `PAYMENT_CHARGEBACK_REQUESTED`, `PAYMENT_OVERDUE`
+5. `ASAAS_ACCOUNT_TYPE`: `pf` (cobra tudo e repassa por Pix) ou `pj`
+   (subconta por vendedora + split nativo). Só troque para `pj` quando as
+   subcontas existirem.
+6. Cada loja precisa de `pix_key` cadastrada — é para lá que vai o repasse.
+
+Teste ponta a ponta: `SEED_PAYMENT_TEST=True` cria uma loja com 3 itens de
+R$ 5 (`manage.py seed_payment_test`).
 
 ## Identidade, CPF e privacidade
 
-- **Idade oficial** vem sempre de `AgeVerification.validated_birth_date` (data retornada pela base oficial do CPF no provider de KYC) — nunca da data digitada no cadastro. Ver `apps/accounts/services.py`.
-- **Telefone**: `apps/accounts/phone.py` só envia o OTP por SMS depois de confirmar com um bureau que a linha pertence ao CPF do cadastro (`PHONE_CPF_BUREAU_*`). Compra e assinatura exigem `is_phone_verified=True`.
-- **Pagamento**: toda cobrança (pedido, assinatura, plano de loja, boost) é criada em um customer do PSP amarrado ao CPF da conta (`apps/payments/services.py`). Pix pago por CPF diferente é estornado automaticamente no webhook (`verify_payer_cpf`).
-- **Saque**: sempre para a chave Pix = CPF da dona da loja — não é configurável (`apps/wallet/services.py`).
-- **Apelido/nome social** (`User.public_alias`): usado só na interação comprador↔vendedora (pedidos personalizados). Pagamento, NF, KYC e admin sempre usam a identidade civil.
+- **Idade oficial** vem sempre de `AgeVerification.validated_birth_date` — nunca da data digitada. Ver `apps/accounts/services.py`.
+- **Telefone**: `apps/accounts/phone.py` só envia OTP depois de o bureau confirmar que a linha pertence ao CPF.
+- **Pagamento**: cobrança amarrada a um customer do PSP com o CPF do titular. Pix pago por CPF diferente é estornado (`REFUND_ON_PAYER_CPF_MISMATCH`).
+- **Saque/repasse**: para a chave Pix cadastrada pela dona da loja.
+- **Apelido** (`User.public_alias`): só na interação comprador↔vendedora. Pagamento, NF, KYC e admin usam identidade civil.
+- **CEP**: a consulta ao ViaCEP sai do servidor (`/api/cep/<cep>/`), nunca do navegador — mantém a CSP fechada e não expõe o IP da compradora.
 
 ## Front-end
 
-- Tailwind CSS compilado localmente (`package.json` / `tailwind.config.js` / `static/css/input.css` → `static/css/tailwind.css`), sem CDN — CSP em `config/settings.py` é `script-src 'self'` estrito.
-- HTMX e Alpine.js vendorizados em `static/vendor/` (baixados uma vez, sem dependência de terceiros em runtime).
-- Componentes JS pequenos ficam inline nos templates (`{% block extra_body %}`); o único script global é `static/js/app.js` (modal de denúncia).
-- Design tokens (cor de marca, superfícies, etc.) em `tailwind.config.js`.
+- Tailwind compilado localmente, sem CDN — CSP `script-src 'self' 'unsafe-eval'` (o `unsafe-eval` é exigido pelo build padrão do Alpine).
+- HTMX e Alpine vendorizados em `static/vendor/`.
+- `static/js/app.js` concentra a sacola (`Alpine.store('cart')`), o funil de
+  checkout, o polling do pedido, a galeria e os modais.
+- `templates/catalog/_product_card.html` é o card reutilizado na vitrine, na
+  loja e nos relacionados.
 
 ## Deploy no Render
 
-Use o `render.yaml` na raiz do repositório (Blueprint). Produção sobe:
+Blueprint em `render.yaml` (raiz do repo). Sobe Postgres + web + 4 crons:
 
-- **Postgres** `rendaerenda-db` (`basic-256mb`) — `DATABASE_URL` via `fromDatabase`
-- **Web** `rendaerenda-web` (`starter`) + domínios `rendaerenda.com.br` / `www`
-- **Cron** `rendaerenda-poll-shipments` (1×/h) e `rendaerenda-release-deliveries` (*/30)
+| Cron | Frequência | Para quê |
+|---|---|---|
+| `expire-orders` | */10 | Confere Pix pendente no Asaas e devolve estoque de pedido não pago |
+| `poll-shipments` | 1×/h | Rastreio |
+| `release-deliveries` | */30 | Liberação de saldo pós-entrega |
+| `marketing-digest` | seg 14h UTC | Newsletter opt-in |
 
-**Sem Redis** (cache/rate-limit na tabela Postgres) **e sem worker Celery 24/7**
-(`CELERY_TASK_ALWAYS_EAGER = True`). Cron cobra por segundo de execução.
-
-1. Rode `npm run build:css` e commite `static/css/tailwind.css` (o build do Render é Python puro, sem Node — ver `build.sh`).
-2. Push do repo → Render Dashboard → **New → Blueprint** → selecione o repositório.
-3. Preencha as variáveis `sync: false` (Asaas, S3, KYC, Melhor Envio, SMTP, CNPJ…). Segredos sem valor podem ficar vazios no 1º deploy se ainda não tiver as contas.
-4. Na **Hostinger** (DNS do domínio, sem hospedar o site lá):
-   - `A` `@` → `216.24.57.1`
-   - `CNAME` `www` → `rendaerenda-web.onrender.com` (hostname exato do serviço)
-   - Remova registros `AAAA` de `@`/`www`
-5. Shell do web → `python manage.py createsuperuser`
-6. Webhook Asaas → `https://rendaerenda.com.br/webhooks/asaas/`
+1. `npm run build:css` e commite `static/css/tailwind.css`.
+2. Push → Render → **New → Blueprint**.
+3. Preencha as variáveis `sync: false` (Asaas, Melhor Envio, SMTP, Pix de teste).
+4. DNS na Hostinger: `A @ → 216.24.57.1`, `CNAME www → rendaerenda-web.onrender.com`, sem `AAAA`.
+5. Shell do web → `python manage.py createsuperuser`.
+6. Configure o webhook do Asaas (seção acima).
 
 ## Checklist antes de expor a público
 
-Ver `docs/BASE_JURIDICA.md` seção 7 — nenhuma feature entra em produção sem isso.
+Ver `docs/BASE_JURIDICA.md` seção 7 e `docs/PRODUCAO.md` (checklist operacional).

@@ -29,6 +29,7 @@ api_urlpatterns = [
     path("", include((offers_urls.api_urlpatterns, "offers_api"))),
     path("", include((catalog_urls.api_urlpatterns, "catalog_api"))),
     path("", include((reviews_urls.api_urlpatterns, "reviews_api"))),
+    path("", include((core_urls.api_urlpatterns, "core_api"))),
     path("", include("apps.shipping.urls")),
 ]
 

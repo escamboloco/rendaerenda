@@ -76,8 +76,15 @@ def age_verification_webhook(request):
     if request.method != "POST":
         return JsonResponse({"detail": "method not allowed"}, status=405)
 
+    # Sem chave configurada o endpoint fica FECHADO. Comparar com "" faria
+    # hmac.compare_digest("", "") == True e deixaria qualquer um aprovar a
+    # verificacao de idade de qualquer conta.
+    expected = (getattr(settings, "AGE_KYC_API_KEY", "") or "").strip()
+    if not expected:
+        return JsonResponse({"detail": "webhook de KYC não configurado"}, status=503)
+
     token = request.headers.get("X-Kyc-Webhook-Token", "")
-    if not hmac.compare_digest(token, settings.AGE_KYC_API_KEY):
+    if not hmac.compare_digest(token, expected):
         return HttpResponseForbidden("Token inválido.")
 
     payload = json.loads(request.body)

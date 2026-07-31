@@ -1,0 +1,291 @@
+{% extends "core/base.html" %}
+{% block title %}Finalizar compra — Renda &amp; Renda{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div x-data="checkoutFunnel({
+       auth: {{ request.user.is_authenticated|yesno:'true,false' }},
+       checkoutUrl: '{% url 'payments:checkout' %}'
+     })"
+     class="max-w-5xl mx-auto">
+
+  {# ------------------------------------------------------------- passos #}
+  <ol class="flex items-center gap-2 text-xs mb-8">
+    <li class="flex items-center gap-2" :class="step >= 1 ? 'text-white' : 'text-gray-600'">
+      <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]"
+            :class="step >= 1 ? 'bg-brand text-white' : 'bg-surface-alt text-gray-500'">1</span>
+      Seus dados
+    </li>
+    <li class="flex-1 h-px" :class="step >= 2 ? 'bg-brand' : 'bg-surface-border'"></li>
+    <li class="flex items-center gap-2" :class="step >= 2 ? 'text-white' : 'text-gray-600'">
+      <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]"
+            :class="step >= 2 ? 'bg-brand text-white' : 'bg-surface-alt text-gray-500'">2</span>
+      Entrega
+    </li>
+    <li class="flex-1 h-px" :class="step >= 3 ? 'bg-brand' : 'bg-surface-border'"></li>
+    <li class="flex items-center gap-2" :class="step >= 3 ? 'text-white' : 'text-gray-600'">
+      <span class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px]"
+            :class="step >= 3 ? 'bg-brand text-white' : 'bg-surface-alt text-gray-500'">3</span>
+      Pix
+    </li>
+  </ol>
+
+  {# ------------------------------------------------- sacola vazia (sem cobrança em aberto) #}
+  <template x-if="step < 3 && $store.cart.isEmpty">
+    <div class="card p-10 text-center space-y-4 max-w-lg mx-auto">
+      <p class="text-lg font-semibold">Sua sacola está vazia</p>
+      <p class="text-sm text-gray-500">Escolha as peças e volte aqui para pagar em menos de um minuto.</p>
+      <a href="{% url 'stores:home' %}" class="btn-primary">Ver peças disponíveis</a>
+    </div>
+  </template>
+
+  <div class="grid lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start"
+       x-show="step === 3 || !$store.cart.isEmpty">
+
+    <div class="space-y-4">
+
+      {# ------------------------------------------------------ passo 1: dados #}
+      <section x-show="step === 1" class="card p-5 sm:p-6 space-y-4">
+        <div>
+          <h1 class="text-xl font-bold">Quem está comprando</h1>
+          <p class="text-sm text-gray-500 mt-1">
+            {% if request.user.is_authenticated %}
+            Vamos usar os dados da sua conta. É só confirmar a entrega no próximo passo.
+            {% else %}
+            Sem cadastro. Pedimos CPF e nascimento porque a venda é restrita a maiores de 18 anos
+            e o Pix precisa sair do mesmo CPF.
+            {% endif %}
+          </p>
+        </div>
+
+        {% if request.user.is_authenticated %}
+        <div class="rounded-xl bg-white/5 border border-surface-border px-4 py-3 text-sm">
+          <p class="text-gray-300">{{ request.user.get_full_name|default:request.user.email }}</p>
+          <p class="text-xs text-gray-500">{{ request.user.email }}</p>
+        </div>
+        {% else %}
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div class="sm:col-span-2">
+            <label class="input-label" for="guest-name">Nome completo</label>
+            <input id="guest-name" type="text" x-model="guest.name" autocomplete="name" class="input-field" placeholder="Como está no documento">
+            <p x-cloak x-show="fieldErrors.name" x-text="fieldErrors.name" class="input-error"></p>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="input-label" for="guest-email">E-mail</label>
+            <input id="guest-email" type="email" x-model="guest.email" autocomplete="email" inputmode="email" class="input-field" placeholder="Para receber o link do pedido">
+            <p x-cloak x-show="fieldErrors.email" x-text="fieldErrors.email" class="input-error"></p>
+          </div>
+          <div>
+            <label class="input-label" for="guest-cpf">CPF</label>
+            <input id="guest-cpf" type="text" x-model="guest.cpf" @input="formatCPF()" inputmode="numeric" maxlength="14" class="input-field" placeholder="000.000.000-00">
+            <p x-cloak x-show="fieldErrors.cpf" x-text="fieldErrors.cpf" class="input-error"></p>
+          </div>
+          <div>
+            <label class="input-label" for="guest-birth">Data de nascimento</label>
+            <input id="guest-birth" type="date" x-model="guest.birth_date" class="input-field">
+            <p x-cloak x-show="fieldErrors.birth_date" x-text="fieldErrors.birth_date" class="input-error"></p>
+          </div>
+        </div>
+        <p class="text-[11px] text-gray-500">
+          Seus dados são usados só para a compra e a verificação de idade — nunca aparecem para a vendedora
+          além do necessário para o envio. <a href="{% url 'core_pages:privacy' %}" class="text-brand hover:underline">Política de privacidade</a>.
+        </p>
+        {% endif %}
+
+        <button type="button" class="btn-primary w-full" @click="goToAddress()">Continuar para a entrega</button>
+      </section>
+
+      {# ----------------------------------------------------- passo 2: entrega #}
+      <section x-show="step === 2" x-cloak class="card p-5 sm:p-6 space-y-4">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h1 class="text-xl font-bold">Onde entregamos</h1>
+            <p class="text-sm text-gray-500 mt-1">Digite o CEP que o resto preenche sozinho.</p>
+          </div>
+          <button type="button" class="text-xs text-gray-400 hover:text-white shrink-0" @click="backToIdentity()">Voltar</button>
+        </div>
+
+        <div class="grid sm:grid-cols-6 gap-3">
+          <div class="sm:col-span-2">
+            <label class="input-label" for="address-cep">CEP</label>
+            <div class="relative">
+              <input id="address-cep" type="text" x-model="address.cep" @input="formatCEP()" @blur="lookupCep()"
+                     inputmode="numeric" maxlength="9" autocomplete="postal-code" class="input-field" placeholder="00000-000">
+              <span x-cloak x-show="cepLoading" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">buscando…</span>
+            </div>
+            <p x-cloak x-show="fieldErrors.cep" x-text="fieldErrors.cep" class="input-error"></p>
+            <p x-cloak x-show="cepError" x-text="cepError" class="input-help"></p>
+          </div>
+          <div class="sm:col-span-4">
+            <label class="input-label" for="address-street">Rua</label>
+            <input id="address-street" type="text" x-model="address.street" autocomplete="address-line1" class="input-field">
+            <p x-cloak x-show="fieldErrors.street" x-text="fieldErrors.street" class="input-error"></p>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="input-label" for="address-number">Número</label>
+            <input id="address-number" type="text" x-model="address.number" class="input-field">
+            <p x-cloak x-show="fieldErrors.number" x-text="fieldErrors.number" class="input-error"></p>
+          </div>
+          <div class="sm:col-span-4">
+            <label class="input-label" for="address-complement">Complemento <span class="text-gray-600 normal-case">(opcional)</span></label>
+            <input id="address-complement" type="text" x-model="address.complement" class="input-field" placeholder="Apto, bloco, referência">
+          </div>
+          <div class="sm:col-span-3">
+            <label class="input-label" for="address-neighborhood">Bairro</label>
+            <input id="address-neighborhood" type="text" x-model="address.neighborhood" class="input-field">
+            <p x-cloak x-show="fieldErrors.neighborhood" x-text="fieldErrors.neighborhood" class="input-error"></p>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="input-label" for="address-city">Cidade</label>
+            <input id="address-city" type="text" x-model="address.city" class="input-field">
+            <p x-cloak x-show="fieldErrors.city" x-text="fieldErrors.city" class="input-error"></p>
+          </div>
+          <div class="sm:col-span-1">
+            <label class="input-label" for="address-state">UF</label>
+            <input id="address-state" type="text" x-model="address.state" maxlength="2" class="input-field uppercase">
+            <p x-cloak x-show="fieldErrors.state" x-text="fieldErrors.state" class="input-error"></p>
+          </div>
+        </div>
+
+        <label class="flex items-start gap-2 text-xs text-gray-400 cursor-pointer">
+          <input type="checkbox" x-model="marketingOptIn" class="mt-0.5">
+          <span>Quero receber novidades por e-mail (opcional, sem conteúdo explícito).</span>
+        </label>
+
+        <p x-cloak x-show="error" x-text="error" class="input-error text-sm"></p>
+
+        <button type="button" class="btn-primary w-full text-base" @click="pay()" :disabled="loading">
+          <span x-show="!loading" x-text="'Pagar ' + totalLabel + ' com Pix'"></span>
+          <span x-cloak x-show="loading">Gerando seu Pix…</span>
+        </button>
+        <p class="text-[11px] text-gray-500 text-center">
+          O código Pix aparece na próxima tela. Nada é cobrado antes disso.
+        </p>
+      </section>
+
+      {# --------------------------------------------------------- passo 3: Pix #}
+      <section x-show="step === 3" x-cloak class="card p-5 sm:p-6 space-y-5">
+
+        {# --- pago --- #}
+        <template x-if="paid">
+          <div class="text-center space-y-4 py-4">
+            <div class="w-16 h-16 rounded-full bg-emerald-400/15 text-emerald-400 mx-auto flex items-center justify-center text-3xl">✓</div>
+            <div>
+              <h1 class="text-xl font-bold">Pagamento confirmado!</h1>
+              <p class="text-sm text-gray-400 mt-1">A vendedora já foi avisada e vai preparar seu envio. O acompanhamento vai por e-mail.</p>
+            </div>
+            <a :href="charge && charge.track_url" class="btn-primary w-full sm:w-auto">Acompanhar meu pedido</a>
+            <p class="text-xs text-gray-500">Guarde este link: é por ele que você acompanha a entrega.</p>
+          </div>
+        </template>
+
+        {# --- aguardando pagamento --- #}
+        <template x-if="!paid">
+          <div class="space-y-5">
+            <div class="text-center space-y-1">
+              <h1 class="text-xl font-bold">Falta só o Pix</h1>
+              <p class="text-sm text-gray-400">
+                Abra o app do banco, escaneie o QR ou cole o código.
+                Use o <strong class="text-white">mesmo CPF</strong> informado na compra.
+              </p>
+            </div>
+
+            <div x-cloak x-show="secondsLeft > 0 && !expired"
+                 class="text-center text-xs text-gray-500">
+              Reservamos suas peças por mais <span class="text-amber-300 font-semibold" x-text="countdown"></span>
+            </div>
+
+            <div x-cloak x-show="expired" class="card bg-amber-400/5 border-amber-400/20 p-4 text-sm text-amber-200">
+              O tempo de reserva acabou. Se você já pagou, o pedido confirma sozinho em instantes —
+              caso contrário, monte a sacola de novo.
+            </div>
+
+            <template x-if="charge && charge.pix_qr_code">
+              <div class="flex justify-center">
+                <div class="bg-white p-3 rounded-2xl">
+                  <img :src="charge.pix_qr_code" alt="QR Code Pix" class="w-52 h-52 block">
+                </div>
+              </div>
+            </template>
+
+            <template x-if="charge && charge.pix_copy_paste">
+              <div class="space-y-2">
+                <p class="input-label">Pix copia e cola</p>
+                <textarea readonly rows="3" class="input-field font-mono text-xs"
+                          :value="charge.pix_copy_paste" @focus="$event.target.select()"></textarea>
+                <button type="button" class="btn-primary w-full" @click="copyPix()">
+                  <span x-show="!copied">Copiar código Pix</span>
+                  <span x-cloak x-show="copied">Código copiado ✓</span>
+                </button>
+              </div>
+            </template>
+
+            <template x-if="charge && charge.payment_url">
+              <a :href="charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">
+                Abrir a página de pagamento do Asaas
+              </a>
+            </template>
+
+            <div class="flex items-center justify-center gap-2 text-xs text-gray-500">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Esta tela confirma sozinha assim que o Pix cair.
+            </div>
+
+            <a :href="charge && charge.track_url" class="block text-center text-sm text-brand hover:underline">
+              Acompanhar o pedido depois
+            </a>
+          </div>
+        </template>
+      </section>
+    </div>
+
+    {# ------------------------------------------------------------- resumo #}
+    <aside class="card p-5 space-y-4 lg:sticky lg:top-24" x-show="step < 3">
+      <p class="font-semibold text-sm">Resumo</p>
+
+      <template x-if="summary && summary.store">
+        <a :href="summary.store.url" class="text-xs text-gray-500 hover:text-gray-300 block truncate"
+           x-text="'Vendido por ' + summary.store.name"></a>
+      </template>
+
+      <div class="space-y-3">
+        <template x-for="item in (summary ? summary.items : [])" :key="item.id">
+          <div class="flex gap-3 items-center">
+            <div class="w-12 h-12 rounded-lg bg-white/5 overflow-hidden shrink-0">
+              <template x-if="item.image">
+                <img :src="item.image" :alt="item.title" class="w-full h-full object-cover">
+              </template>
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm truncate" x-text="item.title"></p>
+              <p class="text-xs text-gray-500" x-text="item.qty + 'x ' + money(item.price)"></p>
+            </div>
+            <p class="text-sm font-semibold shrink-0" x-text="money(item.line_total)"></p>
+          </div>
+        </template>
+      </div>
+
+      <div class="border-t border-surface-border pt-3 space-y-1.5 text-sm">
+        <div class="flex justify-between text-gray-400">
+          <span>Itens</span>
+          <span x-text="money(summary ? summary.items_total : 0)"></span>
+        </div>
+        <div class="flex justify-between text-gray-400">
+          <span>Frete</span>
+          <span class="text-emerald-400">Grátis</span>
+        </div>
+        <div class="flex justify-between items-center pt-2">
+          <span class="font-semibold">Total</span>
+          <span class="text-2xl font-extrabold text-brand" x-text="totalLabel"></span>
+        </div>
+      </div>
+
+      <ul class="text-[11px] text-gray-500 space-y-1.5 border-t border-surface-border pt-3">
+        <li>✓ Cobrança discreta no extrato</li>
+        <li>✓ Embalagem sem identificação</li>
+        <li>✓ Pagamento processado pelo Asaas</li>
+      </ul>
+    </aside>
+  </div>
+</div>
+{% endblock %}

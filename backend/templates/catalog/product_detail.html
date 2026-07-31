@@ -24,132 +24,128 @@
 {% endblock %}
 
 {% block content %}
-<nav class="text-xs text-gray-500 mb-4 flex items-center gap-1.5">
-  <a href="{% url 'stores:home' %}" class="hover:text-gray-300">Início</a>
+{{ image_urls|json_script:"product-images" }}
+
+<nav class="text-xs text-gray-500 mb-4 flex items-center gap-1.5 flex-wrap">
+  <a href="{% url 'stores:home' %}" class="hover:text-gray-300">Vitrine</a>
   <span>/</span>
   <a href="{% url 'stores:detail' store.slug %}" class="hover:text-gray-300">{{ store.display_name }}</a>
   <span>/</span>
-  <span class="text-gray-400">{{ product.title }}</span>
+  <span class="text-gray-400 truncate">{{ product.title }}</span>
 </nav>
 
-<div x-data="productCheckout('{{ product.id }}')" class="grid md:grid-cols-2 gap-8">
+<div class="grid lg:grid-cols-[minmax(0,1fr)_24rem] gap-8 items-start">
 
-  <div>
+  {# --------------------------------------------------------------- galeria #}
+  <div x-data="productGallery(JSON.parse(document.getElementById('product-images').textContent))" class="space-y-3">
     <div class="relative aspect-square card">
-      {% with cover=product.images.first %}
-      {% if cover %}
-      <img src="{{ cover.file.url }}" alt="{{ product.title }}" class="w-full h-full object-cover">
-      {% else %}
-      <div class="w-full h-full flex items-center justify-center text-gray-600 text-sm">Sem foto</div>
-      {% endif %}
-      {% endwith %}
+      <template x-if="images.length">
+        <img :src="current" alt="{{ product.title }}" class="w-full h-full object-cover">
+      </template>
+      <template x-if="!images.length">
+        <div class="w-full h-full flex items-center justify-center text-gray-600 text-sm">Sem foto</div>
+      </template>
+
+      <template x-if="images.length > 1">
+        <div>
+          <button type="button" @click="prev()" aria-label="Foto anterior"
+                  class="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 border border-white/10 text-white">‹</button>
+          <button type="button" @click="next()" aria-label="Próxima foto"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 border border-white/10 text-white">›</button>
+        </div>
+      </template>
     </div>
 
-    {% if product.images.count > 1 %}
-    <div class="grid grid-cols-4 gap-2 mt-2">
-      {% for image in product.images.all|slice:":4" %}
-      <div class="aspect-square card">
-        <img src="{{ image.file.url }}" alt="" class="w-full h-full object-cover">
+    <template x-if="images.length > 1">
+      <div class="grid grid-cols-5 gap-2">
+        <template x-for="(image, i) in images" :key="i">
+          <button type="button" @click="select(i)"
+                  class="aspect-square card overflow-hidden"
+                  :class="i === index ? 'ring-2 ring-brand border-brand' : 'opacity-70 hover:opacity-100'">
+            <img :src="image" alt="" class="w-full h-full object-cover">
+          </button>
+        </template>
       </div>
-      {% endfor %}
-    </div>
-    {% endif %}
+    </template>
 
     {% if product.videos.all %}
-    <div class="mt-2 space-y-2">
+    <div class="space-y-2">
       {% for video in product.videos.all %}
-      <video src="{{ video.file.url }}" controls playsinline class="w-full rounded-2xl border border-surface-border"></video>
+      <video src="{{ video.file.url }}" controls playsinline preload="metadata" class="w-full rounded-2xl border border-surface-border"></video>
       {% endfor %}
     </div>
     {% endif %}
+
+    <div class="card p-5 space-y-2">
+      <h2 class="font-semibold text-sm">Descrição</h2>
+      <p class="text-gray-400 text-sm leading-relaxed whitespace-pre-line">{{ product.description }}</p>
+    </div>
   </div>
 
-  <div class="space-y-5">
-    <div>
+  {# --------------------------------------------------------- caixa de compra #}
+  <div class="space-y-4 lg:sticky lg:top-24">
+    <div class="space-y-2">
       <span class="badge-neutral">{{ product.category.name }}</span>
-      <h1 class="text-2xl font-bold mt-2">{{ product.title }}</h1>
-      <p class="text-3xl font-extrabold text-brand mt-1">R$ {{ product.price }}</p>
+      <h1 class="text-2xl font-bold leading-snug">{{ product.title }}</h1>
+      <p class="text-4xl font-extrabold text-brand">R$ {{ product.price }}</p>
+      <p class="text-xs text-gray-500">Frete incluso neste lançamento · pagamento por Pix</p>
     </div>
-
-    <p class="text-gray-400 text-sm leading-relaxed whitespace-pre-line">{{ product.description }}</p>
-
-    <a href="{% url 'stores:detail' store.slug %}" class="card p-3 flex items-center gap-3 hover:border-brand/50 transition">
-      <div class="w-10 h-10 rounded-full bg-white/10 avatar-ring shrink-0"></div>
-      <div class="min-w-0">
-        <p class="font-medium truncate">{{ store.display_name }}</p>
-        <p class="text-xs text-gray-500">Ver loja</p>
-      </div>
-    </a>
 
     {% if not product.is_available %}
-    <p class="card px-4 py-3 text-sm text-gray-400">Este item já foi vendido.</p>
+    <p class="card px-4 py-4 text-sm text-gray-400">Esta peça já foi vendida.</p>
+    <a href="{% url 'stores:detail' store.slug %}" class="btn-secondary w-full">Ver outras peças da loja</a>
 
     {% elif can_buy %}
-    <div class="card p-4 space-y-4">
-      <a href="{% url 'stores:detail' store.slug %}" class="btn-secondary w-full text-sm">
-        + Adicionar mais itens desta loja
-      </a>
-      <p class="text-xs text-gray-500">Ou finalize só este item abaixo. O site apenas conecta comprador e vendedora.</p>
-      <template x-if="!charge">
-        <div class="space-y-3">
-          {% if not is_authenticated %}
-          <div class="grid grid-cols-2 gap-2">
-            <input type="text" x-model="guest.name" placeholder="Seu nome" class="input-field col-span-2">
-            <input type="email" x-model="guest.email" placeholder="E-mail" class="input-field col-span-2">
-            <input type="text" x-model="guest.cpf" placeholder="CPF" maxlength="14" class="input-field">
-            <input type="date" x-model="guest.birth_date" class="input-field" title="Data de nascimento (+18)">
-          </div>
-          <p class="text-[11px] text-gray-500">Sem cadastro. Use o mesmo CPF no Pix. Maior de 18 anos.</p>
-          {% endif %}
+    <div class="card p-5 space-y-3" x-data="buyButton('{{ product.id }}', '{{ store.slug }}')">
+      {% if product.stock == 1 %}
+      <p class="text-xs text-amber-300">Peça única — quem pagar primeiro leva.</p>
+      {% else %}
+      <p class="text-xs text-gray-500">{{ product.stock }} unidades disponíveis.</p>
+      {% endif %}
 
-          <div class="grid grid-cols-2 gap-2">
-            <input type="text" x-model="cep" maxlength="9" placeholder="CEP" class="input-field col-span-2">
-            <input type="text" x-model="address.street" placeholder="Rua" class="input-field col-span-2">
-            <input type="text" x-model="address.number" placeholder="Número" class="input-field">
-            <input type="text" x-model="address.neighborhood" placeholder="Bairro" class="input-field">
-            <input type="text" x-model="address.city" placeholder="Cidade" class="input-field">
-            <input type="text" x-model="address.state" placeholder="UF" maxlength="2" class="input-field">
-          </div>
-
-          <div class="rounded-xl bg-white/5 p-3 text-sm flex justify-between font-bold text-brand">
-            <span>Total</span><span>R$ {{ product.price }}</span>
-          </div>
-
-          <label class="flex items-start gap-2 text-xs text-gray-400 cursor-pointer">
-            <input type="checkbox" x-model="marketingOptIn" class="mt-0.5">
-            <span>Quero receber novidades por e-mail (opcional).</span>
-          </label>
-
-          <p x-show="error" x-text="error" class="input-error"></p>
-
-          <button type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
-            <span x-show="!loadingCheckout">Pagar R$ {{ product.price }} no Asaas</span>
-            <span x-show="loadingCheckout">Gerando Pix Asaas…</span>
-          </button>
-          <p class="text-[11px] text-gray-500 text-center">Processado com segurança pelo Asaas</p>
-        </div>
-      </template>
-
-      <template x-if="charge">
-        <div class="text-center space-y-3">
-          <p class="text-xs uppercase tracking-wide text-emerald-400 font-semibold">Pagamento via Asaas</p>
-          <p class="text-sm text-gray-300">Pague com Pix usando o <strong class="text-white">mesmo CPF</strong> informado:</p>
-          <a x-show="charge.payment_url" :href="charge.payment_url" target="_blank" rel="noopener" class="btn-primary w-full">Abrir pagamento Asaas</a>
-          <div x-show="charge.pix_qr_code" class="bg-white p-3 rounded-xl inline-block">
-            <img :src="charge.pix_qr_code" alt="QR Code Pix Asaas" class="w-40 h-40">
-          </div>
-          <template x-if="charge.pix_copy_paste">
-            <div class="text-left space-y-1">
-              <p class="text-xs text-gray-500">Pix copia e cola (Asaas)</p>
-              <textarea class="input-field text-xs font-mono h-24" readonly x-model="charge.pix_copy_paste" @click="$event.target.select()"></textarea>
-              <button type="button" class="btn-secondary w-full text-sm" @click="navigator.clipboard.writeText(charge.pix_copy_paste)">Copiar código Pix</button>
-            </div>
-          </template>
-          <a x-show="trackUrl" :href="trackUrl" class="block text-sm text-brand underline">Acompanhar pedido</a>
-        </div>
-      </template>
+      <button type="button" class="btn-primary w-full text-base" @click="buyNow()">
+        Comprar agora com Pix
+      </button>
+      <button type="button" class="btn-secondary w-full" @click="add()">
+        <span x-show="!added">Adicionar à sacola</span>
+        <span x-cloak x-show="added">Adicionado ✓</span>
+      </button>
+      <p class="text-[11px] text-gray-500 text-center">
+        Sem cadastro obrigatório. CPF e nascimento só para confirmar que você é maior de 18.
+      </p>
     </div>
+
+    <ul class="card p-5 space-y-3 text-xs text-gray-400">
+      <li class="flex gap-2.5">
+        <span class="text-emerald-400">✓</span>
+        <span><strong class="text-gray-200">Pagamento protegido.</strong> Cobrança feita pelo Asaas, instituição autorizada pelo Banco Central.</span>
+      </li>
+      <li class="flex gap-2.5">
+        <span class="text-emerald-400">✓</span>
+        <span><strong class="text-gray-200">Embalagem discreta.</strong> Nada no pacote ou no extrato indica o conteúdo.</span>
+      </li>
+      <li class="flex gap-2.5">
+        <span class="text-emerald-400">✓</span>
+        <span><strong class="text-gray-200">Envio rastreado.</strong> Você acompanha tudo pelo link enviado por e-mail.</span>
+      </li>
+    </ul>
     {% endif %}
+
+    <a href="{% url 'stores:detail' store.slug %}" class="card p-4 flex items-center gap-3 hover:border-brand/50 transition">
+      <div class="w-11 h-11 rounded-full bg-white/10 avatar-ring shrink-0 flex items-center justify-center font-bold text-gray-400">
+        {{ store.display_name|slice:":1" }}
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="font-medium truncate flex items-center gap-1">
+          {{ store.display_name }}
+          <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.2 7.7 8.9a1 1 0 10-1.4 1.4l2 2a1 1 0 001.4 0l4-4z" clip-rule="evenodd"/></svg>
+        </p>
+        <p class="text-xs text-gray-500">
+          {% if store.review_count %}★ {{ store.avg_rating }} · {{ store.review_count }} avaliaç{{ store.review_count|pluralize:"ão,ões" }}{% else %}Loja verificada{% endif %}
+        </p>
+      </div>
+      <span class="text-xs text-brand shrink-0">Ver loja</span>
+    </a>
 
     {% include "moderation/_report_button.html" with target_type="product" object_id=product.id %}
   </div>
@@ -160,79 +156,9 @@
   <h2 class="text-lg font-bold mb-4">Mais de {{ store.display_name }}</h2>
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
     {% for related in related_products %}
-    <a href="{% url 'catalog:detail' store.slug related.slug %}" class="card card-hover">
-      <div class="aspect-square bg-white/5 overflow-hidden">
-        {% with cover=related.images.first %}
-        {% if cover %}<img src="{{ cover.file.url }}" alt="{{ related.title }}" class="w-full h-full object-cover">{% endif %}
-        {% endwith %}
-      </div>
-      <div class="p-3">
-        <p class="text-sm font-medium truncate">{{ related.title }}</p>
-        <p class="text-brand font-bold text-sm">R$ {{ related.price }}</p>
-      </div>
-    </a>
+      {% include "catalog/_product_card.html" with product=related show_store=False %}
     {% endfor %}
   </div>
 </section>
 {% endif %}
-{% endblock %}
-
-{% block extra_body %}
-<script>
-function productCheckout(productId) {
-  return {
-    cep: "",
-    address: { street: "", number: "", neighborhood: "", city: "", state: "" },
-    paymentMethod: "pix",
-    marketingOptIn: false,
-    guest: { name: "", email: "", cpf: "", birth_date: "" },
-    loadingCheckout: false,
-    error: "",
-    charge: null,
-    trackUrl: "",
-    async checkout() {
-      this.error = "";
-      this.loadingCheckout = true;
-      try {
-        const body = {
-          items: [{ product_id: productId, quantity: 1 }],
-          shipping_service: "pac",
-          shipping_address: { cep: this.cep.replace(/\D/g, ""), ...this.address },
-          payment_method: "pix",
-          marketing_opt_in: !!this.marketingOptIn,
-        };
-        {% if not is_authenticated %}
-        body.guest_name = this.guest.name;
-        body.guest_email = this.guest.email;
-        body.guest_cpf = this.guest.cpf;
-        body.guest_birth_date = this.guest.birth_date;
-        {% endif %}
-        const resp = await fetch("{% url 'payments:checkout' %}", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": (window.getCsrfToken && window.getCsrfToken()) || window.CSRF_TOKEN || "",
-          },
-          body: JSON.stringify(body),
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-          this.error = data.detail || Object.values(data).flat().join(" ") || "Não foi possível concluir a compra.";
-          return;
-        }
-        this.charge = data;
-        this.trackUrl = data.track_url || "";
-        if (data.payment_url) {
-          window.open(data.payment_url, "_blank", "noopener");
-        }
-      } catch (e) {
-        this.error = "Falha de conexão. Tente de novo.";
-      } finally {
-        this.loadingCheckout = false;
-      }
-    },
-  };
-}
-</script>
 {% endblock %}

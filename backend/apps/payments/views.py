@@ -1,10 +1,10 @@
 import hmac
-import secrets
+import json
+import logging
 from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
@@ -13,18 +13,25 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.catalog.models import Product
-from apps.shipping.models import Shipment
-from apps.shipping.services import (
-    calculate_freight_options,
-    products_are_payment_test,
-    test_free_freight_option,
+from .asaas import AsaasError
+from .checkout import (
+    CartLine,
+    CheckoutError,
+    confirm_paid_order,
+    create_charge_for_order,
+    mark_refunded,
+    quote_shipping,
+    reserve_order,
+    sync_payment_status,
 )
-from apps.wallet.services import credit_and_auto_payout
-
-from .models import Order, OrderItem, Payment
+from .models import Order, Payment
 from .serializers import CheckoutSerializer, OrderSerializer
-from .services import _adult_from_birth, _digits, asaas_uses_split, get_payment_provider
+from .services import _digits, is_adult
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------- paginas
 
 
 @login_required
@@ -32,36 +39,152 @@ def my_purchases_page(request):
     """Compras do usuário logado."""
     orders = (
         Order.objects.filter(buyer=request.user)
-        .exclude(status=Order.Status.AWAITING_PAYMENT)
-        .select_related("store", "shipment", "review")
-        .prefetch_related("items__product")
+        .exclude(status__in=[Order.Status.EXPIRED, Order.Status.CANCELED])
+        .select_related("store", "shipment", "review", "payment")
+        .prefetch_related("items__product__images")
         .order_by("-created_at")[:50]
     )
     return render(request, "payments/my_purchases.html", {"orders": orders})
 
 
-def guest_order_page(request, token):
-    """Acompanhar pedido guest pelo link do e-mail (sem login)."""
+def order_page(request, token):
+    """
+    Acompanhamento do pedido pelo link (sem login). E também a tela de
+    pagamento: se o Pix ainda não foi pago, o QR aparece aqui e a página
+    consulta o status sozinha até confirmar.
+    """
     order = get_object_or_404(
-        Order.objects.select_related("store", "shipment", "payment").prefetch_related("items__product"),
+        Order.objects.select_related("store", "shipment", "payment").prefetch_related(
+            "items__product__images"
+        ),
         access_token=token,
     )
-    return render(request, "payments/guest_order.html", {"order": order})
+    return render(
+        request,
+        "payments/order_detail.html",
+        {"order": order, "payment": getattr(order, "payment", None)},
+    )
+
+
+# Nome antigo mantido para não quebrar imports/urls existentes.
+guest_order_page = order_page
+
+
+def checkout_page(request):
+    """
+    Página única do funil: sacola -> dados -> entrega -> Pix.
+
+    Não recebe nada por querystring: a sacola vive no navegador e os
+    preços são sempre recalculados pelo servidor (CartSummaryView).
+    """
+    return render(
+        request,
+        "payments/checkout.html",
+        {"free_shipping": getattr(settings, "CHECKOUT_FREE_SHIPPING", True)},
+    )
+
+
+class CartSummaryView(APIView):
+    """
+    POST /api/sacola/ — devolve os itens da sacola com preço, foto e
+    disponibilidade conferidos no servidor.
+
+    A sacola do navegador guarda só id + quantidade; preço, título e
+    estoque nunca vêm do cliente.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_scope = "cart"
+
+    def post(self, request):
+        raw_items = request.data.get("items") or []
+        if not isinstance(raw_items, list):
+            return Response({"detail": "Sacola inválida."}, status=status.HTTP_400_BAD_REQUEST)
+
+        wanted: dict[str, int] = {}
+        for item in raw_items[:50]:
+            if not isinstance(item, dict):
+                continue
+            product_id = str(item.get("id") or item.get("product_id") or "").strip()
+            try:
+                quantity = max(1, min(int(item.get("qty") or item.get("quantity") or 1), 20))
+            except (TypeError, ValueError):
+                quantity = 1
+            if product_id:
+                wanted[product_id] = wanted.get(product_id, 0) + quantity
+
+        from apps.catalog.models import Product
+
+        products = (
+            Product.objects.select_related("store")
+            .prefetch_related("images")
+            .filter(id__in=list(wanted))
+        )
+        # Filtro no Python porque is_available() depende do estado da loja.
+        items, unavailable = [], []
+        items_total = Decimal("0.00")
+        store = None
+        for product in products:
+            quantity = min(wanted[str(product.id)], product.stock)
+            if not product.is_available() or quantity < 1:
+                unavailable.append({"id": str(product.id), "title": product.title})
+                continue
+            store = store or product.store
+            if product.store_id != store.id:
+                unavailable.append({"id": str(product.id), "title": product.title, "other_store": True})
+                continue
+            cover = product.images.first()
+            items.append(
+                {
+                    "id": str(product.id),
+                    "title": product.title,
+                    "price": str(product.price),
+                    "qty": quantity,
+                    "line_total": str(product.price * quantity),
+                    "stock": product.stock,
+                    "image": cover.file.url if cover else "",
+                    "url": f"/loja/{product.store.slug}/item/{product.slug}/",
+                }
+            )
+            items_total += product.price * quantity
+
+        known = {i["id"] for i in items} | {u["id"] for u in unavailable}
+        for product_id in wanted:
+            if product_id not in known:
+                unavailable.append({"id": product_id, "title": ""})
+
+        return Response(
+            {
+                "items": items,
+                "unavailable": unavailable,
+                "items_total": str(items_total),
+                "shipping_total": "0.00",
+                "grand_total": str(items_total),
+                "store": (
+                    {"slug": store.slug, "name": store.display_name, "url": f"/loja/{store.slug}/"}
+                    if store
+                    else None
+                ),
+            }
+        )
+
+
+# -------------------------------------------------------------------- API
 
 
 class CheckoutView(APIView):
     """
-    POST /api/checkout/ — compra com ou sem cadastro.
+    POST /api/checkout/ — fecha a compra com ou sem cadastro.
 
-    Split Asaas: vendedora recebe item (payout) + frete; plataforma recebe
-    so os 30%. Frete e so cotado — a vendedora posta por conta propria.
-    Guest: nome, e-mail, CPF, data de nascimento (+18), endereco, pagamento.
+    Fluxo: valida -> reserva estoque (transação curta) -> cria a cobrança
+    Pix no Asaas (fora da transação) -> devolve QR + link de
+    acompanhamento. Qualquer falha na cobrança cancela o pedido e devolve
+    o estoque, sem cobrar nada de ninguém.
     """
 
     permission_classes = [AllowAny]
     throttle_scope = "checkout"
 
-    @transaction.atomic
     def post(self, request):
         user = request.user if request.user.is_authenticated else None
 
@@ -69,288 +192,204 @@ class CheckoutView(APIView):
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
 
+        guest_birth = None
         if user:
-            customer_cpf = user.cpf
-            customer_name = user.get_full_name() or user.username
-            customer_email = user.email
-            guest_birth = None
+            if not user.cpf:
+                return Response(
+                    {"detail": "Complete seu cadastro com CPF antes de comprar."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         else:
-            customer_cpf = _digits(payload["guest_cpf"])
-            customer_name = payload["guest_name"].strip()
-            customer_email = payload["guest_email"].strip()
             guest_birth = payload["guest_birth_date"]
-            if len(customer_cpf) != 11:
-                return Response({"detail": "CPF inválido."}, status=status.HTTP_400_BAD_REQUEST)
-            if not _adult_from_birth(guest_birth):
+            if not is_adult(guest_birth):
                 return Response(
                     {"detail": "Compras apenas para maiores de 18 anos."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        products = {
-            p.id: p
-            for p in Product.objects.select_for_update().filter(
-                id__in=[i["product_id"] for i in payload["items"]]
-            )
-        }
-        store = next(iter(products.values())).store
-        if not (getattr(settings, "ASAAS_API_KEY", "") or "").strip():
-            return Response(
-                {
-                    "detail": (
-                        "Pagamento Asaas não configurado. "
-                        "Defina ASAAS_API_KEY no ambiente do servidor."
-                    )
-                },
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-        if not store.pix_key:
-            return Response(
-                {"detail": "Esta loja ainda não cadastrou chave Pix para receber."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if asaas_uses_split() and not store.psp_subaccount_id:
-            return Response(
-                {"detail": "Esta loja ainda não está apta a receber pagamentos (subconta Asaas)."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        lines = [
+            CartLine(product_id=str(item["product_id"]), quantity=item["quantity"])
+            for item in payload["items"]
+        ]
 
-        items_total = Decimal("0.00")
-        order_items_data = []
-        for item in payload["items"]:
-            product = products[item["product_id"]]
-            quantity = item["quantity"]
-            items_total += product.price * quantity
-            order_items_data.append((product, quantity))
-
-        total_weight = sum(p.weight_grams * q for p, q in order_items_data)
-        product_list = [p for p, _ in order_items_data]
-        if getattr(settings, "CHECKOUT_FREE_SHIPPING", True) or products_are_payment_test(product_list):
-            freight_options = [test_free_freight_option()]
-        else:
-            freight_options = calculate_freight_options(
-                destination_cep=payload["shipping_address"]["cep"],
-                weight_grams=total_weight,
-                length_cm=max(p.length_cm for p, _ in order_items_data),
-                width_cm=max(p.width_cm for p, _ in order_items_data),
-                height_cm=sum(p.height_cm * q for p, q in order_items_data),
-                origin_cep=store.origin_cep,
-                declared_value=items_total,
-            )
+        address = payload["shipping_address"]
         try:
-            chosen = next(o for o in freight_options if o.service == payload["shipping_service"])
-        except StopIteration:
-            # Fallback: se o front mandou pac e o frete gratis esta ativo.
-            if freight_options:
-                chosen = freight_options[0]
-            else:
-                return Response(
-                    {"detail": "Opção de frete indisponível."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        shipping_total = Decimal(str(chosen.price))
-
-        access_token = secrets.token_urlsafe(32)
-        order = Order.objects.create(
-            buyer=user,
-            guest_name="" if user else customer_name,
-            guest_email="" if user else customer_email,
-            guest_cpf="" if user else customer_cpf,
-            guest_birth_date=guest_birth,
-            access_token=access_token,
-            store=store,
-            items_total=items_total,
-            shipping_total=shipping_total,
-            packaging_fee=Decimal("0.00"),
-            shipping_address=payload["shipping_address"],
-        )
-        for product, quantity in order_items_data:
-            OrderItem.objects.create(
-                order=order,
-                product=product,
-                unit_price=product.price,
-                unit_payout_amount=product.payout_amount,
-                quantity=quantity,
+            # Cotacao antes da reserva: pode fazer chamada externa e nao
+            # pode acontecer com o estoque travado.
+            freight = quote_shipping(
+                lines=lines,
+                destination_cep=address["cep"],
+                preferred_service=payload.get("shipping_service") or "pac",
             )
-            product.stock -= quantity
-            if product.stock == 0:
-                product.status = Product.Status.SOLD
-            product.save(update_fields=["stock", "status"])
+            order = reserve_order(
+                lines=lines,
+                buyer=user,
+                guest_name=(payload.get("guest_name") or "").strip(),
+                guest_email=(payload.get("guest_email") or "").strip(),
+                guest_cpf=_digits(payload.get("guest_cpf")),
+                guest_birth_date=guest_birth,
+                shipping_address=address,
+                shipping_service=freight.service,
+                shipping_total=Decimal(str(freight.price)),
+                shipping_deadline_days=freight.deadline_days,
+            )
+        except CheckoutError as exc:
+            return Response({"detail": exc.detail}, status=exc.status_code)
 
-        Shipment.objects.create(
-            order=order,
-            service=chosen.service,
-            estimated_delivery_days=chosen.deadline_days,
-        )
-
-        provider = get_payment_provider()
         try:
-            charge = provider.create_split_charge(
-                order_id=str(order.id),
-                method=payload["payment_method"],
-                total_amount=order.grand_total,
-                seller_subaccount_id=store.psp_subaccount_id,
-                seller_amount=order.seller_amount,
-                platform_amount=order.platform_amount,
-                customer_cpf=customer_cpf,
-                customer_name=customer_name,
-                customer_email=customer_email,
-            )
-        except Exception as exc:
-            import logging
-
-            logging.getLogger(__name__).exception("Falha ao criar cobrança Asaas do pedido %s", order.id)
-            order.status = Order.Status.CANCELED
-            order.save(update_fields=["status"])
-            # Devolve estoque
-            for product, quantity in order_items_data:
-                product.stock += quantity
-                if product.status == Product.Status.SOLD and product.stock > 0:
-                    product.status = Product.Status.PUBLISHED
-                product.save(update_fields=["stock", "status"])
-            detail = "Não foi possível gerar a cobrança no Asaas. Tente de novo em instantes."
-            resp = getattr(exc, "response", None)
-            if resp is not None:
-                try:
-                    err = resp.json()
-                    errors = err.get("errors") or []
-                    if errors and isinstance(errors, list):
-                        detail = errors[0].get("description") or detail
-                except Exception:
-                    pass
-            return Response({"detail": detail}, status=status.HTTP_502_BAD_GATEWAY)
-
-        Payment.objects.create(
-            order=order,
-            provider_charge_id=charge.provider_charge_id,
-            method=payload["payment_method"],
-        )
+            payment = create_charge_for_order(order, method=payload["payment_method"])
+        except CheckoutError as exc:
+            return Response({"detail": exc.detail}, status=exc.status_code)
 
         if payload.get("marketing_opt_in"):
             from apps.core.models import MarketingSubscriber
 
             MarketingSubscriber.subscribe(
-                email=customer_email,
-                name=customer_name,
-                source="checkout",
+                email=order.payer_email, name=order.payer_name, source="checkout"
             )
 
         return Response(
             {
                 "order": OrderSerializer(order).data,
-                "payment_url": charge.payment_url,
-                "pix_qr_code": charge.pix_qr_code,
-                "pix_copy_paste": getattr(charge, "pix_copy_paste", None),
+                "payment_url": payment.payment_url or None,
+                "pix_qr_code": payment.pix_qr_code or None,
+                "pix_copy_paste": payment.pix_copy_paste or None,
                 "provider": "asaas",
-                "access_token": access_token,
-                "track_url": f"/pedido/{access_token}/",
+                "access_token": order.access_token,
+                "track_url": order.track_url,
+                "expires_at": order.expires_at,
             },
             status=status.HTTP_201_CREATED,
         )
 
 
+class OrderStatusView(APIView):
+    """
+    GET /api/pedido/<token>/status/ — usado pela tela de pagamento.
+
+    Além de ler o banco, consulta o Asaas quando o pedido ainda está
+    aguardando: é isso que faz o Pix confirmar sozinho mesmo se o webhook
+    não estiver configurado (ou tiver falhado).
+    """
+
+    permission_classes = [AllowAny]
+    throttle_scope = "order_status"
+
+    def get(self, request, token):
+        order = get_object_or_404(
+            Order.objects.select_related("payment", "shipment"), access_token=token
+        )
+        payment = getattr(order, "payment", None)
+
+        if order.status == Order.Status.AWAITING_PAYMENT and payment:
+            try:
+                sync_payment_status(payment)
+            except AsaasError as exc:
+                logger.info("Polling do pedido %s: %s", order.id, exc.user_message)
+            order.refresh_from_db()
+
+        return Response(
+            {
+                "status": order.status,
+                "status_label": order.get_status_display(),
+                "paid": order.status
+                not in (Order.Status.AWAITING_PAYMENT, Order.Status.EXPIRED, Order.Status.CANCELED),
+                "expired": order.status == Order.Status.EXPIRED,
+                "expires_at": order.expires_at,
+                "track_url": order.track_url,
+            }
+        )
+
+
+# ---------------------------------------------------------------- webhook
+
+
+# Eventos que significam "o dinheiro entrou".
+PAID_EVENTS = {"PAYMENT_RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_RECEIVED_IN_CASH"}
+# Eventos que desfazem a cobranca.
+REFUND_EVENTS = {
+    "PAYMENT_REFUNDED",
+    "PAYMENT_PARTIALLY_REFUNDED",
+    "PAYMENT_CHARGEBACK_REQUESTED",
+    "PAYMENT_CHARGEBACK_DISPUTE",
+    "PAYMENT_REVERSED",
+}
+
+
 @csrf_exempt
 def asaas_webhook(request):
     """
-    Webhook Asaas. No PAYMENT_CONFIRMED: marca pago, split ja feito pelo
-    Asaas, e dispara Pix automatico pra chave da vendedora.
+    Webhook do Asaas.
+
+    Idempotente por construção: a confirmação do pedido é feita por
+    confirm_paid_order(), que trava a linha do pagamento e não repete
+    crédito nem repasse. O Asaas reenvia o mesmo evento até receber 200,
+    então responder 200 para evento já processado é o comportamento certo.
     """
     if request.method == "GET":
-        # Navegador abre com GET — nao e erro. Asaas so usa POST.
+        # Navegador abre com GET — nao e erro. O Asaas so usa POST.
         return JsonResponse(
             {
                 "ok": True,
                 "service": "asaas-webhook",
-                "hint": "Endpoint ativo. O Asaas deve enviar POST com o header Asaas-Access-Token.",
+                "hint": "Endpoint ativo. O Asaas deve enviar POST com o header asaas-access-token.",
             }
         )
     if request.method != "POST":
         return HttpResponse(status=405)
 
-    token = request.headers.get("Asaas-Access-Token", "")
-    expected = getattr(settings, "ASAAS_WEBHOOK_TOKEN", "") or ""
-    if not expected or not hmac.compare_digest(token, expected):
+    expected = (getattr(settings, "ASAAS_WEBHOOK_TOKEN", "") or "").strip()
+    if not expected:
+        # Sem token configurado o endpoint fica FECHADO: aceitar qualquer
+        # POST aqui deixaria qualquer um marcar pedido como pago.
+        logger.error("Webhook Asaas chamado sem ASAAS_WEBHOOK_TOKEN configurado no servidor.")
+        return JsonResponse({"detail": "webhook nao configurado"}, status=503)
+
+    token = request.headers.get("asaas-access-token") or request.headers.get("Asaas-Access-Token") or ""
+    if not hmac.compare_digest(token, expected):
+        logger.warning("Webhook Asaas com token invalido.")
         return HttpResponseForbidden("Token inválido.")
 
-    import json
-
-    payload = json.loads(request.body)
-    event = payload.get("event")
-    charge_data = payload.get("payment", {})
-    provider_charge_id = charge_data.get("id")
-
     try:
-        payment = Payment.objects.select_related("order", "order__store").get(
-            provider_charge_id=provider_charge_id
-        )
-    except Payment.DoesNotExist:
+        payload = json.loads(request.body or b"{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "payload inválido"}, status=400)
+
+    event = payload.get("event") or ""
+    charge_data = payload.get("payment") or {}
+    provider_charge_id = charge_data.get("id")
+    if not provider_charge_id:
+        return JsonResponse({"received": True, "ignored": "sem id de cobranca"})
+
+    payment = (
+        Payment.objects.select_related("order", "order__store")
+        .filter(provider_charge_id=provider_charge_id)
+        .first()
+    )
+    if payment is None:
+        # Pode ser cobranca de assinatura/plano (nao tem Order).
         from apps.subscriptions.services import activate_subscription
 
-        if event == "PAYMENT_CONFIRMED" and activate_subscription(provider_charge_id):
-            return JsonResponse({"received": True})
-        return JsonResponse({"detail": "payment not found"}, status=404)
+        if event in PAID_EVENTS and activate_subscription(provider_charge_id):
+            return JsonResponse({"received": True, "kind": "subscription"})
+        logger.info("Webhook Asaas para cobranca desconhecida %s (%s)", provider_charge_id, event)
+        return JsonResponse({"received": True, "ignored": "cobranca desconhecida"})
 
+    if event in PAID_EVENTS:
+        confirmed = confirm_paid_order(payment, webhook_payload=payload)
+        return JsonResponse({"received": True, "confirmed_now": confirmed})
+
+    if event in REFUND_EVENTS:
+        mark_refunded(payment, reason=event.lower())
+        return JsonResponse({"received": True, "action": "refunded"})
+
+    if event in ("PAYMENT_OVERDUE", "PAYMENT_DELETED"):
+        payment.provider_status = charge_data.get("status") or event
+        payment.raw_webhook_payload = payload
+        payment.save(update_fields=["provider_status", "raw_webhook_payload"])
+        return JsonResponse({"received": True})
+
+    payment.provider_status = charge_data.get("status") or payment.provider_status
     payment.raw_webhook_payload = payload
-
-    if event == "PAYMENT_CONFIRMED":
-        from django.utils import timezone
-
-        from .services import verify_payer_cpf
-        from .tasks import (
-            emit_invoice_for_order,
-            send_order_confirmation_email,
-            send_seller_new_sale_email,
-        )
-
-        if not verify_payer_cpf(payment, payload):
-            payment.status = Payment.Status.REFUNDED
-            payment.save()
-            payment.order.status = Order.Status.CANCELED
-            payment.order.save(update_fields=["status"])
-            return JsonResponse({"received": True, "action": "refunded_payer_mismatch"})
-
-        payment.status = Payment.Status.CONFIRMED
-        payment.split_confirmed = True
-        payment.confirmed_at = timezone.now()
-        payment.save()
-
-        order = payment.order
-        order.status = Order.Status.PAID
-        order.paid_at = timezone.now()
-        order.save(update_fields=["status", "paid_at"])
-
-        # Credita ledger e, se AUTO_PAYOUT_ON_PAYMENT, Pix imediato pra vendedora.
-        try:
-            credit_and_auto_payout(order)
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception(
-                "Falha no repasse Pix do pedido %s — pedido permanece pago.", order.id
-            )
-
-        from apps.stores.services import increment_sales_count
-
-        increment_sales_count(order.store)
-        # E-mail/NF nunca podem derrubar o webhook apos o pedido ja estar PAID.
-        try:
-            send_order_confirmation_email.delay(str(order.id))
-            send_seller_new_sale_email.delay(str(order.id))
-            emit_invoice_for_order.delay(str(order.id))
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception(
-                "Falha ao enfileirar e-mails/NF do pedido %s", order.id
-            )
-        # Vendedora posta sozinha — nao compramos etiqueta pela plataforma.
-
-    elif event in ("PAYMENT_REFUNDED", "PAYMENT_CHARGEBACK_REQUESTED"):
-        payment.status = Payment.Status.REFUNDED
-        payment.save()
-        payment.order.status = Order.Status.REFUNDED
-        payment.order.save(update_fields=["status"])
-    else:
-        payment.save(update_fields=["raw_webhook_payload"])
-
+    payment.save(update_fields=["provider_status", "raw_webhook_payload"])
     return JsonResponse({"received": True})

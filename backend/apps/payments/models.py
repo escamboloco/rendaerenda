@@ -12,11 +12,15 @@ from apps.stores.models import Store
 class Order(models.Model):
     """
     Pedido entre comprador e vendedora. A plataforma so intermedia:
-    nao vende o item. Pagamento via Asaas com split automatico.
+    nao vende o item. Pagamento via Asaas.
 
-    Split: vendedora recebe payout_amount (o que ela pediu) + frete;
-    plataforma recebe so a comissao de 30% embutida em items_total.
+    Repasse: vendedora recebe payout_amount (o liquido que ela pediu) +
+    frete; a plataforma fica so com a comissao
+    (settings.PLATFORM_COMMISSION_PERCENT) ja embutida em items_total.
     Compra pode ser guest (sem conta): buyer null + campos guest_*.
+
+    O estoque e reservado na criacao do pedido e devolvido se o Pix nao
+    for pago ate `expires_at` (management command expire_orders).
     """
 
     class Status(models.TextChoices):
@@ -26,7 +30,11 @@ class Order(models.Model):
         DELIVERED = "delivered", "Entregue"
         DISPUTED = "disputed", "Em disputa"
         CANCELED = "canceled", "Cancelado"
+        EXPIRED = "expired", "Expirado (não pago)"
         REFUNDED = "refunded", "Reembolsado"
+
+    # Estados em que o estoque continua reservado para o pedido.
+    RESERVING_STATUSES = ("awaiting_payment", "paid", "shipped", "delivered", "disputed")
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     buyer = models.ForeignKey(
@@ -51,9 +59,37 @@ class Order(models.Model):
     shipping_address = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)
+    # Ate quando o Pix deste pedido pode ser pago. Passou disso sem
+    # pagamento, o pedido expira e o estoque volta para a vitrine.
+    expires_at = models.DateTimeField(null=True, blank=True)
+    canceled_reason = models.CharField(max_length=80, blank=True)
+    # Trava de idempotencia: garante que o estoque so volta uma vez,
+    # mesmo com webhook repetido + cron de expiracao rodando junto.
+    stock_restored = models.BooleanField(default=False)
 
     class Meta:
-        indexes = [models.Index(fields=["status"]), models.Index(fields=["buyer", "status"])]
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["buyer", "status"]),
+            models.Index(fields=["status", "expires_at"]),
+            models.Index(fields=["store", "status"]),
+        ]
+
+    def __str__(self):
+        return f"Pedido {str(self.id)[:8]} — {self.get_status_display()}"
+
+    @property
+    def short_id(self) -> str:
+        return str(self.id)[:8].upper()
+
+    @property
+    def is_open_for_payment(self) -> bool:
+        return self.status == self.Status.AWAITING_PAYMENT
+
+    @property
+    def track_url(self) -> str:
+        return f"/pedido/{self.access_token}/" if self.access_token else "/compras/"
 
     @property
     def payer_cpf(self) -> str:
@@ -122,9 +158,19 @@ class Payment(models.Model):
 
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name="payment")
     provider = models.CharField(max_length=20, default=settings.PAYMENT_PROVIDER)
-    provider_charge_id = models.CharField(max_length=100, blank=True)
+    provider_charge_id = models.CharField(max_length=100, blank=True, db_index=True)
     method = models.CharField(max_length=15, choices=Method.choices)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+
+    # Dados do Pix guardados para a pessoa poder voltar ao pedido pelo link
+    # do e-mail e continuar pagando sem gerar uma cobranca nova.
+    payment_url = models.URLField(blank=True)
+    pix_qr_code = models.TextField(blank=True, help_text="Imagem do QR em data URL.")
+    pix_copy_paste = models.TextField(blank=True)
+    pix_expires_at = models.DateTimeField(null=True, blank=True)
+    # Ultimo status bruto retornado pelo PSP (RECEIVED, CONFIRMED, OVERDUE...).
+    provider_status = models.CharField(max_length=40, blank=True)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
     split_confirmed = models.BooleanField(
         default=False, help_text="True quando o PSP confirma que o split para a subconta da vendedora foi feito."
     )

@@ -3,6 +3,8 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
+from django.core.paginator import Paginator
+from django.db.models import Case, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from rest_framework import status
@@ -11,7 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.catalog.models import Category
+from apps.catalog.models import Category, Product
 from apps.moderation.models import ModerationQueueItem
 from apps.moderation.services import run_automated_filters
 from apps.payments.services import get_payment_provider
@@ -20,45 +22,111 @@ from .models import BoostPackage, Store, StoreBoost, StorePlan
 from .serializers import StoreBoostPurchaseSerializer, StoreOnboardSerializer, StorePlanCheckoutSerializer
 
 
+SORT_OPTIONS = {
+    "recentes": ("-created_at", "Mais recentes"),
+    "menor-preco": ("price", "Menor preço"),
+    "maior-preco": ("-price", "Maior preço"),
+    "melhor-avaliadas": ("-store__bayesian_rating", "Lojas melhor avaliadas"),
+}
+
+
+def public_store_filter(prefix: str = "") -> Q:
+    """
+    Loja visível ao público: ativa e com plano em dia (plano nulo = grátis).
+    Espelha Store.is_public() em SQL para evitar filtrar no Python.
+    """
+    now = timezone.now()
+    field = f"{prefix}status" if prefix else "status"
+    plan = f"{prefix}plan__isnull" if prefix else "plan__isnull"
+    expires = f"{prefix}plan_expires_at__gt" if prefix else "plan_expires_at__gt"
+    return Q(**{field: Store.Status.ACTIVE}) & (Q(**{plan: True}) | Q(**{expires: now}))
+
+
 def home(request):
-    stores = (
-        Store.objects.filter(status=Store.Status.ACTIVE)
-        .select_related("plan")
-        .prefetch_related("products")
-    )
-
+    """
+    Vitrine principal: peças à venda (não lojas). É o que faz o marketplace
+    parecer marketplace — a pessoa entra e já vê o que pode comprar.
+    """
     query = request.GET.get("q", "").strip()
-    if query:
-        stores = stores.filter(display_name__icontains=query)
-
     category_slug = request.GET.get("categoria", "").strip()
-    if category_slug:
-        stores = stores.filter(products__category__slug=category_slug).distinct()
+    sort_key = request.GET.get("ordem", "recentes")
+    order_by, _ = SORT_OPTIONS.get(sort_key, SORT_OPTIONS["recentes"])
 
-    boosted_ids = set(
-        StoreBoost.objects.filter(paid=True).values_list("store_id", flat=True)
+    products = (
+        Product.objects.filter(
+            public_store_filter("store__"),
+            status=Product.Status.PUBLISHED,
+            visibility=Product.Visibility.PUBLIC,
+            stock__gt=0,
+        )
+        .select_related("store", "category")
+        .prefetch_related("images")
     )
-    stores = sorted(stores, key=lambda s: s.id in boosted_ids, reverse=True)
+
+    if query:
+        products = products.filter(
+            Q(title__icontains=query)
+            | Q(description__icontains=query)
+            | Q(store__display_name__icontains=query)
+            | Q(category__name__icontains=query)
+        )
+    if category_slug:
+        products = products.filter(category__slug=category_slug)
+
+    # Loja com boost ativo aparece antes (é o produto pago da plataforma).
+    boosted_ids = set(
+        StoreBoost.objects.filter(
+            paid=True, starts_at__lte=timezone.now(), ends_at__gte=timezone.now()
+        ).values_list("store_id", flat=True)
+    )
+    products = products.annotate(
+        is_boosted=Case(
+            When(store_id__in=boosted_ids, then=Value(1)), default=Value(0), output_field=IntegerField()
+        )
+    ).order_by("-is_boosted", order_by)
+
+    page = Paginator(products, 24).get_page(request.GET.get("pagina"))
+
+    featured_stores = (
+        Store.objects.filter(public_store_filter())
+        .filter(review_count__gt=0)
+        .order_by("-bayesian_rating", "-sales_count")[:8]
+    )
 
     return render(
         request,
         "stores/home.html",
         {
-            "stores": stores,
-            "categories": Category.objects.all(),
+            "page_obj": page,
+            "products": page.object_list,
+            "categories": Category.objects.order_by("name"),
             "active_category": category_slug,
-            "boosted_ids": boosted_ids,
+            "featured_stores": featured_stores,
+            "sort_options": SORT_OPTIONS,
+            "active_sort": sort_key if sort_key in SORT_OPTIONS else "recentes",
+            "total_count": page.paginator.count,
         },
     )
 
 
 def store_detail(request, slug):
     store = get_object_or_404(Store, slug=slug, status=Store.Status.ACTIVE)
-    products = store.products.filter(
-        status="published", stock__gt=0, visibility="public"
-    ).prefetch_related("images")
+    products = (
+        store.products.filter(
+            status=Product.Status.PUBLISHED,
+            stock__gt=0,
+            visibility=Product.Visibility.PUBLIC,
+        )
+        .select_related("category")
+        .prefetch_related("images")
+        .order_by("-created_at")
+    )
     reviews = store.reviews.select_related("buyer").order_by("-created_at")[:20]
-    return render(request, "stores/detail.html", {"store": store, "products": products, "reviews": reviews})
+    return render(
+        request,
+        "stores/detail.html",
+        {"store": store, "products": products, "reviews": reviews, "product_count": products.count()},
+    )
 
 
 def ranking_page(request):

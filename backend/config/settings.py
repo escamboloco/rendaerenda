@@ -242,6 +242,10 @@ REST_FRAMEWORK = {
         "report": "10/min",
         "phone": "5/min",
         "offers": "10/min",
+        # A tela de pagamento consulta o status a cada 4s enquanto o Pix
+        # nao cai; precisa de folga bem maior que o resto.
+        "order_status": "60/min",
+        "cart": "60/min",
     },
 }
 
@@ -259,6 +263,14 @@ DELIVERY_CONFIRMATION_WINDOW_HOURS = config("DELIVERY_CONFIRMATION_WINDOW_HOURS"
 PACKAGING_FEE = config("PACKAGING_FEE", default=Decimal("0.00"), cast=Decimal)
 # Soft-launch: checkout sem cotacao de frete (frete R$ 0, serviço pac).
 CHECKOUT_FREE_SHIPPING = config("CHECKOUT_FREE_SHIPPING", default=True, cast=bool)
+# Quanto tempo o pedido segura o estoque esperando o Pix. Passou disso, o
+# management command expire_orders devolve o item para a vitrine.
+ORDER_PAYMENT_TTL_MINUTES = config("ORDER_PAYMENT_TTL_MINUTES", default=60, cast=int)
+# Validade da cobranca no Asaas (dueDate). Com 0 o QR morre a meia-noite.
+PIX_DUE_DAYS = config("PIX_DUE_DAYS", default=3, cast=int)
+# Pix pago por CPF diferente do titular do pedido: estornar automaticamente.
+# E uma trava de idade (so adulto identificado compra), nao antifraude.
+REFUND_ON_PAYER_CPF_MISMATCH = config("REFUND_ON_PAYER_CPF_MISMATCH", default=True, cast=bool)
 PAYMENT_PROVIDER = config("PAYMENT_PROVIDER", default="asaas")
 ASAAS_API_KEY = config("ASAAS_API_KEY", default="")
 ASAAS_API_URL = config("ASAAS_API_URL", default="https://api.asaas.com/v3")

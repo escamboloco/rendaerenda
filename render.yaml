@@ -44,6 +44,17 @@ envVarGroups:
         value: "0"
       - key: CHECKOUT_FREE_SHIPPING
         value: "True"
+      # Tempo que o pedido segura o estoque esperando o Pix (min).
+      - key: ORDER_PAYMENT_TTL_MINUTES
+        value: "60"
+      # Validade da cobranca Pix no Asaas (dias). 0 faria o QR morrer a meia-noite.
+      - key: PIX_DUE_DAYS
+        value: "3"
+      # Pix pago por CPF diferente do titular do pedido: estorno automatico
+      # (trava de idade). Deixe True enquanto a verificacao biometrica nao
+      # estiver ligada.
+      - key: REFUND_ON_PAYER_CPF_MISMATCH
+        value: "True"
       - key: AUTO_PAYOUT_ON_PAYMENT
         value: "True"
       - key: REQUIRE_SELLER_KYC
@@ -134,6 +145,26 @@ services:
           name: rendaerenda-db
           property: connectionString
       - key: MELHOR_ENVIO_TOKEN
+        sync: false
+
+  # Confere no Asaas os Pix pendentes (rede de seguranca caso o webhook
+  # falhe) e devolve para a vitrine o estoque de pedido nao pago.
+  - type: cron
+    name: rendaerenda-expire-orders
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "*/10 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py expire_orders"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: ASAAS_API_KEY
         sync: false
 
   - type: cron

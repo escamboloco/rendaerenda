@@ -1,29 +1,21 @@
 {% extends "core/base.html" %}
-{% load l10n %}
 {% block title %}{{ store.display_name }} — Renda &amp; Renda{% endblock %}
-{% block description %}{{ store.bio|default:"Loja verificada no Renda &amp; Renda."|truncatechars:150 }}{% endblock %}
+{% block description %}{{ store.bio|default:"Loja verificada no Renda & Renda."|truncatechars:150 }}{% endblock %}
 {% block robots %}index, follow{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 
 {% block content %}
-<div
-  x-data="storeCartCheckout({
-    auth: {{ request.user.is_authenticated|yesno:'true,false' }},
-    checkoutUrl: '{% url 'payments:checkout' %}'
-  })"
-  class="pb-32"
->
 <section class="mb-8">
   <div class="card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4">
     <div class="w-20 h-20 rounded-full bg-white/10 avatar-ring shrink-0 flex items-center justify-center text-2xl font-bold text-gray-400">
       {{ store.display_name|slice:":1" }}
     </div>
     <div class="flex-1 min-w-0">
-      <h1 class="text-2xl font-bold flex items-center gap-2">
+      <h1 class="text-2xl font-bold flex items-center gap-2 flex-wrap">
         {{ store.display_name }}
         <span class="badge-verified">Verificada</span>
       </h1>
-      <p class="text-gray-400 text-sm mt-1">{{ store.bio }}</p>
+      {% if store.bio %}<p class="text-gray-400 text-sm mt-1">{{ store.bio }}</p>{% endif %}
       <div class="flex items-center gap-2 mt-2 flex-wrap">
         {% if store.review_count %}
         {% include "reviews/_stars.html" with rating=store.avg_rating %}
@@ -35,7 +27,7 @@
         <span class="text-gray-600">·</span>
         <span class="text-xs text-gray-500">{{ store.sales_count }} venda{{ store.sales_count|pluralize }}</span>
         <span class="text-gray-600">·</span>
-        <span class="text-xs text-gray-500">{{ products.count }} itens publicados</span>
+        <span class="text-xs text-gray-500">{{ product_count }} peça{{ product_count|pluralize }} à venda</span>
       </div>
     </div>
     {% include "moderation/_report_button.html" with target_type="store" object_id=store.id %}
@@ -45,16 +37,16 @@
   <div class="mt-4" x-data="customRequestModal('{{ store.slug }}')">
     <button type="button" class="btn-secondary w-full sm:w-auto" @click="open = true">
       <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-      Pedido personalizado
+      Pedir uma peça sob medida
     </button>
 
     <template x-if="open">
-      <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" @click.self="open = false" @keydown.escape.window="open = false">
+      <div class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/75" @click.self="open = false" @keydown.escape.window="open = false">
         <div class="card p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto" @click.stop>
           <h3 class="font-semibold">Pedido personalizado para {{ store.display_name }}</h3>
           <template x-if="sent">
             <div class="space-y-3 text-center">
-              <p class="text-sm text-emerald-400">Pedido enviado! A vendedora vai responder por aqui.</p>
+              <p class="text-sm text-emerald-400">Pedido enviado! A vendedora responde por aqui.</p>
               <a href="{% url 'offers:my_requests' %}" class="btn-primary w-full">Acompanhar meus pedidos</a>
             </div>
           </template>
@@ -90,177 +82,32 @@
   {% endif %}
 </section>
 
-<p class="text-sm text-gray-400 mb-4">Selecione um ou mais itens e finalize a compra juntos (mesmo frete).</p>
+<h2 class="text-lg font-bold mb-1">Peças à venda</h2>
+<p class="text-sm text-gray-500 mb-4">Junte quantas quiser desta loja — tudo vai num pedido só.</p>
 
-<div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
   {% for product in products %}
-  <div class="card overflow-hidden flex flex-col"
-       :class="selected['{{ product.id }}'] ? 'ring-2 ring-brand border-brand' : ''">
-    <a href="{% url 'catalog:detail' store.slug product.slug %}" class="aspect-square bg-white/5 overflow-hidden block">
-      {% with cover=product.images.first %}
-      {% if cover %}
-      <img src="{{ cover.file.url }}" alt="{{ product.title }}" class="w-full h-full object-cover">
-      {% endif %}
-      {% endwith %}
-    </a>
-    <div class="p-3 space-y-2 flex-1 flex flex-col">
-      <a href="{% url 'catalog:detail' store.slug product.slug %}" class="font-medium text-sm truncate block hover:underline">{{ product.title }}</a>
-      <p class="text-brand font-bold">R$ {{ product.price }}</p>
-      <div class="mt-auto space-y-2">
-        <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-          <input type="checkbox"
-                 class="rounded border-surface-border"
-                 :checked="!!selected['{{ product.id }}']"
-                 @change="toggle('{{ product.id }}', {{ product.price|unlocalize }}, '{{ product.title|escapejs }}')">
-          Incluir na compra
-        </label>
-        <button type="button"
-                class="btn-primary w-full !py-2 !min-h-0 text-sm"
-                @click="buyOne('{{ product.id }}', {{ product.price|unlocalize }}, '{{ product.title|escapejs }}')">
-          Comprar
-        </button>
-      </div>
-    </div>
-  </div>
+    {% include "catalog/_product_card.html" with product=product show_store=False %}
   {% empty %}
-  <p class="col-span-full text-gray-500 text-center py-12">Sem itens publicados.</p>
+  <p class="col-span-full text-gray-500 text-center py-12">Sem peças publicadas no momento.</p>
   {% endfor %}
 </div>
 
 {% if reviews %}
 <section class="mt-14">
-  <h2 class="text-lg font-bold mb-4">Avaliações</h2>
-  <div class="space-y-3 max-w-xl">
+  <h2 class="text-lg font-bold mb-4">Avaliações de quem comprou</h2>
+  <div class="grid sm:grid-cols-2 gap-3 max-w-3xl">
     {% for review in reviews %}
     <div class="card p-4 space-y-1.5">
       <div class="flex items-center justify-between gap-3">
         {% include "reviews/_stars.html" with rating=review.rating size="w-3.5 h-3.5" %}
         <span class="text-xs text-gray-500">{{ review.created_at|date:"d/m/Y" }}</span>
       </div>
-      {% if review.comment %}<p class="text-sm text-gray-400">"{{ review.comment }}"</p>{% endif %}
+      {% if review.comment %}<p class="text-sm text-gray-400">“{{ review.comment }}”</p>{% endif %}
       <p class="text-xs text-gray-600">{{ review.buyer.interaction_name }} · compra verificada</p>
     </div>
     {% endfor %}
   </div>
 </section>
 {% endif %}
-
-{# Barra do carrinho #}
-<template x-teleport="body">
-  <div
-    x-show="count > 0 && !checkoutOpen"
-    x-cloak
-    style="position:fixed;left:0;right:0;bottom:1rem;z-index:40;padding:0 1rem;pointer-events:none;"
-  >
-    <div style="max-width:42rem;margin:0 auto;pointer-events:auto;background:#1c1329;border:1px solid #2c2038;border-radius:1rem;padding:1rem 1.25rem;display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem;box-shadow:0 12px 40px rgba(0,0,0,.45);">
-      <div style="flex:1;min-width:8rem;">
-        <p style="margin:0;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9ca3af;">Sua compra</p>
-        <p style="margin:0.15rem 0 0;font-size:14px;color:#f3f4f6;" x-text="count + (count === 1 ? ' item' : ' itens')"></p>
-        <p style="margin:0;font-size:1.25rem;font-weight:700;color:#e0243f;" x-text="'R$ ' + itemsTotal.toFixed(2)"></p>
-      </div>
-      <button type="button" class="btn-secondary !py-2.5 !min-h-0 text-sm" @click="clear()">Limpar</button>
-      <button type="button" class="btn-primary !py-2.5 !min-h-0 text-sm px-5" @click="openCheckout()">Finalizar compra</button>
-    </div>
-  </div>
-</template>
-
-{# Checkout em tela cheia, teletransportado pro body (nao quebra layout) #}
-<template x-teleport="body">
-  <div
-    x-show="checkoutOpen"
-    x-cloak
-    style="position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:1rem;"
-    @click.self="closeCheckout()"
-    @keydown.escape.window="closeCheckout()"
-  >
-    <div
-      style="width:100%;max-width:26rem;max-height:92vh;background:#1c1329;border:1px solid #2c2038;border-radius:1.25rem;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.55);"
-      @click.stop
-    >
-      <div style="padding:1.25rem 1.25rem 1rem;border-bottom:1px solid #2c2038;display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
-        <div>
-          <h2 style="margin:0;font-size:1.15rem;font-weight:700;color:#fff;">Finalizar compra</h2>
-          <p style="margin:0.25rem 0 0;font-size:12px;color:#9ca3af;">Pagamento Pix pelo Asaas</p>
-        </div>
-        <button type="button" style="background:none;border:0;color:#9ca3af;cursor:pointer;font-size:14px;" x-show="!charge" @click="closeCheckout()">Fechar</button>
-      </div>
-
-      <div style="padding:1.25rem;overflow-y:auto;flex:1;">
-        <ul style="list-style:none;margin:0 0 1rem;padding:0;background:rgba(255,255,255,.04);border-radius:0.75rem;">
-          <template x-for="item in selectedList" :key="item.id">
-            <li style="display:flex;justify-content:space-between;gap:0.75rem;padding:0.7rem 0.85rem;border-bottom:1px solid rgba(255,255,255,.06);font-size:14px;">
-              <span style="color:#d1d5db;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="item.title"></span>
-              <span style="color:#fff;font-weight:600;flex-shrink:0;" x-text="'R$ ' + Number(item.price).toFixed(2)"></span>
-            </li>
-          </template>
-        </ul>
-
-        <div x-show="!charge" style="display:flex;flex-direction:column;gap:1rem;">
-          {% if not request.user.is_authenticated %}
-          <div>
-            <p class="input-label">Seus dados</p>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
-              <input type="text" x-model="guest.name" placeholder="Nome completo" class="input-field" style="grid-column:1/-1;">
-              <input type="email" x-model="guest.email" placeholder="E-mail" class="input-field" style="grid-column:1/-1;">
-              <input type="text" x-model="guest.cpf" placeholder="CPF" maxlength="14" class="input-field">
-              <input type="date" x-model="guest.birth_date" class="input-field" title="Nascimento (+18)">
-            </div>
-            <p class="input-help">Use o mesmo CPF no Pix.</p>
-          </div>
-          {% endif %}
-
-          <div>
-            <p class="input-label">Endereço de entrega</p>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
-              <input type="text" x-model="address.cep" maxlength="9" placeholder="CEP" class="input-field" style="grid-column:1/-1;">
-              <input type="text" x-model="address.street" placeholder="Rua" class="input-field" style="grid-column:1/-1;">
-              <input type="text" x-model="address.number" placeholder="Número" class="input-field">
-              <input type="text" x-model="address.neighborhood" placeholder="Bairro" class="input-field">
-              <input type="text" x-model="address.city" placeholder="Cidade" class="input-field">
-              <input type="text" x-model="address.state" placeholder="UF" maxlength="2" class="input-field">
-            </div>
-          </div>
-
-          <div style="background:rgba(255,255,255,.04);border:1px solid #2c2038;border-radius:0.75rem;padding:0.85rem 1rem;">
-            <div style="display:flex;justify-content:space-between;font-size:14px;color:#9ca3af;">
-              <span>Total</span>
-              <span style="color:#e0243f;font-weight:700;font-size:1.1rem;" x-text="'R$ ' + grandTotal.toFixed(2)"></span>
-            </div>
-            <p style="margin:0.35rem 0 0;font-size:11px;color:#6b7280;">Frete incluso (R$ 0 neste lançamento)</p>
-          </div>
-
-          <label style="display:flex;align-items:flex-start;gap:0.5rem;font-size:12px;color:#9ca3af;cursor:pointer;">
-            <input type="checkbox" x-model="marketingOptIn" style="margin-top:0.15rem;">
-            <span>Quero receber novidades por e-mail (opcional)</span>
-          </label>
-
-          <p x-show="error" x-text="error" class="input-error"></p>
-        </div>
-
-        <div x-show="charge" style="text-align:center;">
-          <p style="margin:0 0 0.75rem;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#34d399;">Pagamento via Asaas</p>
-          <p style="margin:0 0 1rem;font-size:14px;color:#d1d5db;">Pague com Pix no Asaas com o <strong style="color:#fff;">mesmo CPF</strong>.</p>
-          <a x-show="charge && charge.payment_url" :href="charge && charge.payment_url" target="_blank" rel="noopener" class="btn-primary w-full" style="margin-bottom:0.75rem;">Abrir pagamento Asaas</a>
-          <div x-show="charge && charge.pix_qr_code" style="display:inline-block;background:#fff;padding:0.75rem;border-radius:0.75rem;margin-bottom:0.75rem;">
-            <img :src="charge && charge.pix_qr_code" alt="QR Pix" style="width:11rem;height:11rem;display:block;">
-          </div>
-          <div x-show="charge && charge.pix_copy_paste" style="text-align:left;margin-top:0.5rem;">
-            <p style="margin:0 0 0.35rem;font-size:12px;color:#9ca3af;">Pix copia e cola</p>
-            <textarea class="input-field" style="height:5.5rem;font-family:ui-monospace,monospace;font-size:12px;" readonly :value="charge && charge.pix_copy_paste" @focus="$event.target.select()"></textarea>
-            <button type="button" class="btn-secondary w-full text-sm" style="margin-top:0.5rem;" @click="navigator.clipboard.writeText(charge.pix_copy_paste)">Copiar código</button>
-          </div>
-          <a x-show="trackUrl" :href="trackUrl" style="display:block;margin-top:0.85rem;font-size:14px;color:#e0243f;">Acompanhar pedido</a>
-        </div>
-      </div>
-
-      <div x-show="!charge" style="padding:1rem 1.25rem 1.25rem;border-top:1px solid #2c2038;">
-        <button type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
-          <span x-show="!loadingCheckout" x-text="'Pagar R$ ' + grandTotal.toFixed(2) + ' no Asaas'"></span>
-          <span x-show="loadingCheckout">Gerando Pix Asaas…</span>
-        </button>
-      </div>
-    </div>
-  </div>
-</template>
-</div>
 {% endblock %}

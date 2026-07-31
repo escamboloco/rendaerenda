@@ -47,6 +47,7 @@ def product_detail(request, store_slug, product_slug):
 
     # Compra aberta (guest ou logado). Age gate do site ainda vale.
     can_buy = product.is_available()
+    image_urls = [image.file.url for image in product.images.all()]
 
     return render(
         request,
@@ -56,6 +57,7 @@ def product_detail(request, store_slug, product_slug):
             "store": store,
             "related_products": related_products,
             "can_buy": can_buy,
+            "image_urls": image_urls,
             "is_authenticated": request.user.is_authenticated,
         },
     )

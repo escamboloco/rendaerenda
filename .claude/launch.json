@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "renda-dev",
+      "runtimeExecutable": "backend/.venv/Scripts/python.exe",
+      "runtimeArgs": ["backend/manage.py", "runserver", "8009", "--noreload"],
+      "port": 8009,
+      "env": {
+        "DJANGO_SECRET_KEY": "dev-key-local",
+        "DJANGO_DEBUG": "True",
+        "DATABASE_URL": "sqlite:///backend/db.sqlite3",
+        "USE_LOCMEM_CACHE": "True",
+        "ASAAS_API_KEY": "",
+        "DJANGO_ALLOWED_HOSTS": "localhost,127.0.0.1"
+      }
+    }
+  ]
+}

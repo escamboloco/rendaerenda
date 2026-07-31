@@ -52,6 +52,15 @@ class WalletEntry(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["store", "available_at"])]
+        constraints = [
+            # Trava de dinheiro: um pedido so pode gerar UM credito de venda,
+            # mesmo com webhook duplicado do PSP + polling rodando junto.
+            models.UniqueConstraint(
+                fields=["order", "kind"],
+                condition=models.Q(kind="sale_credit"),
+                name="wallet_unique_sale_credit_per_order",
+            )
+        ]
 
 
 class WithdrawalRequest(models.Model):

@@ -8,6 +8,10 @@ urlpatterns = [
     path("", views.age_gate, name="age_gate"),
 ]
 
+api_urlpatterns = [
+    path("cep/<str:cep>/", views.cep_lookup, name="cep_lookup"),
+]
+
 page_urlpatterns = [
     path("healthz/", views.healthz, name="healthz"),
     path("robots.txt", views.robots_txt, name="robots_txt"),
