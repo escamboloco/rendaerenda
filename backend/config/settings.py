@@ -256,10 +256,16 @@ WALLET_RELEASE_DAYS_AFTER_SHIPPING = config("WALLET_RELEASE_DAYS_AFTER_SHIPPING"
 # Janela pós-entrega pra comprador confirmar ou contestar antes da liberação
 # automática do saldo pra vendedora (docs/checkout.md).
 DELIVERY_CONFIRMATION_WINDOW_HOURS = config("DELIVERY_CONFIRMATION_WINDOW_HOURS", default=24, cast=int)
-# Embalagem padrão comprada pela plataforma, custo embutido no frete do
-# comprador - nunca repassado à vendedora (ver apps.payments.models.Order).
-PACKAGING_FEE = config("PACKAGING_FEE", default=Decimal("3.90"), cast=Decimal)
+# Legado — modelo simplificado nao soma embalagem (frete inteiro pra vendedora).
+PACKAGING_FEE = config("PACKAGING_FEE", default=Decimal("0.00"), cast=Decimal)
 PAYMENT_PROVIDER = config("PAYMENT_PROVIDER", default="asaas")
+ASAAS_API_KEY = config("ASAAS_API_KEY", default="")
+ASAAS_API_URL = config("ASAAS_API_URL", default="https://api.asaas.com/v3")
+ASAAS_WEBHOOK_TOKEN = config("ASAAS_WEBHOOK_TOKEN", default="")
+# True = no webhook, apos split, dispara Pix automatico pra chave da vendedora.
+AUTO_PAYOUT_ON_PAYMENT = config("AUTO_PAYOUT_ON_PAYMENT", default=True, cast=bool)
+# Soft-launch: abrir loja sem KYC aprovado (ainda exige idade +18 no site).
+REQUIRE_SELLER_KYC = config("REQUIRE_SELLER_KYC", default=False, cast=bool)
 
 AGE_KYC_PROVIDER = config("AGE_KYC_PROVIDER", default="idwall")
 AGE_KYC_API_KEY = config("AGE_KYC_API_KEY", default="")

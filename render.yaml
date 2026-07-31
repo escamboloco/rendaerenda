@@ -1,24 +1,17 @@
 # Blueprint de deploy no Render (https://render.com/docs/blueprint-spec).
 #
-# PRODUCAO — rendaerenda.com.br
-# Sobe: Postgres + Web (Django/gunicorn) + 2 Cron Jobs.
-# Sem Redis e sem worker Celery 24/7 (tasks assincronas rodam no gunicorn
-# via CELERY_TASK_ALWAYS_EAGER — ver config/settings.py). Cron cobra por
-# segundo de execucao (centavos/mes).
+# PRODUCAO — rendaerenda.com.br (modelo intermediario simples)
+# Sobe: Postgres + Web + 2 Cron Jobs.
+#
+# Variaveis sync:false = so o ESSENCIAL pra subir e vender:
+#   Asaas (split) + Melhor Envio (cotacao frete) + e-mail + S3 (fotos).
+# KYC/SMS/NFS-e/Correios ficam opcionais (defaults vazios no settings).
 #
 # Como usar:
-#   1. Commit e push deste arquivo.
-#   2. Render Dashboard → New → Blueprint → selecione o repositorio.
-#   3. Preencha as variaveis sync:false (segredos) quando o Render pedir.
-#   4. Na Hostinger, aponte o DNS (A @ → 216.24.57.1 ; CNAME www →
-#      rendaerenda-web.onrender.com). Ver instrucoes no chat / README.
-#   5. Shell do web → python manage.py createsuperuser
-#
-# Custo aproximado: Web Starter (~US$7) + Postgres basic-256mb (~US$7) +
-# crons (centavos). NAO use plano free em producao (dorme + webhook quebra).
-#
-# IMPORTANTE envVarGroups: so literais ou generateValue. Segredos (sync:false)
-# e fromDatabase ficam repetidos em cada servico que precisa deles.
+#   1. Push deste arquivo.
+#   2. Render → New → Blueprint → Apply.
+#   3. Preencha as poucas chaves pedidas (ou deixe em branco e complete depois).
+#   4. Hostinger DNS: A @ → 216.24.57.1 ; CNAME www → rendaerenda-web.onrender.com
 
 databases:
   - name: rendaerenda-db
@@ -27,7 +20,7 @@ databases:
     postgresMajorVersion: "16"
     databaseName: rendaerenda
     user: rendaerenda
-    ipAllowList: [] # so rede interna do Render (web/cron)
+    ipAllowList: []
 
 envVarGroups:
   - name: rendaerenda-shared
@@ -48,12 +41,16 @@ envVarGroups:
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT
         value: "30"
+      - key: PACKAGING_FEE
+        value: "0"
+      - key: AUTO_PAYOUT_ON_PAYMENT
+        value: "True"
+      - key: REQUIRE_SELLER_KYC
+        value: "False"
       - key: WALLET_RELEASE_DAYS_AFTER_SHIPPING
-        value: "3"
+        value: "0"
       - key: DELIVERY_CONFIRMATION_WINDOW_HOURS
         value: "24"
-      - key: PACKAGING_FEE
-        value: "3.90"
       - key: SHIPPING_PROVIDER
         value: "melhor_envio"
       - key: MELHOR_ENVIO_SANDBOX
@@ -62,12 +59,6 @@ envVarGroups:
         value: "asaas"
       - key: ASAAS_API_URL
         value: "https://api.asaas.com/v3"
-      - key: AGE_KYC_PROVIDER
-        value: "idwall"
-      - key: NFSE_PROVIDER_URL
-        value: "https://api.focusnfe.com.br/v2/nfse"
-      - key: AWS_S3_SIGNED_URL_EXPIRE_SECONDS
-        value: "300"
       - key: EMAIL_BACKEND
         value: "django.core.mail.backends.smtp.EmailBackend"
       - key: EMAIL_PORT
@@ -76,6 +67,8 @@ envVarGroups:
         value: "True"
       - key: DEFAULT_FROM_EMAIL
         value: "Renda & Renda <no-reply@rendaerenda.com.br>"
+      - key: AWS_S3_SIGNED_URL_EXPIRE_SECONDS
+        value: "300"
 
 services:
   - type: web
@@ -96,39 +89,18 @@ services:
         fromDatabase:
           name: rendaerenda-db
           property: connectionString
+      # --- Essenciais ---
       - key: ASAAS_API_KEY
         sync: false
       - key: ASAAS_WEBHOOK_TOKEN
         sync: false
-      - key: AGE_KYC_API_KEY
-        sync: false
-      - key: PHONE_CPF_BUREAU_URL
-        sync: false
-      - key: PHONE_CPF_BUREAU_API_KEY
-        sync: false
-      - key: SMS_PROVIDER_URL
-        sync: false
-      - key: SMS_PROVIDER_API_KEY
-        sync: false
-      - key: NFSE_PROVIDER_API_KEY
-        sync: false
-      - key: PLATFORM_LEGAL_NAME
-        sync: false
-      - key: PLATFORM_CNPJ
-        sync: false
-      - key: PLATFORM_MUNICIPAL_SERVICE_CODE
-        sync: false
       - key: MELHOR_ENVIO_TOKEN
         sync: false
-      - key: CORREIOS_CWS_USER
+      - key: EMAIL_HOST
         sync: false
-      - key: CORREIOS_CWS_PASSWORD
+      - key: EMAIL_HOST_USER
         sync: false
-      - key: CORREIOS_CONTRACT_NUMBER
-        sync: false
-      - key: CORREIOS_CARD_NUMBER
-        sync: false
-      - key: CORREIOS_ORIGIN_CEP
+      - key: EMAIL_HOST_PASSWORD
         sync: false
       - key: AWS_ACCESS_KEY_ID
         sync: false
@@ -138,14 +110,7 @@ services:
         sync: false
       - key: AWS_S3_ENDPOINT_URL
         sync: false
-      - key: EMAIL_HOST
-        sync: false
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false
 
-  # Rastreio de envios (Melhor Envio / Correios) — a cada hora
   - type: cron
     name: rendaerenda-poll-shipments
     runtime: python
@@ -163,32 +128,7 @@ services:
           property: connectionString
       - key: MELHOR_ENVIO_TOKEN
         sync: false
-      - key: CORREIOS_CWS_USER
-        sync: false
-      - key: CORREIOS_CWS_PASSWORD
-        sync: false
-      - key: CORREIOS_CONTRACT_NUMBER
-        sync: false
-      - key: CORREIOS_CARD_NUMBER
-        sync: false
-      - key: CORREIOS_ORIGIN_CEP
-        sync: false
-      - key: EMAIL_HOST
-        sync: false
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_STORAGE_BUCKET_NAME
-        sync: false
-      - key: AWS_S3_ENDPOINT_URL
-        sync: false
 
-  # Libera saldo apos confirmacao de entrega — a cada 30 min
   - type: cron
     name: rendaerenda-release-deliveries
     runtime: python

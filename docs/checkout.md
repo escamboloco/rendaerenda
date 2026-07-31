@@ -12,31 +12,27 @@
 
 | Antes | Agora |
 |---|---|
-| Comprador pagava assinatura mensal para poder comprar | **Sem assinatura.** Navegar, ver fotos e comprar são gratuitos — só se paga o pedido no ato |
-| Vendedora pagava plano mensal para manter a loja | **Anunciar é grátis.** `Store.plan` é opcional (null = plano gratuito) |
-| Comissão calculada como % "para dentro" do preço | Vendedora declara **quanto quer receber** (`Product.payout_amount`); o site soma 30% **por cima**, e o comprador paga o total |
-| Frete repassado à vendedora | Frete + embalagem ficam com a plataforma, que **compra a etiqueta automaticamente** e entrega pronta pra vendedora colar |
-| Saldo liberado N dias após o envio | Comprador confirma o recebimento (libera na hora) **ou** libera automático 24h após a entrega |
+| Comprador precisava de conta + telefone | **Compra guest** — nome, e-mail, CPF, nascimento (+18), endereço e pagamento |
+| Plataforma comprava etiqueta e ficava com o frete | **Vendedora posta sozinha**; frete cotado no checkout e **repassado a ela** |
+| Comissão 30% + frete pra plataforma | **Só 30% pra plataforma**; vendedora recebe **item (payout) + frete** |
+| Saque manual / retido | **Pix automático** na chave cadastrada pela vendedora após confirmação do pagamento |
 
-Como a plataforma ganha: **só a comissão de 30% sobre cada venda** (mais o que sobrar do frete acima do custo real da etiqueta). Sem receita recorrente.
-
-### Exemplo de cálculo (implementado em `apps/catalog/models.py`)
+### Exemplo de cálculo
 
 ```
 Vendedora quer receber:  R$ 100,00   (payout_amount)
 Comissão da plataforma:  R$  30,00   (30% por cima)
 ─────────────────────────────────
-Preço exibido/pago:      R$ 130,00   (price)   ← Product.save() calcula
-+ Frete (ex. PAC):       R$  18,50   (cotado do CEP da vendedora)
-+ Embalagem:             R$   3,90   (PACKAGING_FEE, embutida no frete)
+Preço do anúncio:        R$ 130,00   (price)   ← o que o comprador vê no item
++ Frete (ex. PAC):       R$  18,50
 ─────────────────────────────────
-Comprador paga:          R$ 152,40
-Vendedora recebe:        R$ 100,00 (líquido, na carteira)
-Plataforma fica com:     R$  30,00 + sobra do frete
+Comprador paga:          R$ 148,50
+Vendedora recebe (Pix):  R$ 118,50   (100 + frete)
+Plataforma fica com:     R$  30,00
 ```
 
-A tela de anúncio (`templates/catalog/product_create.html`) mostra esse
-cálculo **ao vivo** enquanto a vendedora digita o valor.
+O site **não vende nada** — só conecta comprador e vendedora (Termos de Uso).
+
 
 ---
 

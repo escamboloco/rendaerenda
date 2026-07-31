@@ -5,7 +5,7 @@
 <div class="max-w-lg mx-auto space-y-6">
   <div class="text-center">
     <h1 class="text-2xl font-bold">Abrir minha loja</h1>
-    <p class="text-gray-400 text-sm mt-1">Anunciar é grátis — a plataforma só cobra uma comissão quando você vende.</p>
+    <p class="text-gray-400 text-sm mt-1">Anunciar é grátis. Você define quanto quer receber; o site acrescenta 30% no preço. No pagamento, o frete também vai para você.</p>
   </div>
 
   {% if already_has_store %}
@@ -24,14 +24,14 @@
     <a href="{% url 'accounts_pages:verification_page' %}" class="btn-primary w-full">Verificar idade</a>
   </div>
 
-  {% elif not seller_kyc or seller_kyc.status != 'approved' %}
+  {% elif require_seller_kyc and (not seller_kyc or seller_kyc.status != 'approved') %}
   <div class="card p-6 text-center space-y-3">
     <p class="text-gray-300">
-      {% if seller_kyc.status == 'pending' %}Seu KYC de vendedora está em análise.
+      {% if seller_kyc and seller_kyc.status == 'pending' %}Seu KYC de vendedora está em análise.
       {% else %}Envie seus documentos de verificação de vendedora para continuar.{% endif %}
     </p>
     <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="btn-primary w-full">
-      {% if seller_kyc.status == 'pending' %}Ver status{% else %}Enviar documentos{% endif %}
+      {% if seller_kyc and seller_kyc.status == 'pending' %}Ver status{% else %}Enviar documentos{% endif %}
     </a>
   </div>
 
@@ -53,22 +53,36 @@
       <div>
         <label class="input-label">CEP de onde você posta (somente números)</label>
         <input type="text" x-model="originCep" required pattern="\d{8}" maxlength="8" inputmode="numeric" placeholder="01001000" class="input-field">
-        <p class="input-help">Usado para calcular o frete dos seus itens e mostrar o ponto de postagem mais próximo de você.</p>
+        <p class="input-help">Usado para calcular o frete que o comprador paga (e que você recebe para postar).</p>
+      </div>
+      <div>
+        <label class="input-label">Sua chave Pix (para receber automaticamente)</label>
+        <input type="text" x-model="pixKey" required maxlength="140" placeholder="CPF, e-mail, celular ou chave aleatória" class="input-field">
+      </div>
+      <div>
+        <label class="input-label">Tipo da chave</label>
+        <select x-model="pixKeyType" class="input-field">
+          <option value="CPF">CPF</option>
+          <option value="EMAIL">E-mail</option>
+          <option value="PHONE">Telefone</option>
+          <option value="EVP">Chave aleatória</option>
+          <option value="CNPJ">CNPJ</option>
+        </select>
       </div>
       <div class="card px-4 py-3 text-sm text-gray-400">
-        Recebimentos e saques vão sempre para a <strong class="text-gray-200">chave Pix do seu CPF</strong> — por segurança, não é possível usar chave de terceiros.
+        Quando o comprador pagar, o Asaas faz o split: <strong class="text-gray-200">você recebe o valor do item + frete</strong>; a plataforma fica com 30%. O Pix cai na chave cadastrada aqui.
       </div>
       <p x-show="error" x-text="error" class="input-error"></p>
       <button type="submit" class="btn-primary w-full" :disabled="loading">
         <span x-show="!loading">Criar loja</span>
         <span x-show="loading">Enviando…</span>
       </button>
-      <p class="input-help text-center">Sua loja entra em fila de moderação e fica visível após aprovação. Depois disso você já pode anunciar seus itens.</p>
+      <p class="input-help text-center">Sua loja entra em fila de moderação e fica visível após aprovação.</p>
     </form>
 
     <div x-show="step === 2" x-cloak class="card p-6 text-center space-y-3">
       <span class="badge-pending text-sm px-3 py-1">Aguardando moderação</span>
-      <p class="text-gray-400 text-sm">Sua loja foi criada e está em análise. Você será notificada assim que for aprovada — aí é só anunciar.</p>
+      <p class="text-gray-400 text-sm">Sua loja foi criada e está em análise. Depois de aprovada, é só anunciar.</p>
       <a href="{% url 'wallet:dashboard' %}" class="btn-primary w-full">Ir para a carteira</a>
     </div>
   </div>
@@ -85,6 +99,8 @@ function storeOnboarding() {
     slug: "",
     bio: "",
     originCep: "",
+    pixKey: "",
+    pixKeyType: "CPF",
     loading: false,
     error: "",
     async createStore() {
@@ -94,7 +110,14 @@ function storeOnboarding() {
         const resp = await fetch("{% url 'stores_api:onboard' %}", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
-          body: JSON.stringify({ slug: this.slug, display_name: this.displayName, bio: this.bio, origin_cep: this.originCep }),
+          body: JSON.stringify({
+            slug: this.slug,
+            display_name: this.displayName,
+            bio: this.bio,
+            origin_cep: this.originCep,
+            pix_key: this.pixKey,
+            pix_key_type: this.pixKeyType,
+          }),
         });
         const data = await resp.json();
         if (!resp.ok) {

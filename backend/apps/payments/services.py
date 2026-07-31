@@ -34,6 +34,7 @@ from django.conf import settings
 class SubaccountResult:
     provider_subaccount_id: str
     pix_key: str | None
+    api_key: str | None = None
 
 
 @dataclass
@@ -41,6 +42,38 @@ class ChargeResult:
     provider_charge_id: str
     payment_url: str | None
     pix_qr_code: str | None
+
+
+def _digits(value: str | None) -> str:
+    return re.sub(r"\D", "", value or "")
+
+
+def detect_pix_key_type(pix_key: str) -> str:
+    """Infere o tipo da chave Pix pro Asaas (CPF/CNPJ/EMAIL/PHONE/EVP)."""
+    key = (pix_key or "").strip()
+    if "@" in key:
+        return "EMAIL"
+    digits = _digits(key)
+    if len(digits) == 14:
+        return "CNPJ"
+    if len(digits) == 11:
+        # Telefone BR costuma comecar com DDD + 9; CPF e so digitos sem +.
+        if key.startswith("+") or key.startswith("55") or (len(key) >= 12 and not key.isdigit()):
+            return "PHONE"
+        return "CPF"
+    if len(digits) == 10 or len(digits) == 12 or len(digits) == 13:
+        return "PHONE"
+    return "EVP"
+
+
+def _adult_from_birth(birth_date) -> bool:
+    from datetime import date
+
+    today = date.today()
+    years = today.year - birth_date.year - (
+        (today.month, today.day) < (birth_date.month, birth_date.day)
+    )
+    return years >= 18
 
 
 class PaymentProvider(ABC):
@@ -63,7 +96,15 @@ class PaymentProvider(ABC):
     ) -> ChargeResult: ...
 
     @abstractmethod
-    def request_seller_withdrawal(self, *, seller_subaccount_id: str, amount: Decimal, pix_key: str) -> str: ...
+    def request_seller_withdrawal(
+        self,
+        *,
+        seller_subaccount_id: str,
+        amount: Decimal,
+        pix_key: str,
+        pix_key_type: str = "CPF",
+        api_key: str | None = None,
+    ) -> str: ...
 
     @abstractmethod
     def create_charge(
@@ -82,10 +123,6 @@ class PaymentProvider(ABC):
     def refund_charge(self, *, provider_charge_id: str) -> None: ...
 
 
-def _digits(value: str | None) -> str:
-    return re.sub(r"\D", "", value or "")
-
-
 class AsaasProvider(PaymentProvider):
     """
     Requer conta Asaas aprovada por escrito para o nicho (vestuario
@@ -95,9 +132,9 @@ class AsaasProvider(PaymentProvider):
 
     BILLING_TYPES = {"pix": "PIX", "credit_card": "CREDIT_CARD", "debit_card": "DEBIT_CARD", "boleto": "BOLETO"}
 
-    def __init__(self):
-        self.base_url = settings.ASAAS_API_URL if hasattr(settings, "ASAAS_API_URL") else "https://api.asaas.com/v3"
-        self.api_key = getattr(settings, "ASAAS_API_KEY", "")
+    def __init__(self, api_key: str | None = None):
+        self.base_url = getattr(settings, "ASAAS_API_URL", "") or "https://api.asaas.com/v3"
+        self.api_key = api_key or getattr(settings, "ASAAS_API_KEY", "")
 
     def _headers(self):
         return {"access_token": self.api_key, "Content-Type": "application/json"}
@@ -144,7 +181,11 @@ class AsaasProvider(PaymentProvider):
         resp.raise_for_status()
         data = resp.json()
         wallet_id = data.get("walletId") or data["id"]
-        return SubaccountResult(provider_subaccount_id=wallet_id, pix_key=None)
+        return SubaccountResult(
+            provider_subaccount_id=wallet_id,
+            pix_key=None,
+            api_key=data.get("apiKey") or "",
+        )
 
     def create_split_charge(
         self,
@@ -159,10 +200,8 @@ class AsaasProvider(PaymentProvider):
         customer_name: str,
         customer_email: str,
     ) -> ChargeResult:
-        # Split: so a parte da vendedora vai no array. O restante liquido
-        # (comissao + frete/embalagem - taxas Asaas) fica AUTOMATICO na
-        # conta master da plataforma - nao se inclui o proprio walletId.
-        # platform_amount e calculado no Order e usado so no ledger interno.
+        # Split: parte da vendedora (item + frete). O restante liquido
+        # (comissao 30% - taxas Asaas) fica AUTOMATICO na conta master.
         _ = platform_amount
         customer_id = self._get_or_create_customer(cpf=customer_cpf, name=customer_name, email=customer_email)
         resp = requests.post(
@@ -171,7 +210,7 @@ class AsaasProvider(PaymentProvider):
             json={
                 "customer": customer_id,
                 "billingType": self.BILLING_TYPES[method],
-                "value": str(total_amount),
+                "value": float(total_amount),
                 "externalReference": order_id,
                 "split": [
                     {
@@ -190,16 +229,31 @@ class AsaasProvider(PaymentProvider):
             pix_qr_code=data.get("pixQrCode"),
         )
 
-    def request_seller_withdrawal(self, *, seller_subaccount_id: str, amount: Decimal, pix_key: str) -> str:
+    def request_seller_withdrawal(
+        self,
+        *,
+        seller_subaccount_id: str,
+        amount: Decimal,
+        pix_key: str,
+        pix_key_type: str = "CPF",
+        api_key: str | None = None,
+    ) -> str:
+        # Preferir apiKey da subconta (saque do saldo dela). Fallback: conta master.
+        headers = {"access_token": api_key or self.api_key, "Content-Type": "application/json"}
+        key_type = (pix_key_type or detect_pix_key_type(pix_key)).upper()
+        payload = {
+            "value": float(amount),
+            "pixAddressKey": pix_key,
+            "pixAddressKeyType": key_type,
+        }
+        # Com apiKey da subconta o saque e da propria carteira; sem ela,
+        # tentamos via walletId na conta master (nem sempre suportado).
+        if not api_key:
+            payload["walletId"] = seller_subaccount_id
         resp = requests.post(
             f"{self.base_url}/transfers",
-            headers=self._headers(),
-            json={
-                "walletId": seller_subaccount_id,
-                "value": str(amount),
-                "pixAddressKey": pix_key,
-                "pixAddressKeyType": "CPF",  # saque exclusivamente para chave Pix do CPF da vendedora
-            },
+            headers=headers,
+            json=payload,
             timeout=15,
         )
         resp.raise_for_status()
@@ -216,7 +270,7 @@ class AsaasProvider(PaymentProvider):
             json={
                 "customer": customer_id,
                 "billingType": self.BILLING_TYPES[method],
-                "value": str(amount),
+                "value": float(amount),
                 "externalReference": reference_id,
             },
             timeout=15,
@@ -269,11 +323,9 @@ def get_payment_provider() -> PaymentProvider:
 
 def verify_payer_cpf(payment, webhook_payload: dict | None) -> bool:
     """
-    Confere se quem pagou e o titular da conta (Order.buyer.cpf). Cartao ja
+    Confere se quem pagou e o CPF do pedido (buyer ou guest). Cartao ja
     e travado pelo customer do PSP; aqui cobrimos principalmente Pix pago
-    de banco de terceiro. CPF divergente -> estorno automatico. Se o PSP
-    nao informar o documento do pagador, seguimos (matched=None) - o
-    customer da cobranca ja e o do titular.
+    de banco de terceiro. CPF divergente -> estorno automatico.
     """
     provider = get_payment_provider()
     payer_doc = provider.get_payer_document(
@@ -284,8 +336,9 @@ def verify_payer_cpf(payment, webhook_payload: dict | None) -> bool:
         payment.payer_cpf_matched = None
         return True
 
+    expected = payment.order.payer_cpf
     payment.payer_document = payer_doc
-    payment.payer_cpf_matched = payer_doc == payment.order.buyer.cpf
+    payment.payer_cpf_matched = payer_doc == expected
     if payment.payer_cpf_matched:
         return True
 

@@ -11,17 +11,12 @@ from apps.stores.models import Store
 
 class Order(models.Model):
     """
-    Pedido de compra de item fisico entre comprador e vendedora. A
-    plataforma NUNCA e dona do produto nem processa o dinheiro
-    diretamente - o pagamento e feito via PSP (Asaas/Iugu) com split
-    automatico. Ver apps.payments.services.PaymentProvider.
+    Pedido entre comprador e vendedora. A plataforma so intermedia:
+    nao vende o item. Pagamento via Asaas com split automatico.
 
-    Fluxo de valores (docs/checkout.md): a vendedora recebe exatamente o
-    payout_amount que ela declarou em cada item (nunca items_total, que
-    ja embute a comissao). O frete NAO vai para a vendedora - a
-    etiqueta e comprada automaticamente pela plataforma (Melhor Envio/
-    Correios) e entregue pronta pra ela colar, entao o valor do frete
-    pago pelo comprador cobre esse custo e fica com a plataforma.
+    Split: vendedora recebe payout_amount (o que ela pediu) + frete;
+    plataforma recebe so a comissao de 30% embutida em items_total.
+    Compra pode ser guest (sem conta): buyer null + campos guest_*.
     """
 
     class Status(models.TextChoices):
@@ -34,7 +29,15 @@ class Order(models.Model):
         REFUNDED = "refunded", "Reembolsado"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders")
+    buyer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders", null=True, blank=True
+    )
+    guest_name = models.CharField(max_length=150, blank=True)
+    guest_email = models.EmailField(blank=True)
+    guest_cpf = models.CharField(max_length=11, blank=True)
+    guest_birth_date = models.DateField(null=True, blank=True)
+    access_token = models.CharField(max_length=64, blank=True, db_index=True)
+
     store = models.ForeignKey(Store, on_delete=models.PROTECT, related_name="orders")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AWAITING_PAYMENT)
 
@@ -42,7 +45,7 @@ class Order(models.Model):
     shipping_total = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
     packaging_fee = models.DecimalField(
         max_digits=6, decimal_places=2, default=Decimal("0.00"),
-        help_text="Já somado a shipping_total - guardado à parte só para exibir o detalhamento ao comprador.",
+        help_text="Legado — modelo atual nao soma embalagem; frete vai inteiro pra vendedora.",
     )
 
     shipping_address = models.JSONField()
@@ -53,23 +56,41 @@ class Order(models.Model):
         indexes = [models.Index(fields=["status"]), models.Index(fields=["buyer", "status"])]
 
     @property
+    def payer_cpf(self) -> str:
+        if self.buyer_id and self.buyer.cpf:
+            return self.buyer.cpf
+        return self.guest_cpf
+
+    @property
+    def payer_name(self) -> str:
+        if self.buyer_id:
+            return self.buyer.get_full_name() or self.buyer.username
+        return self.guest_name
+
+    @property
+    def payer_email(self) -> str:
+        if self.buyer_id:
+            return self.buyer.email
+        return self.guest_email
+
+    @property
     def grand_total(self) -> Decimal:
         return self.items_total + self.shipping_total
 
     @property
     def payout_total(self) -> Decimal:
-        """Soma do que cada vendedora declarou querer receber (snapshot por item)."""
+        """Soma do que a vendedora declarou querer receber pelos itens."""
         return sum((item.unit_payout_amount * item.quantity for item in self.items.all()), Decimal("0.00"))
 
     @property
     def seller_amount(self) -> Decimal:
-        # So o valor dos itens - frete/embalagem cobre a etiqueta que a
-        # PLATAFORMA compra automaticamente (nunca vai pra vendedora).
-        return self.payout_total
+        # Item (payout) + frete — a vendedora posta e fica com o frete.
+        return self.payout_total + self.shipping_total
 
     @property
     def platform_amount(self) -> Decimal:
-        return (self.items_total - self.payout_total) + self.shipping_total
+        # So a comissao de 30% (items_total ja e payout + markup).
+        return self.items_total - self.payout_total
 
 
 class OrderItem(models.Model):

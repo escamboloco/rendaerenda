@@ -45,9 +45,8 @@ def product_detail(request, store_slug, product_slug):
         .prefetch_related("images")[:4]
     )
 
-    # Navegar e ver fotos é livre para qualquer visitante (sem assinatura -
-    # docs/checkout.md). Só comprar exige telefone vinculado ao CPF.
-    can_buy = request.user.is_authenticated and request.user.is_phone_verified
+    # Compra aberta (guest ou logado). Age gate do site ainda vale.
+    can_buy = product.is_available()
 
     return render(
         request,
@@ -57,6 +56,7 @@ def product_detail(request, store_slug, product_slug):
             "store": store,
             "related_products": related_products,
             "can_buy": can_buy,
+            "is_authenticated": request.user.is_authenticated,
         },
     )
 

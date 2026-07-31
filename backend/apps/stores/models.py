@@ -47,11 +47,18 @@ class Store(models.Model):
     plan_expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # Subconta no PSP (Asaas/Iugu) que efetivamente custodia o dinheiro
-    # da vendedora - ver apps.payments.services. Criada no onboarding,
-    # antes da loja poder receber pedidos.
+    # Subconta Asaas (walletId) que recebe o split de cada venda.
     psp_subaccount_id = models.CharField(max_length=100, blank=True)
+    # apiKey da subconta (retornada na criacao) — usada pro Pix automatico.
+    psp_api_key = models.CharField(max_length=200, blank=True)
+    # Chave Pix cadastrada pela vendedora (CPF, e-mail, telefone ou aleatoria).
     pix_key = models.CharField(max_length=140, blank=True)
+    pix_key_type = models.CharField(
+        max_length=10,
+        blank=True,
+        default="CPF",
+        help_text="CPF, CNPJ, EMAIL, PHONE ou EVP (chave aleatoria).",
+    )
     # CEP de onde a vendedora posta os itens - usado como origem em TODA
     # cotacao de frete (o comprador ve preco/prazo reais a partir daqui) e
     # para achar o ponto de coleta mais proximo dela.

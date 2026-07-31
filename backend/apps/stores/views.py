@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import get_object_or_404, render
@@ -80,7 +81,15 @@ def onboard_page(request):
         return render(request, "stores/onboard.html", {"already_has_store": True, "store": request.user.store})
 
     seller_kyc = getattr(request.user, "seller_kyc", None)
-    return render(request, "stores/onboard.html", {"already_has_store": False, "seller_kyc": seller_kyc})
+    return render(
+        request,
+        "stores/onboard.html",
+        {
+            "already_has_store": False,
+            "seller_kyc": seller_kyc,
+            "require_seller_kyc": settings.REQUIRE_SELLER_KYC,
+        },
+    )
 
 
 class StoreOnboardView(APIView):
@@ -98,9 +107,12 @@ class StoreOnboardView(APIView):
 
     def post(self, request):
         user = request.user
-        seller_kyc = getattr(user, "seller_kyc", None)
-        if not seller_kyc or seller_kyc.status != seller_kyc.Status.APPROVED:
-            raise PermissionDenied("KYC de vendedora precisa estar aprovado antes de abrir loja.")
+        if settings.REQUIRE_SELLER_KYC:
+            seller_kyc = getattr(user, "seller_kyc", None)
+            if not seller_kyc or seller_kyc.status != seller_kyc.Status.APPROVED:
+                raise PermissionDenied("KYC de vendedora precisa estar aprovado antes de abrir loja.")
+        if not user.cpf:
+            raise PermissionDenied("Complete o cadastro com CPF antes de abrir loja.")
         if hasattr(user, "store"):
             return Response({"detail": "Você já tem uma loja."}, status=status.HTTP_409_CONFLICT)
 
@@ -108,6 +120,10 @@ class StoreOnboardView(APIView):
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
         plan = payload.get("plan_id")
+        from apps.payments.services import detect_pix_key_type
+
+        pix_key = payload["pix_key"]
+        pix_key_type = (payload.get("pix_key_type") or detect_pix_key_type(pix_key)).upper()
 
         provider = get_payment_provider()
         subaccount = provider.create_seller_subaccount(
@@ -124,7 +140,9 @@ class StoreOnboardView(APIView):
             plan=plan,
             plan_expires_at=(timezone.now() + timedelta(days=plan.duration_days)) if plan else None,
             psp_subaccount_id=subaccount.provider_subaccount_id,
-            pix_key=user.cpf,  # chave Pix de recebimento e sempre o CPF da titular
+            psp_api_key=subaccount.api_key or "",
+            pix_key=pix_key,
+            pix_key_type=pix_key_type,
             origin_cep=payload["origin_cep"],
         )
         # Nome/bio da loja nunca podem ser canal de contato pessoal (telefone,

@@ -1,5 +1,5 @@
-from datetime import timedelta
 from decimal import Decimal
+import logging
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -7,28 +7,20 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.payments.models import Order
-from apps.payments.services import get_payment_provider
+from apps.payments.services import detect_pix_key_type, get_payment_provider
 from apps.stores.models import Store
 
 from .models import WalletEntry, WithdrawalRequest
 
-
-# Teto de seguranca: se o rastreio nunca confirmar a entrega (extravio,
-# transportadora sem atualizacao), o credito nao fica preso pra sempre -
-# libera apos este prazo. Compativel com o maximo de 45 dias da conta
-# escrow do Asaas.
-RELEASE_SAFETY_CEILING_DAYS = 30
+logger = logging.getLogger(__name__)
 
 
 def credit_sale(order: Order):
     """
-    Chamado quando o pagamento do pedido e confirmado (webhook do PSP).
-    O credito fica RETIDO ate: (a) o comprador confirmar o recebimento,
-    ou (b) passar DELIVERY_CONFIRMATION_WINDOW_HOURS da entrega sem
-    contestacao - liberacao automatica via Celery beat (ver
-    apps.shipping.tasks.release_confirmed_deliveries). docs/checkout.md.
+    Registra credito no ledger. Com AUTO_PAYOUT_ON_PAYMENT o valor ja fica
+    disponivel (saque imediato no mesmo webhook).
     """
-    available_at = timezone.now() + timedelta(days=RELEASE_SAFETY_CEILING_DAYS)
+    available_at = timezone.now()
     return WalletEntry.objects.create(
         store=order.store,
         order=order,
@@ -39,21 +31,37 @@ def credit_sale(order: Order):
 
 
 def release_sale(order: Order):
-    """Libera o credito da venda para saque imediato (confirmacao do comprador ou fim da janela)."""
+    """Libera credito retido (legado — modelo atual ja libera na hora)."""
     entry = order.wallet_entries.filter(kind=WalletEntry.Kind.SALE_CREDIT).first()
     if entry and entry.available_at > timezone.now():
         entry.available_at = timezone.now()
         entry.save(update_fields=["available_at"])
 
 
+def credit_and_auto_payout(order: Order):
+    """Credita a venda e, se configurado, dispara Pix automatico pra vendedora."""
+    credit_sale(order)
+    if not getattr(settings, "AUTO_PAYOUT_ON_PAYMENT", True):
+        return
+    store = order.store
+    if not store.pix_key or not store.psp_subaccount_id:
+        logger.warning("Pedido %s: loja sem Pix/subconta — split ficou na carteira Asaas.", order.id)
+        return
+    try:
+        request_withdrawal(store, order.seller_amount)
+    except Exception:
+        logger.exception("Falha no Pix automatico do pedido %s — saldo ficou na subconta Asaas.", order.id)
+
+
 @transaction.atomic
 def request_withdrawal(store: Store, amount: Decimal) -> WithdrawalRequest:
-    # Anti-fraude/anti-lavagem: o saque SEMPRE vai para a chave Pix CPF da
-    # propria dona da loja - nunca para chave de terceiro, e-mail ou
-    # aleatoria. Nao e configuravel de proposito.
-    pix_key = store.owner.cpf
+    pix_key = (store.pix_key or "").strip()
+    if not pix_key:
+        raise ValidationError("Cadastre uma chave Pix na loja antes de sacar.")
+    pix_type = (store.pix_key_type or detect_pix_key_type(pix_key)).upper()
+
     withdrawal = WithdrawalRequest(store=store, amount=amount, pix_key=pix_key)
-    withdrawal.full_clean()  # dispara WithdrawalRequest.clean() -> valida saldo disponivel
+    withdrawal.full_clean()
     withdrawal.save()
 
     provider = get_payment_provider()
@@ -62,6 +70,8 @@ def request_withdrawal(store: Store, amount: Decimal) -> WithdrawalRequest:
             seller_subaccount_id=store.psp_subaccount_id,
             amount=amount,
             pix_key=pix_key,
+            pix_key_type=pix_type,
+            api_key=store.psp_api_key or None,
         )
     except Exception:
         withdrawal.status = WithdrawalRequest.Status.FAILED

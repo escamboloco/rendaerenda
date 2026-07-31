@@ -1,30 +1,31 @@
 import hmac
+import secrets
 from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.catalog.models import Product
 from apps.shipping.models import Shipment
 from apps.shipping.services import calculate_freight_options
-from apps.wallet.services import credit_sale
+from apps.wallet.services import credit_and_auto_payout
 
 from .models import Order, OrderItem, Payment
 from .serializers import CheckoutSerializer, OrderSerializer
-from .services import get_payment_provider
+from .services import _adult_from_birth, _digits, get_payment_provider
 
 
 @login_required
 def my_purchases_page(request):
-    """Compras do usuário, com etapa do envio e confirmação de recebimento."""
+    """Compras do usuário logado."""
     orders = (
         Order.objects.filter(buyer=request.user)
         .exclude(status=Order.Status.AWAITING_PAYMENT)
@@ -35,37 +36,65 @@ def my_purchases_page(request):
     return render(request, "payments/my_purchases.html", {"orders": orders})
 
 
+def guest_order_page(request, token):
+    """Acompanhar pedido guest pelo link do e-mail (sem login)."""
+    order = get_object_or_404(
+        Order.objects.select_related("store", "shipment", "payment").prefetch_related("items__product"),
+        access_token=token,
+    )
+    return render(request, "payments/guest_order.html", {"order": order})
+
+
 class CheckoutView(APIView):
     """
-    POST /api/checkout/ — cria o pedido, a cobranca com split (o PSP
-    ja separa X% pra vendedora, resto pra plataforma) e o registro de
-    envio. Navegar e comprar não exigem assinatura - só é cobrado o
-    valor do pedido em si, no ato (docs/checkout.md - novo modelo de
-    negócio: sem taxa recorrente, comissão só na venda).
+    POST /api/checkout/ — compra com ou sem cadastro.
+
+    Split Asaas: vendedora recebe item (payout) + frete; plataforma recebe
+    so os 30%. Frete e so cotado — a vendedora posta por conta propria.
+    Guest: nome, e-mail, CPF, data de nascimento (+18), endereco, pagamento.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     throttle_scope = "checkout"
 
     @transaction.atomic
     def post(self, request):
-        buyer = request.user
-
-        if not buyer.is_phone_verified:
-            return Response(
-                {"detail": "Confirme seu celular (vinculado ao seu CPF) antes de comprar.",
-                 "action": "verify_phone"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        user = request.user if request.user.is_authenticated else None
 
         serializer = CheckoutSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
 
-        products = {p.id: p for p in Product.objects.select_for_update().filter(
-            id__in=[i["product_id"] for i in payload["items"]]
-        )}
+        if user:
+            customer_cpf = user.cpf
+            customer_name = user.get_full_name() or user.username
+            customer_email = user.email
+            guest_birth = None
+        else:
+            customer_cpf = _digits(payload["guest_cpf"])
+            customer_name = payload["guest_name"].strip()
+            customer_email = payload["guest_email"].strip()
+            guest_birth = payload["guest_birth_date"]
+            if len(customer_cpf) != 11:
+                return Response({"detail": "CPF inválido."}, status=status.HTTP_400_BAD_REQUEST)
+            if not _adult_from_birth(guest_birth):
+                return Response(
+                    {"detail": "Compras apenas para maiores de 18 anos."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        products = {
+            p.id: p
+            for p in Product.objects.select_for_update().filter(
+                id__in=[i["product_id"] for i in payload["items"]]
+            )
+        }
         store = next(iter(products.values())).store
+        if not store.psp_subaccount_id or not store.pix_key:
+            return Response(
+                {"detail": "Esta loja ainda não está apta a receber pagamentos."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         items_total = Decimal("0.00")
         order_items_data = []
@@ -92,22 +121,29 @@ class CheckoutView(APIView):
                 {"detail": "Opção de frete indisponível — recalcule o frete e tente de novo."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Embalagem padronizada comprada pela plataforma - custo embutido no
-        # frete cobrado do comprador (docs/checkout.md).
-        shipping_total = Decimal(str(chosen.price)) + settings.PACKAGING_FEE
+        shipping_total = Decimal(str(chosen.price))
 
+        access_token = secrets.token_urlsafe(32)
         order = Order.objects.create(
-            buyer=buyer,
+            buyer=user,
+            guest_name="" if user else customer_name,
+            guest_email="" if user else customer_email,
+            guest_cpf="" if user else customer_cpf,
+            guest_birth_date=guest_birth,
+            access_token=access_token,
             store=store,
             items_total=items_total,
             shipping_total=shipping_total,
-            packaging_fee=settings.PACKAGING_FEE,
+            packaging_fee=Decimal("0.00"),
             shipping_address=payload["shipping_address"],
         )
         for product, quantity in order_items_data:
             OrderItem.objects.create(
-                order=order, product=product, unit_price=product.price,
-                unit_payout_amount=product.payout_amount, quantity=quantity,
+                order=order,
+                product=product,
+                unit_price=product.price,
+                unit_payout_amount=product.payout_amount,
+                quantity=quantity,
             )
             product.stock -= quantity
             if product.stock == 0:
@@ -128,11 +164,9 @@ class CheckoutView(APIView):
             seller_subaccount_id=store.psp_subaccount_id,
             seller_amount=order.seller_amount,
             platform_amount=order.platform_amount,
-            # Cobranca amarrada ao CPF do titular da conta - identidade civil,
-            # nunca o apelido (ver apps.payments.services).
-            customer_cpf=buyer.cpf,
-            customer_name=buyer.get_full_name() or buyer.username,
-            customer_email=buyer.email,
+            customer_cpf=customer_cpf,
+            customer_name=customer_name,
+            customer_email=customer_email,
         )
         Payment.objects.create(
             order=order,
@@ -145,6 +179,8 @@ class CheckoutView(APIView):
                 "order": OrderSerializer(order).data,
                 "payment_url": charge.payment_url,
                 "pix_qr_code": charge.pix_qr_code,
+                "access_token": access_token,
+                "track_url": f"/pedido/{access_token}/",
             },
             status=status.HTTP_201_CREATED,
         )
@@ -153,15 +189,15 @@ class CheckoutView(APIView):
 @csrf_exempt
 def asaas_webhook(request):
     """
-    Webhook de confirmacao de pagamento do Asaas. Autenticado por
-    token compartilhado no header (nunca confiar so no payload).
-    Docs: https://docs.asaas.com/docs/webhook
+    Webhook Asaas. No PAYMENT_CONFIRMED: marca pago, split ja feito pelo
+    Asaas, e dispara Pix automatico pra chave da vendedora.
     """
     if request.method != "POST":
         return HttpResponse(status=405)
 
     token = request.headers.get("Asaas-Access-Token", "")
-    if not hmac.compare_digest(token, settings.ASAAS_WEBHOOK_TOKEN):
+    expected = getattr(settings, "ASAAS_WEBHOOK_TOKEN", "") or ""
+    if not expected or not hmac.compare_digest(token, expected):
         return HttpResponseForbidden("Token inválido.")
 
     import json
@@ -172,10 +208,10 @@ def asaas_webhook(request):
     provider_charge_id = charge_data.get("id")
 
     try:
-        payment = Payment.objects.select_related("order").get(provider_charge_id=provider_charge_id)
+        payment = Payment.objects.select_related("order", "order__store").get(
+            provider_charge_id=provider_charge_id
+        )
     except Payment.DoesNotExist:
-        # Nao e o pagamento de um pedido - pode ser a cobranca (sem split)
-        # de uma assinatura de compradora (ver apps.subscriptions.services).
         from apps.subscriptions.services import activate_subscription
 
         if event == "PAYMENT_CONFIRMED" and activate_subscription(provider_charge_id):
@@ -190,8 +226,6 @@ def asaas_webhook(request):
         from .services import verify_payer_cpf
         from .tasks import emit_invoice_for_order, send_order_confirmation_email
 
-        # Trava "pagamento so pelo CPF do titular": se o Pix veio de conta
-        # de terceiro, verify_payer_cpf ja disparou o estorno no PSP.
         if not verify_payer_cpf(payment, payload):
             payment.status = Payment.Status.REFUNDED
             payment.save()
@@ -209,17 +243,15 @@ def asaas_webhook(request):
         order.paid_at = timezone.now()
         order.save(update_fields=["status", "paid_at"])
 
-        credit_sale(order)
+        # Credita ledger e, se AUTO_PAYOUT_ON_PAYMENT, Pix imediato pra vendedora.
+        credit_and_auto_payout(order)
+
         from apps.stores.services import increment_sales_count
 
         increment_sales_count(order.store)
         send_order_confirmation_email.delay(str(order.id))
         emit_invoice_for_order.delay(str(order.id))
-        # Compra automatica da etiqueta (Melhor Envio) com o frete que o
-        # comprador ja pagou - a vendedora recebe o PDF por e-mail.
-        from apps.shipping.tasks import buy_label_for_order
-
-        buy_label_for_order.delay(str(order.id))
+        # Vendedora posta sozinha — nao compramos etiqueta pela plataforma.
 
     elif event in ("PAYMENT_REFUNDED", "PAYMENT_CHARGEBACK_REQUESTED"):
         payment.status = Payment.Status.REFUNDED

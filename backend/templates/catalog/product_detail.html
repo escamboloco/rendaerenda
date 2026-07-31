@@ -83,16 +83,21 @@
     {% if not product.is_available %}
     <p class="card px-4 py-3 text-sm text-gray-400">Este item já foi vendido.</p>
 
-    {% elif not request.user.is_authenticated %}
-    <a href="{% url 'account_login' %}?next={{ request.path }}" class="btn-primary w-full">Entrar para comprar</a>
-
-    {% elif not can_buy %}
-    <a href="{% url 'accounts_pages:phone_page' %}" class="btn-primary w-full">Verificar celular para comprar</a>
-
-    {% else %}
+    {% elif can_buy %}
     <div class="card p-4 space-y-4">
+      <p class="text-xs text-gray-500">O site apenas conecta comprador e vendedora. Quem vende e quem envia é a loja.</p>
       <template x-if="!charge">
         <div class="space-y-3">
+          {% if not is_authenticated %}
+          <div class="grid grid-cols-2 gap-2">
+            <input type="text" x-model="guest.name" placeholder="Seu nome" class="input-field col-span-2">
+            <input type="email" x-model="guest.email" placeholder="E-mail" class="input-field col-span-2">
+            <input type="text" x-model="guest.cpf" placeholder="CPF" maxlength="14" class="input-field">
+            <input type="date" x-model="guest.birth_date" class="input-field" title="Data de nascimento (+18)">
+          </div>
+          <p class="text-[11px] text-gray-500">Sem cadastro. Precisamos do CPF e da data de nascimento para confirmar que você tem 18+ e processar o Pix.</p>
+          {% endif %}
+
           <div class="flex gap-2">
             <input type="text" x-model="cep" maxlength="9" placeholder="CEP de entrega" class="input-field flex-1">
             <button type="button" class="btn-secondary shrink-0" @click="quoteFreight()" :disabled="loadingQuote">
@@ -108,10 +113,18 @@
                   <input type="radio" class="mr-1.5" :value="option.service" x-model="shippingService">
                   <span x-text="option.label"></span> · <span x-text="option.deadline_days + ' dias úteis'"></span>
                 </span>
-                <span x-text="'R$ ' + option.price.toFixed(2)"></span>
+                <span x-text="'R$ ' + Number(option.price).toFixed(2)"></span>
               </label>
             </template>
           </div>
+
+          <template x-if="shippingService">
+            <div class="rounded-xl bg-white/5 p-3 text-sm space-y-1">
+              <div class="flex justify-between"><span>Item</span><span>R$ {{ product.price }}</span></div>
+              <div class="flex justify-between text-gray-400"><span>Frete</span><span x-text="'R$ ' + freightPrice.toFixed(2)"></span></div>
+              <div class="flex justify-between font-bold text-brand pt-1 border-t border-white/10"><span>Total</span><span x-text="'R$ ' + ({{ product.price }} + freightPrice).toFixed(2)"></span></div>
+            </div>
+          </template>
 
           <template x-if="shippingService">
             <div class="grid grid-cols-2 gap-2">
@@ -134,7 +147,7 @@
           <p x-show="error" x-text="error" class="input-error"></p>
 
           <button x-show="shippingService" type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
-            <span x-show="!loadingCheckout">Comprar agora</span>
+            <span x-show="!loadingCheckout">Pagar agora</span>
             <span x-show="loadingCheckout">Processando…</span>
           </button>
         </div>
@@ -147,6 +160,7 @@
             <img :src="charge.pix_qr_code" alt="QR Code Pix" class="w-40 h-40">
           </div>
           <a x-show="charge.payment_url" :href="charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir cobrança</a>
+          <a x-show="trackUrl" :href="trackUrl" class="block text-sm text-brand underline">Acompanhar pedido</a>
         </div>
       </template>
     </div>
@@ -187,10 +201,16 @@ function productCheckout(productId) {
     shippingService: "",
     address: { street: "", number: "", neighborhood: "", city: "", state: "" },
     paymentMethod: "pix",
+    guest: { name: "", email: "", cpf: "", birth_date: "" },
     loadingQuote: false,
     loadingCheckout: false,
     error: "",
     charge: null,
+    trackUrl: "",
+    get freightPrice() {
+      const opt = this.freightOptions.find(o => o.service === this.shippingService);
+      return opt ? Number(opt.price) : 0;
+    },
     async quoteFreight() {
       this.error = "";
       this.loadingQuote = true;
@@ -212,24 +232,32 @@ function productCheckout(productId) {
       this.error = "";
       this.loadingCheckout = true;
       try {
+        const body = {
+          items: [{ product_id: productId, quantity: 1 }],
+          shipping_service: this.shippingService,
+          shipping_address: { cep: this.cep.replace(/\D/g, ""), ...this.address },
+          payment_method: this.paymentMethod,
+        };
+        {% if not is_authenticated %}
+        body.guest_name = this.guest.name;
+        body.guest_email = this.guest.email;
+        body.guest_cpf = this.guest.cpf;
+        body.guest_birth_date = this.guest.birth_date;
+        {% endif %}
         const resp = await fetch("{% url 'payments:checkout' %}", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
-          body: JSON.stringify({
-            items: [{ product_id: productId, quantity: 1 }],
-            shipping_service: this.shippingService,
-            shipping_address: { cep: this.cep.replace(/\D/g, ""), ...this.address },
-            payment_method: this.paymentMethod,
-          }),
+          body: JSON.stringify(body),
         });
         const data = await resp.json();
         if (!resp.ok) {
-          this.error = data.detail || "Não foi possível concluir a compra.";
+          this.error = data.detail || Object.values(data).flat().join(" ") || "Não foi possível concluir a compra.";
           return;
         }
-        this.charge = { payment_url: data.payment_url, pix_qr_code: data.pix_qr_code };
+        this.charge = data;
+        this.trackUrl = data.track_url || "";
       } catch (e) {
-        this.error = "Erro de conexão. Tente novamente.";
+        this.error = "Falha de conexão. Tente de novo.";
       } finally {
         this.loadingCheckout = false;
       }
