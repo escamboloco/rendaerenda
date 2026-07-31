@@ -11,7 +11,12 @@ from apps.payments.models import Order
 
 from .models import Shipment
 from .serializers import FreightOptionSerializer, FreightQuoteRequestSerializer, MarkPostedSerializer
-from .services import calculate_freight_options, save_quote
+from .services import (
+    calculate_freight_options,
+    products_are_payment_test,
+    save_quote,
+    test_free_freight_option,
+)
 from .tasks import send_shipment_posted_email
 
 
@@ -41,19 +46,23 @@ class FreightQuoteView(APIView):
         origin_cep = products[0].store.origin_cep
         declared_value = sum(p.price for p in products)
 
-        options = calculate_freight_options(
-            destination_cep=destination_cep,
-            weight_grams=total_weight,
-            length_cm=max((p.length_cm for p in products), default=16),
-            width_cm=max((p.width_cm for p in products), default=11),
-            height_cm=sum(p.height_cm for p in products),
-            origin_cep=origin_cep,
-            declared_value=declared_value,
-        )
+        if products_are_payment_test(products):
+            options = [test_free_freight_option()]
+            packaging = 0.0
+        else:
+            options = calculate_freight_options(
+                destination_cep=destination_cep,
+                weight_grams=total_weight,
+                length_cm=max((p.length_cm for p in products), default=16),
+                width_cm=max((p.width_cm for p in products), default=11),
+                height_cm=sum(p.height_cm for p in products),
+                origin_cep=origin_cep,
+                declared_value=declared_value,
+            )
+            packaging = float(settings.PACKAGING_FEE)
         for option in options:
             save_quote(destination_cep, total_weight, option)
 
-        packaging = float(settings.PACKAGING_FEE)
         return Response(
             FreightOptionSerializer(
                 [

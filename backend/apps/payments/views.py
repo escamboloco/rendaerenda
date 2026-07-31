@@ -15,7 +15,11 @@ from rest_framework.views import APIView
 
 from apps.catalog.models import Product
 from apps.shipping.models import Shipment
-from apps.shipping.services import calculate_freight_options
+from apps.shipping.services import (
+    calculate_freight_options,
+    products_are_payment_test,
+    test_free_freight_option,
+)
 from apps.wallet.services import credit_and_auto_payout
 
 from .models import Order, OrderItem, Payment
@@ -110,15 +114,18 @@ class CheckoutView(APIView):
             order_items_data.append((product, quantity))
 
         total_weight = sum(p.weight_grams * q for p, q in order_items_data)
-        freight_options = calculate_freight_options(
-            destination_cep=payload["shipping_address"]["cep"],
-            weight_grams=total_weight,
-            length_cm=max(p.length_cm for p, _ in order_items_data),
-            width_cm=max(p.width_cm for p, _ in order_items_data),
-            height_cm=sum(p.height_cm * q for p, q in order_items_data),
-            origin_cep=store.origin_cep,
-            declared_value=items_total,
-        )
+        if products_are_payment_test([p for p, _ in order_items_data]):
+            freight_options = [test_free_freight_option()]
+        else:
+            freight_options = calculate_freight_options(
+                destination_cep=payload["shipping_address"]["cep"],
+                weight_grams=total_weight,
+                length_cm=max(p.length_cm for p, _ in order_items_data),
+                width_cm=max(p.width_cm for p, _ in order_items_data),
+                height_cm=sum(p.height_cm * q for p, q in order_items_data),
+                origin_cep=store.origin_cep,
+                declared_value=items_total,
+            )
         try:
             chosen = next(o for o in freight_options if o.service == payload["shipping_service"])
         except StopIteration:

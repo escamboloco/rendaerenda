@@ -33,6 +33,25 @@ class CorreiosAuthError(Exception):
     pass
 
 
+def products_are_payment_test(products) -> bool:
+    """Itens do seed_payment_test (slug começa com teste-pagamento)."""
+    products = list(products)
+    return bool(products) and all(
+        getattr(p, "slug", "").startswith("teste-pagamento") for p in products
+    )
+
+
+def test_free_freight_option() -> FreightOption:
+    """Frete R$ 0 para fechar cobrança de teste em R$ 5,00."""
+    return FreightOption(
+        service="pac",
+        label="Frete teste (grátis)",
+        price=0.0,
+        deadline_days=1,
+        company="Teste",
+    )
+
+
 def _get_cws_token() -> str:
     resp = requests.post(
         CWS_AUTH_URL,
