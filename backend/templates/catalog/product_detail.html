@@ -85,7 +85,10 @@
 
     {% elif can_buy %}
     <div class="card p-4 space-y-4">
-      <p class="text-xs text-gray-500">O site apenas conecta comprador e vendedora. Quem vende e quem envia é a loja.</p>
+      <a href="{% url 'stores:detail' store.slug %}" class="btn-secondary w-full text-sm">
+        + Adicionar mais itens desta loja
+      </a>
+      <p class="text-xs text-gray-500">Ou finalize só este item abaixo. O site apenas conecta comprador e vendedora.</p>
       <template x-if="!charge">
         <div class="space-y-3">
           {% if not is_authenticated %}

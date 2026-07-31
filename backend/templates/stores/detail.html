@@ -5,6 +5,7 @@
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 
 {% block content %}
+<div x-data="storeCartCheckout()" class="pb-28">
 <section class="mb-8">
   <div class="card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4">
     <div class="w-20 h-20 rounded-full bg-white/10 avatar-ring shrink-0 flex items-center justify-center text-2xl font-bold text-gray-400">
@@ -40,7 +41,6 @@
       Pedido personalizado
     </button>
 
-    {# template x-if: sem Alpine o conteudo nao aparece na pagina (evita modal fantasma) #}
     <template x-if="open">
       <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" @keydown.escape.window="open = false">
         <div @click.outside="open = false" class="card p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
@@ -83,21 +83,38 @@
   {% endif %}
 </section>
 
+<p class="text-sm text-gray-400 mb-4">Selecione um ou mais itens e finalize a compra juntos (mesmo frete).</p>
+
 <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
   {% for product in products %}
-  <a href="{% url 'catalog:detail' store.slug product.slug %}" class="card card-hover">
-    <div class="aspect-square bg-white/5 overflow-hidden">
+  <div class="card overflow-hidden flex flex-col"
+       :class="selected['{{ product.id }}'] ? 'ring-2 ring-brand border-brand' : ''">
+    <a href="{% url 'catalog:detail' store.slug product.slug %}" class="aspect-square bg-white/5 overflow-hidden block">
       {% with cover=product.images.first %}
       {% if cover %}
       <img src="{{ cover.file.url }}" alt="{{ product.title }}" class="w-full h-full object-cover">
       {% endif %}
       {% endwith %}
-    </div>
-    <div class="p-3 space-y-1">
-      <p class="font-medium truncate">{{ product.title }}</p>
+    </a>
+    <div class="p-3 space-y-2 flex-1 flex flex-col">
+      <a href="{% url 'catalog:detail' store.slug product.slug %}" class="font-medium text-sm truncate block hover:underline">{{ product.title }}</a>
       <p class="text-brand font-bold">R$ {{ product.price }}</p>
+      <div class="mt-auto space-y-2">
+        <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+          <input type="checkbox"
+                 class="rounded border-surface-border"
+                 :checked="!!selected['{{ product.id }}']"
+                 @change="toggle('{{ product.id }}', {{ product.price }}, '{{ product.title|escapejs }}')">
+          Incluir na compra
+        </label>
+        <button type="button"
+                class="btn-primary w-full !py-2 !min-h-0 text-sm"
+                @click="buyOne('{{ product.id }}', {{ product.price }}, '{{ product.title|escapejs }}')">
+          Comprar
+        </button>
+      </div>
     </div>
-  </a>
+  </div>
   {% empty %}
   <p class="col-span-full text-gray-500 text-center py-12">Sem itens publicados.</p>
   {% endfor %}
@@ -120,4 +137,138 @@
   </div>
 </section>
 {% endif %}
+
+{# Barra fixa do carrinho #}
+<div x-show="count > 0 && !checkoutOpen"
+     x-transition
+     class="fixed bottom-0 inset-x-0 z-40 border-t border-surface-border bg-surface/95 backdrop-blur p-3 sm:p-4">
+  <div class="container-page flex items-center gap-3">
+    <div class="flex-1 min-w-0">
+      <p class="text-sm font-medium" x-text="count + (count === 1 ? ' item' : ' itens')"></p>
+      <p class="text-brand font-bold" x-text="'R$ ' + itemsTotal.toFixed(2)"></p>
+    </div>
+    <button type="button" class="btn-secondary !py-2 !min-h-0 text-sm" @click="clear()">Limpar</button>
+    <button type="button" class="btn-primary !py-2 !min-h-0 text-sm" @click="checkoutOpen = true">Finalizar compra</button>
+  </div>
+</div>
+
+{# Painel de checkout multi-item #}
+<template x-if="checkoutOpen">
+  <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70" @keydown.escape.window="!charge && (checkoutOpen = false)">
+    <div class="card w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-b-none sm:rounded-2xl p-5 sm:p-6 space-y-4" @click.outside="!charge && (checkoutOpen = false)">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-bold">Finalizar compra</h2>
+          <p class="text-xs text-gray-500 mt-0.5">Pix · frete único para todos os itens</p>
+        </div>
+        <button type="button" class="btn-ghost !min-h-0 !px-2" x-show="!charge" @click="checkoutOpen = false">Fechar</button>
+      </div>
+
+      <ul class="space-y-2 text-sm">
+        <template x-for="item in selectedList" :key="item.id">
+          <li class="flex justify-between gap-3 border-b border-white/5 pb-2">
+            <span class="truncate text-gray-300" x-text="item.title"></span>
+            <span class="font-medium shrink-0" x-text="'R$ ' + Number(item.price).toFixed(2)"></span>
+          </li>
+        </template>
+      </ul>
+
+      <template x-if="!charge">
+        <div class="space-y-3">
+          {% if not request.user.is_authenticated %}
+          <div class="grid grid-cols-2 gap-2">
+            <input type="text" x-model="guest.name" placeholder="Seu nome" class="input-field col-span-2">
+            <input type="email" x-model="guest.email" placeholder="E-mail" class="input-field col-span-2">
+            <input type="text" x-model="guest.cpf" placeholder="CPF" maxlength="14" class="input-field">
+            <input type="date" x-model="guest.birth_date" class="input-field" title="Data de nascimento (+18)">
+          </div>
+          <p class="text-[11px] text-gray-500">Sem cadastro. CPF e nascimento (+18) são necessários para o Pix.</p>
+          {% endif %}
+
+          <div class="flex gap-2">
+            <input type="text" x-model="cep" maxlength="9" placeholder="CEP de entrega" class="input-field flex-1">
+            <button type="button" class="btn-secondary shrink-0" @click="quoteFreight()" :disabled="loadingQuote">
+              <span x-show="!loadingQuote">Calcular frete</span>
+              <span x-show="loadingQuote">…</span>
+            </button>
+          </div>
+
+          <div x-show="freightOptions.length" class="space-y-2">
+            <template x-for="option in freightOptions" :key="option.service">
+              <label class="chip w-full justify-between" :class="shippingService === option.service ? 'chip-active' : ''">
+                <span>
+                  <input type="radio" class="mr-1.5" :value="option.service" x-model="shippingService">
+                  <span x-text="option.label"></span> · <span x-text="option.deadline_days + ' dias úteis'"></span>
+                </span>
+                <span x-text="'R$ ' + Number(option.price).toFixed(2)"></span>
+              </label>
+            </template>
+          </div>
+
+          <template x-if="shippingService">
+            <div class="rounded-xl bg-white/5 p-3 text-sm space-y-1">
+              <div class="flex justify-between"><span>Itens</span><span x-text="'R$ ' + itemsTotal.toFixed(2)"></span></div>
+              <div class="flex justify-between text-gray-400"><span>Frete</span><span x-text="'R$ ' + freightPrice.toFixed(2)"></span></div>
+              <div class="flex justify-between font-bold text-brand pt-1 border-t border-white/10">
+                <span>Total</span>
+                <span x-text="'R$ ' + (itemsTotal + freightPrice).toFixed(2)"></span>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="shippingService">
+            <div class="grid grid-cols-2 gap-2">
+              <input type="text" x-model="address.street" placeholder="Rua" class="input-field col-span-2">
+              <input type="text" x-model="address.number" placeholder="Número" class="input-field">
+              <input type="text" x-model="address.neighborhood" placeholder="Bairro" class="input-field">
+              <input type="text" x-model="address.city" placeholder="Cidade" class="input-field">
+              <input type="text" x-model="address.state" placeholder="UF" maxlength="2" class="input-field">
+            </div>
+          </template>
+
+          <template x-if="shippingService">
+            <label class="flex items-start gap-2 text-xs text-gray-400 cursor-pointer">
+              <input type="checkbox" x-model="marketingOptIn" class="mt-0.5">
+              <span>Quero receber novidades por e-mail (opcional).</span>
+            </label>
+          </template>
+
+          <p x-show="error" x-text="error" class="input-error"></p>
+
+          <button x-show="shippingService" type="button" class="btn-primary w-full" @click="checkout()" :disabled="loadingCheckout">
+            <span x-show="!loadingCheckout">Pagar com Pix</span>
+            <span x-show="loadingCheckout">Processando…</span>
+          </button>
+        </div>
+      </template>
+
+      <template x-if="charge">
+        <div class="text-center space-y-3">
+          <p class="text-sm text-gray-300">Pedido criado! Pague com Pix (mesmo CPF informado):</p>
+          <div x-show="charge.pix_qr_code" class="bg-white p-3 rounded-xl inline-block">
+            <img :src="charge.pix_qr_code" alt="QR Code Pix" class="w-40 h-40">
+          </div>
+          <template x-if="charge.pix_copy_paste">
+            <div class="text-left space-y-1">
+              <p class="text-xs text-gray-500">Pix copia e cola</p>
+              <textarea class="input-field text-xs font-mono h-24" readonly x-model="charge.pix_copy_paste" @click="$event.target.select()"></textarea>
+              <button type="button" class="btn-secondary w-full text-sm" @click="navigator.clipboard.writeText(charge.pix_copy_paste)">Copiar código Pix</button>
+            </div>
+          </template>
+          <a x-show="charge.payment_url" :href="charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir cobrança Asaas</a>
+          <a x-show="trackUrl" :href="trackUrl" class="block text-sm text-brand underline">Acompanhar pedido</a>
+        </div>
+      </template>
+    </div>
+  </div>
+</template>
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+window.STORE_CART_AUTH = {{ request.user.is_authenticated|yesno:"true,false" }};
+window.STORE_CART_QUOTE_URL = "{% url 'shipping:quote' %}";
+window.STORE_CART_CHECKOUT_URL = "{% url 'payments:checkout' %}";
+</script>
 {% endblock %}
