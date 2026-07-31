@@ -31,11 +31,15 @@ function reportModal(targetType, objectId) {
   };
 }
 
-function storeCartCheckout() {
-  const isAuth = !!window.STORE_CART_AUTH;
+function storeCartCheckout(config) {
+  const cfg = config || {};
+  const isAuth = !!cfg.auth;
+  const quoteUrl = cfg.quoteUrl || "/api/frete/cotacao/";
+  const checkoutUrl = cfg.checkoutUrl || "/api/checkout/";
   return {
     selected: {},
     checkoutOpen: false,
+    ignoreOutside: false,
     cep: "",
     freightOptions: [],
     shippingService: "",
@@ -60,6 +64,9 @@ function storeCartCheckout() {
       const opt = this.freightOptions.find((o) => o.service === this.shippingService);
       return opt ? Number(opt.price) : 0;
     },
+    get grandTotal() {
+      return this.itemsTotal + this.freightPrice;
+    },
     toggle(id, price, title) {
       if (this.selected[id]) {
         const next = { ...this.selected };
@@ -77,13 +84,30 @@ function storeCartCheckout() {
       this.freightOptions = [];
       this.shippingService = "";
       this.charge = null;
+      this.openCheckout();
+    },
+    openCheckout() {
+      if (!this.count) return;
+      this.error = "";
+      // Evita o mesmo clique do botao fechar o modal via click.outside.
+      this.ignoreOutside = true;
       this.checkoutOpen = true;
+      this.$nextTick(() => {
+        setTimeout(() => {
+          this.ignoreOutside = false;
+        }, 200);
+      });
+    },
+    closeCheckout() {
+      if (this.charge || this.ignoreOutside) return;
+      this.checkoutOpen = false;
     },
     clear() {
       this.selected = {};
       this.freightOptions = [];
       this.shippingService = "";
       this.charge = null;
+      this.checkoutOpen = false;
     },
     async quoteFreight() {
       this.error = "";
@@ -93,7 +117,7 @@ function storeCartCheckout() {
       }
       this.loadingQuote = true;
       try {
-        const resp = await fetch(window.STORE_CART_QUOTE_URL, {
+        const resp = await fetch(quoteUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
           body: JSON.stringify({
@@ -131,7 +155,7 @@ function storeCartCheckout() {
           body.guest_cpf = this.guest.cpf;
           body.guest_birth_date = this.guest.birth_date;
         }
-        const resp = await fetch(window.STORE_CART_CHECKOUT_URL, {
+        const resp = await fetch(checkoutUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
           body: JSON.stringify(body),
