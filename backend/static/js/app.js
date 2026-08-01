@@ -411,6 +411,7 @@ function checkoutFunnel(config) {
     cepLoading: false,
     cepError: "",
     marketingOptIn: false,
+    paymentMethod: "pix",
     guest: { name: "", email: "", cpf: "", birth_date: "" },
     address: {
       cep: "",
@@ -585,7 +586,7 @@ function checkoutFunnel(config) {
                 state: this.address.state.trim().toUpperCase(),
               }
             : {},
-          payment_method: "pix",
+          payment_method: this.paymentMethod,
           marketing_opt_in: !!this.marketingOptIn,
         };
         if (!this.isAuth) {
@@ -604,6 +605,10 @@ function checkoutFunnel(config) {
         this.orderToken = data.access_token || "";
         this.step = 3;
         this.cart.clear();
+        // Cartão é pago na página do Asaas: abre já, sem um clique a mais.
+        if (this.paymentMethod === "credit_card" && data.payment_url) {
+          window.open(data.payment_url, "_blank", "noopener");
+        }
         try {
           sessionStorage.removeItem("rr.checkout");
         } catch (e) {
@@ -743,6 +748,64 @@ function orderRelease(token) {
     dispute() {
       if (!window.confirm("Abrir contestação? O pagamento fica travado até a moderação analisar.")) return;
       this.send("dispute");
+    },
+  };
+}
+
+/* Conversa privada do pedido (comprador <-> vendedora). */
+function orderChat(token) {
+  return {
+    messages: [],
+    role: "buyer",
+    text: "",
+    loading: false,
+    sending: false,
+    error: "",
+    timer: null,
+
+    init() {
+      this.load();
+      // Sem websocket: o pedido tem duas pessoas conversando, um poll
+      // lento resolve sem custo de infra.
+      this.timer = setInterval(() => this.load(), 20000);
+    },
+
+    async load() {
+      try {
+        const response = await fetch(`/api/pedido/${token}/mensagens/`, {
+          credentials: "same-origin",
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        this.messages = data.messages;
+        this.role = data.role;
+      } catch (e) {
+        /* silencioso: e so atualizacao de fundo */
+      }
+    },
+
+    async send() {
+      const body = this.text.trim();
+      if (!body) return;
+      this.sending = true;
+      this.error = "";
+      try {
+        const { ok, data } = await postJSON(`/api/pedido/${token}/mensagens/`, { body });
+        if (!ok) {
+          this.error = errorMessage(data, "Não foi possível enviar.");
+          return;
+        }
+        this.messages = [...this.messages, data];
+        this.text = "";
+        this.$nextTick(() => {
+          const box = document.getElementById("chat-scroll");
+          if (box) box.scrollTop = box.scrollHeight;
+        });
+      } catch (e) {
+        this.error = "Falha de conexão. Tente de novo.";
+      } finally {
+        this.sending = false;
+      }
     },
   };
 }

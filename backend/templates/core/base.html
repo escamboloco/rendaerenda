@@ -60,6 +60,7 @@ aninhados (x-data proprio) continuam funcionando normalmente.
           {% if request.user.role == 'seller' %}
             {% if request.user.has_store %}
               <a href="{% url 'catalog:create' %}" class="nav-link hidden lg:inline">Anunciar</a>
+              <a href="{% url 'catalog:seller_questions' %}" class="nav-link hidden xl:inline">Perguntas</a>
             {% endif %}
             <a href="{% url 'wallet:dashboard' %}" class="nav-link hidden md:inline">Carteira</a>
           {% endif %}

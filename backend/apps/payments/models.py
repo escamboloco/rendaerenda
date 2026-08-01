@@ -168,6 +168,34 @@ class OrderItem(models.Model):
         return self.unit_payout_amount * self.quantity + self.addons_payout
 
 
+class OrderMessage(models.Model):
+    """
+    Conversa privada entre comprador e vendedora, presa a um pedido.
+
+    Existe para o combinado de item sob encomenda e para resolver dúvida
+    de entrega sem ninguém precisar trocar telefone. Passa pelo mesmo
+    filtro anti-contato-externo do resto da plataforma: a conversa tem
+    que ficar aqui, onde a moderação enxerga (docs/BASE_JURIDICA.md § 3).
+    """
+
+    class Sender(models.TextChoices):
+        BUYER = "buyer", "Comprador"
+        SELLER = "seller", "Vendedora"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="messages")
+    sender = models.CharField(max_length=6, choices=Sender.choices)
+    body = models.TextField(max_length=1000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [models.Index(fields=["order", "created_at"])]
+
+    def __str__(self):
+        return f"{self.get_sender_display()} — pedido {self.order.short_id}"
+
+
 class Payment(models.Model):
     """Registro da cobranca no PSP (Asaas/Iugu) para o pedido."""
 

@@ -25,7 +25,7 @@ from .checkout import (
     reserve_order,
     sync_payment_status,
 )
-from .models import Order, Payment
+from .models import Order, OrderMessage, Payment
 from .serializers import CheckoutSerializer, OrderSerializer
 from .services import _digits, is_adult
 
@@ -351,16 +351,96 @@ class OrderConfirmView(APIView):
             return Response({"status": "confirmed"})
 
         if action == "dispute":
+            from .tasks import send_dispute_opened_email
+
             if shipment:
                 shipment.buyer_disputed_at = now
                 shipment.save(update_fields=["buyer_disputed_at"])
             order.status = Order.Status.DISPUTED
             order.save(update_fields=["status"])
             logger.warning("Contestacao aberta no pedido %s", order.id)
+            try:
+                send_dispute_opened_email.delay(str(order.id))
+            except Exception:
+                logger.exception("Falha ao avisar da contestacao do pedido %s", order.id)
             return Response({"status": "disputed"})
 
         return Response(
             {"detail": "Ação inválida (use confirm ou dispute)."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+class OrderMessagesView(APIView):
+    """
+    GET/POST /api/pedido/<token>/mensagens/ — conversa do pedido.
+
+    Quem é quem: a vendedora é identificada pela conta (dona da loja do
+    pedido); qualquer outra pessoa com o token é o comprador. O token do
+    pedido é o segredo que dá acesso — é o mesmo que abre a página.
+    """
+
+    permission_classes = [AllowAny]
+    throttle_scope = "offers"
+
+    def _order_and_role(self, request, token):
+        order = get_object_or_404(Order.objects.select_related("store"), access_token=token)
+        is_seller = (
+            request.user.is_authenticated and order.store.owner_id == request.user.id
+        )
+        return order, (OrderMessage.Sender.SELLER if is_seller else OrderMessage.Sender.BUYER)
+
+    def get(self, request, token):
+        order, role = self._order_and_role(request, token)
+        messages = order.messages.all()[:200]
+        return Response(
+            {
+                "role": role,
+                "messages": [
+                    {
+                        "id": str(m.id),
+                        "sender": m.sender,
+                        "mine": m.sender == role,
+                        "body": m.body,
+                        "created_at": m.created_at,
+                    }
+                    for m in messages
+                ],
+            }
+        )
+
+    def post(self, request, token):
+        from apps.moderation.services import run_automated_filters
+
+        order, role = self._order_and_role(request, token)
+        if order.status in (Order.Status.EXPIRED, Order.Status.CANCELED):
+            return Response(
+                {"detail": "Este pedido não está mais ativo."}, status=status.HTTP_409_CONFLICT
+            )
+
+        body = (request.data.get("body") or "").strip()
+        if not 1 <= len(body) <= 1000:
+            return Response({"detail": "Escreva uma mensagem."}, status=status.HTTP_400_BAD_REQUEST)
+        if run_automated_filters(title="", description=body):
+            return Response(
+                {
+                    "detail": (
+                        "A conversa precisa ficar na plataforma. Combinar contato ou "
+                        "pagamento por fora não é permitido — e tira a sua proteção."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        message = OrderMessage.objects.create(order=order, sender=role, body=body)
+        return Response(
+            {
+                "id": str(message.id),
+                "sender": message.sender,
+                "mine": True,
+                "body": message.body,
+                "created_at": message.created_at,
+            },
+            status=status.HTTP_201_CREATED,
         )
 
 

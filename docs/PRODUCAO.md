@@ -64,19 +64,57 @@ Antes de abrir para volume, decida:
 
 | Item | Situação | Risco de deixar assim |
 |---|---|---|
-| Verificação biométrica de idade (`AGE_KYC_API_KEY`) | Não contratada; webhook fica fechado (503) | O age gate é só declaratório. É a maior dívida legal do projeto (Lei 15.211/2025) |
+| Verificação biométrica de idade | Código pronto, provider **não contratado** | O age gate é só declaratório. É a maior dívida legal do projeto (Lei 15.211/2025) |
 | KYC de vendedora (`REQUIRE_SELLER_KYC=False`) | Desligado no soft-launch | Qualquer conta abre loja |
 | Verificação de telefone (bureau + SMS) | Sem provider configurado | Pedido personalizado exige `is_phone_verified`, então fica bloqueado na prática |
 | NFS-e (`NFSE_PROVIDER_API_KEY`) | Não configurada; a task pula sem erro | Comissão sem nota fiscal |
 | Cotação de frete real | `CHECKOUT_FREE_SHIPPING=True` (frete R$ 0) | A vendedora paga o envio do próprio bolso |
-| Cartão de crédito | Só Pix implementado | Perde conversão de quem não usa Pix |
+| Cartão de crédito | Funciona pela página hospedada do Asaas (sem formulário no site) | Um passo a mais que o Pix; parcelamento fica nas mãos do Asaas |
 | Boost de loja | `StoreBoostPurchaseView` cria o boost sem cobrar | Receita não realizada — desative a compra ou implemente a cobrança |
 | Mídia em disco do Render | `/var/data` com 5 GB | Disco cheio derruba upload; migrar para S3 antes de escalar |
-| Painel da vendedora para tipo/adicionais/arquivos | Só pelo admin do Django | A vendedora não consegue criar anúncio digital nem adicional sozinha |
-| Chat comprador↔vendedora | Só perguntas públicas no anúncio | Combinado de item sob encomenda fica sem canal privado |
-| Reembolso do valor em custódia | A contestação trava o repasse, mas o estorno é manual no painel do Asaas | Devolução depende de ação humana |
+| Anexo no chat do pedido | Só texto | Comprovante de postagem tem que ir por e-mail |
+| Moderação de anúncio | Fila existe, aprovação é manual no admin | Sem revisor ativo, anúncio novo não vai ao ar |
 
-## 5. Monitoramento mínimo
+## 5. Ligando a verificação biométrica de idade
+
+O código está pronto e desligado por falta de contrato. Para ativar:
+
+1. Contrate um bureau (idwall, Unico, CAF, Serpro Datavalid) declarando o
+   nicho — o mesmo cuidado do PSP.
+2. Preencha no ambiente:
+   - `AGE_KYC_PROVIDER` — nome do bureau (só rotula o registro);
+   - `AGE_KYC_API_URL` — **endpoint exato do contrato**. Não é derivado do
+     nome do provider de propósito: cada bureau tem rota e payload próprios;
+   - `AGE_KYC_API_KEY` — chave do contrato, que também autentica o webhook.
+3. Configure o callback do bureau para `https://rendaerenda.com.br/webhooks/kyc/`
+   com o header `X-Kyc-Webhook-Token` = `AGE_KYC_API_KEY`.
+4. Confira que o payload do bureau bate com o esperado em
+   `apps/accounts/services.apply_verification_result`: `reference_id`,
+   `approved`, `document_validated` e `birth_date`. Se o formato for outro,
+   adapte **só essa função** — o resto do fluxo não muda.
+5. Ligue `REQUIRE_SELLER_KYC=True` para exigir aprovação antes de abrir loja.
+
+Enquanto estiver desligado: `POST /api/verificacao-idade/` responde 503 e o
+webhook responde 503 — ninguém é aprovado por engano. A idade oficial sempre
+vem de `validated_birth_date` (base do CPF), nunca da data digitada, e menor
+confirmado é banido na hora.
+
+## 6. Resolvendo uma disputa
+
+O comprador contesta pela página do pedido; o valor fica travado na custódia.
+Para fechar o caso, no **admin → Pedidos**, selecione o pedido e use uma das
+duas ações:
+
+- **Disputa procedente: estornar para o comprador** — pede o estorno ao Asaas,
+  desfaz o crédito da vendedora e devolve o item para a vitrine.
+- **Disputa improcedente: liberar o valor para a vendedora** — tira da custódia
+  e dispara o Pix.
+
+Se o estorno acontecer **depois** de o Pix já ter saído (caso raro: liberação
+automática antes da contestação), o ajuste deixa o saldo da loja negativo de
+propósito e um ERROR vai para o log — recuperar o valor é ação humana.
+
+## 7. Monitoramento mínimo
 
 - Render → Logs: procurar por `Falha no repasse`, `Falha no Pix automatico`,
   `Asaas` com nível ERROR.

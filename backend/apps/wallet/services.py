@@ -66,6 +66,42 @@ def credit_sale(order: Order) -> tuple[WalletEntry, bool]:
     return entry, created
 
 
+def reverse_sale_credit(order: Order) -> bool:
+    """
+    Estorna o crédito da venda quando o pedido é reembolsado.
+
+    Sem isso, um reembolso depois da confirmação deixaria o valor na
+    carteira da vendedora — ela sacaria um dinheiro que voltou para quem
+    comprou. Idempotente: só lança o ajuste uma vez.
+    """
+    credit = order.wallet_entries.filter(kind=WalletEntry.Kind.SALE_CREDIT).first()
+    if not credit:
+        return False
+    already_reversed = order.wallet_entries.filter(
+        kind=WalletEntry.Kind.ADJUSTMENT, amount=-credit.amount
+    ).exists()
+    if already_reversed:
+        return False
+
+    WalletEntry.objects.create(
+        store=order.store,
+        order=order,
+        kind=WalletEntry.Kind.ADJUSTMENT,
+        amount=-credit.amount,
+        available_at=timezone.now(),
+    )
+    if order.payout_sent_at:
+        # O Pix já saiu: o ajuste deixa o saldo negativo de propósito, para
+        # aparecer na conciliação. Recuperar o valor é ação humana.
+        logger.error(
+            "Pedido %s reembolsado DEPOIS do repasse — saldo da loja %s ficou negativo, "
+            "cobrança do valor precisa ser tratada manualmente.",
+            order.id,
+            order.store_id,
+        )
+    return True
+
+
 def release_sale(order: Order) -> bool:
     """
     Tira o pedido da custódia: o saldo vira sacável agora. Idempotente —

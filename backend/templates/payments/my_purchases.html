@@ -13,7 +13,9 @@
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <p class="font-semibold">
+          {% if order.access_token %}
           <a href="{% url 'payments_pages:guest_order' order.access_token %}" class="hover:underline">#{{ order.short_id }}</a>
+          {% else %}#{{ order.short_id }}{% endif %}
           · {{ order.store.display_name }}
         </p>
         <p class="text-xs text-gray-500">{{ order.created_at|date:"d/m/Y" }} · {{ order.items.count }} item(ns)</p>
@@ -23,8 +25,10 @@
 
     {% if order.is_open_for_payment %}
     <div class="card bg-amber-400/5 border-amber-400/20 p-4 flex items-center justify-between gap-3">
-      <p class="text-sm text-amber-200">Pix ainda não pago — as peças estão reservadas por tempo limitado.</p>
+      <p class="text-sm text-amber-200">Pagamento ainda não confirmado — as peças estão reservadas por tempo limitado.</p>
+      {% if order.access_token %}
       <a href="{% url 'payments_pages:guest_order' order.access_token %}" class="btn-primary !py-2 !min-h-0 text-sm shrink-0">Pagar agora</a>
+      {% endif %}
     </div>
     {% else %}
 

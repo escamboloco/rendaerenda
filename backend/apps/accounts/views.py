@@ -51,8 +51,20 @@ class AgeVerificationRequestView(APIView):
     throttle_scope = "checkout"
 
     def post(self, request):
+        from .services import is_configured
+
         if request.user.is_age_verified:
             return Response({"detail": "Já verificado."})
+        if not is_configured():
+            return Response(
+                {
+                    "detail": (
+                        "A verificação por biometria ainda não está ativa nesta instalação. "
+                        "Configure AGE_KYC_API_URL e AGE_KYC_API_KEY."
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         serializer = AgeVerificationRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

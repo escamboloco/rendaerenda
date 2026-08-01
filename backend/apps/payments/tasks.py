@@ -95,6 +95,41 @@ def send_seller_new_sale_email(order_id: str):
     )
 
 
+@shared_task
+def send_dispute_opened_email(order_id: str):
+    """
+    Avisa a vendedora e a moderação que uma contestação foi aberta.
+
+    Sem o título do item no corpo (política de discrição) e sem derrubar
+    a resposta da API se o SMTP falhar.
+    """
+    from django.utils import timezone
+
+    from .models import Order
+
+    order = Order.objects.select_related("store__owner").get(id=order_id)
+    context = {
+        "order": order,
+        "site_name": settings.SITE_NAME,
+        "opened_at": timezone.now(),
+        "order_url": _site_url(order.track_url),
+    }
+    subject = f"Contestação aberta — pedido #{order.short_id}"
+
+    seller_email = getattr(order.store.owner, "email", "") or ""
+    if seller_email:
+        _safe_send(subject, "emails/dispute_opened.txt", {**context, "is_seller": True}, seller_email)
+
+    moderation_email = (getattr(settings, "MODERATION_ALERT_EMAIL", "") or "").strip()
+    if moderation_email:
+        _safe_send(subject, "emails/dispute_opened.txt", {**context, "is_seller": False}, moderation_email)
+    else:
+        logger.warning(
+            "Contestacao no pedido %s sem MODERATION_ALERT_EMAIL configurado — ninguem foi avisado.",
+            order_id,
+        )
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def emit_invoice_for_order(self, order_id: str):
     """NFS-e da COMISSAO da plataforma sobre o pedido + e-mail com o link."""

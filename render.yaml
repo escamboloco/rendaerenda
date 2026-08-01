@@ -97,6 +97,9 @@ envVarGroups:
         value: "True"
       - key: DEFAULT_FROM_EMAIL
         value: "Renda & Renda <no-reply@rendaerenda.com.br>"
+      # Caixa que recebe alerta de contestacao — sem isso ninguem e avisado.
+      - key: MODERATION_ALERT_EMAIL
+        sync: false
       - key: MEDIA_ROOT
         value: "/var/data/media"
       # Cria loja teste com 3 itens a R$ 5 em todo deploy (idempotente).

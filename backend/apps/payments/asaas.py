@@ -196,6 +196,10 @@ class AsaasClient:
             self.attach_pix(payment)
         return payment
 
+    def payment_link(self, payment_id: str) -> str | None:
+        """invoiceUrl da cobranca — a pagina hospedada onde o cartao e pago."""
+        return self.get_payment(payment_id).invoice_url
+
     def get_payment(self, payment_id: str) -> AsaasPayment:
         return self._to_payment(self._request("GET", f"/payments/{payment_id}"))
 

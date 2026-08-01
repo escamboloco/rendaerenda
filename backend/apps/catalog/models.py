@@ -52,7 +52,13 @@ class Product(models.Model):
         PUBLISHED = "published", "Publicado"
         REJECTED = "rejected", "Rejeitado"
         SOLD = "sold", "Vendido"
+        # Tirado do ar pela propria vendedora - reversivel, diferente de
+        # REMOVED (retirada pela moderacao).
+        PAUSED = "paused", "Pausado"
         REMOVED = "removed", "Removido"
+
+    # Estados em que a vendedora ainda manda no anuncio (pode editar/pausar).
+    SELLER_EDITABLE_STATUSES = ("draft", "pending", "published", "paused", "sold")
 
     class Visibility(models.TextChoices):
         PUBLIC = "public", "Público"

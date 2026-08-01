@@ -320,6 +320,15 @@ def create_charge_for_order(order: Order, *, method: str = "pix") -> Payment:
             status_code=502,
         ) from exc
 
+    if method != "pix" and not charge.payment_url:
+        # Cartão depende da página hospedada do Asaas: sem ela, a pessoa
+        # ficaria com um pedido sem nenhuma forma de pagar.
+        cancel_order(order, reason="sem_link_pagamento")
+        raise CheckoutError(
+            "Não foi possível abrir a página de pagamento. Nada foi cobrado — tente com Pix.",
+            status_code=502,
+        )
+
     payment = Payment.objects.create(
         order=order,
         provider_charge_id=charge.provider_charge_id,
@@ -416,6 +425,12 @@ def _dispatch_paid_notifications(order: Order) -> None:
 
 
 def mark_refunded(payment: Payment, *, reason: str = "estorno") -> None:
+    """
+    Registra o estorno no nosso lado (o dinheiro já voltou no PSP).
+    Devolve o estoque e desfaz o crédito da vendedora.
+    """
+    from apps.wallet.services import reverse_sale_credit
+
     with transaction.atomic():
         locked = Payment.objects.select_for_update().select_related("order").get(pk=payment.pk)
         if locked.status == Payment.Status.REFUNDED:
@@ -426,7 +441,30 @@ def mark_refunded(payment: Payment, *, reason: str = "estorno") -> None:
         order.status = Order.Status.REFUNDED
         order.canceled_reason = reason[:80]
         order.save(update_fields=["status", "canceled_reason"])
+
+    reverse_sale_credit(order)
     restore_stock(order)
+
+
+def refund_order(order: Order, *, reason: str = "disputa") -> bool:
+    """
+    Reembolsa de verdade: pede o estorno ao PSP e só então desfaz tudo
+    do nosso lado. É o desfecho de uma contestação aceita.
+
+    Retorna False se não havia cobrança para estornar.
+    """
+    payment = getattr(order, "payment", None)
+    if payment is None or not payment.provider_charge_id:
+        logger.warning("Pedido %s sem cobrança — nada a estornar.", order.id)
+        return False
+    if payment.status == Payment.Status.REFUNDED:
+        return True
+
+    provider = services.get_payment_provider()
+    provider.refund_charge(provider_charge_id=payment.provider_charge_id)
+    mark_refunded(payment, reason=reason)
+    logger.info("Pedido %s estornado (%s).", order.id, reason)
+    return True
 
 
 # --------------------------------------------------------------------------

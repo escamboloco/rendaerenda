@@ -148,6 +148,28 @@
           </div>
         </div>
 
+        <div class="space-y-2">
+          <p class="input-label">Como você quer pagar</p>
+          <label class="flex items-center gap-3 rounded-xl border px-3 py-3 cursor-pointer transition"
+                 :class="paymentMethod === 'pix' ? 'border-brand bg-brand/10' : 'border-surface-border hover:border-brand/50'">
+            <input type="radio" value="pix" x-model="paymentMethod">
+            <span class="flex-1">
+              <span class="block text-sm font-medium">Pix</span>
+              <span class="block text-[11px] text-gray-500">Confirma na hora, aqui mesmo nesta página.</span>
+            </span>
+          </label>
+          <label class="flex items-center gap-3 rounded-xl border px-3 py-3 cursor-pointer transition"
+                 :class="paymentMethod === 'credit_card' ? 'border-brand bg-brand/10' : 'border-surface-border hover:border-brand/50'">
+            <input type="radio" value="credit_card" x-model="paymentMethod">
+            <span class="flex-1">
+              <span class="block text-sm font-medium">Cartão de crédito</span>
+              <span class="block text-[11px] text-gray-500">
+                Abre a página segura do Asaas. Seus dados de cartão não passam por este site.
+              </span>
+            </span>
+          </label>
+        </div>
+
         <label class="flex items-start gap-2 text-xs text-gray-400 cursor-pointer">
           <input type="checkbox" x-model="marketingOptIn" class="mt-0.5">
           <span>Quero receber novidades por e-mail (opcional, sem conteúdo explícito).</span>
@@ -184,10 +206,14 @@
         <template x-if="!paid">
           <div class="space-y-5">
             <div class="text-center space-y-1">
-              <h1 class="text-xl font-bold">Falta só o Pix</h1>
-              <p class="text-sm text-gray-400">
+              <h1 class="text-xl font-bold" x-text="paymentMethod === 'pix' ? 'Falta só o Pix' : 'Falta só o pagamento'"></h1>
+              <p class="text-sm text-gray-400" x-show="paymentMethod === 'pix'">
                 Abra o app do banco, escaneie o QR ou cole o código.
                 Use o <strong class="text-white">mesmo CPF</strong> informado na compra.
+              </p>
+              <p class="text-sm text-gray-400" x-cloak x-show="paymentMethod === 'credit_card'">
+                A página segura do Asaas abriu em outra aba. Se não abriu, use o botão abaixo —
+                esta tela confirma sozinha assim que o pagamento for aprovado.
               </p>
             </div>
 
@@ -201,7 +227,7 @@
               caso contrário, monte a sacola de novo.
             </div>
 
-            <template x-if="charge && charge.pix_qr_code">
+            <template x-if="paymentMethod === 'pix' && charge && charge.pix_qr_code">
               <div class="flex justify-center">
                 <div class="bg-white p-3 rounded-2xl">
                   <img :src="charge.pix_qr_code" alt="QR Code Pix" class="w-52 h-52 block">
@@ -209,7 +235,7 @@
               </div>
             </template>
 
-            <template x-if="charge && charge.pix_copy_paste">
+            <template x-if="paymentMethod === 'pix' && charge && charge.pix_copy_paste">
               <div class="space-y-2">
                 <p class="input-label">Pix copia e cola</p>
                 <textarea readonly rows="3" class="input-field font-mono text-xs"
@@ -222,9 +248,9 @@
             </template>
 
             <template x-if="charge && charge.payment_url">
-              <a :href="charge.payment_url" target="_blank" rel="noopener" class="btn-secondary w-full">
-                Abrir a página de pagamento do Asaas
-              </a>
+              <a :href="charge.payment_url" target="_blank" rel="noopener"
+                 :class="paymentMethod === 'credit_card' ? 'btn-primary w-full' : 'btn-secondary w-full'"
+                 x-text="paymentMethod === 'credit_card' ? 'Pagar com cartão no Asaas' : 'Abrir a página de pagamento do Asaas'"></a>
             </template>
 
             <div class="flex items-center justify-center gap-2 text-xs text-gray-500">

@@ -79,8 +79,9 @@ class CheckoutSerializer(serializers.Serializer):
     )
     # Opcional: pedido só de conteúdo digital não tem entrega física.
     shipping_address = serializers.JSONField(required=False, default=dict)
-    # Soft-launch: so Pix (cartao exige tokenizacao Asaas, ainda nao ligada).
-    payment_method = serializers.ChoiceField(choices=["pix"], default="pix")
+    # Cartão é pago na página hospedada do Asaas (invoiceUrl) — nenhum dado
+    # de cartão passa pelo nosso servidor, então não há escopo PCI aqui.
+    payment_method = serializers.ChoiceField(choices=["pix", "credit_card"], default="pix")
 
     guest_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     guest_email = serializers.EmailField(required=False, allow_blank=True)

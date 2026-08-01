@@ -299,7 +299,12 @@ AUTO_PAYOUT_ON_PAYMENT = config("AUTO_PAYOUT_ON_PAYMENT", default=False, cast=bo
 # Soft-launch: abrir loja sem KYC aprovado (ainda exige idade +18 no site).
 REQUIRE_SELLER_KYC = config("REQUIRE_SELLER_KYC", default=False, cast=bool)
 
+# --- Verificacao de idade por biometria (Lei 15.211/2025) ---
+# Cada bureau tem endpoint proprio, entao a URL e explicita — nunca
+# derivada do nome do provider. Sem URL + chave, o fluxo fica desligado:
+# a API responde 503 e o webhook nao aceita ninguem (ver apps.accounts).
 AGE_KYC_PROVIDER = config("AGE_KYC_PROVIDER", default="idwall")
+AGE_KYC_API_URL = config("AGE_KYC_API_URL", default="")
 AGE_KYC_API_KEY = config("AGE_KYC_API_KEY", default="")
 
 # Bureau que confirma se a linha movel pertence ao CPF (Serpro Datavalid,
@@ -341,6 +346,9 @@ EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="Renda & Renda <no-reply@rendaerenda.com.br>")
+# Caixa que recebe alerta de contestação e outros casos que exigem decisão
+# humana. Vazio = ninguém é avisado (só fica no log).
+MODERATION_ALERT_EMAIL = config("MODERATION_ALERT_EMAIL", default="")
 _EMAIL_CONFIGURED = bool(EMAIL_HOST and EMAIL_HOST_USER)
 EMAIL_BACKEND = config(
     "EMAIL_BACKEND",

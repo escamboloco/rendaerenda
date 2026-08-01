@@ -20,11 +20,18 @@
   {% if order.is_open_for_payment %}
   <section class="card p-5 space-y-4">
     <div>
+      {% if payment.method == 'pix' %}
       <h2 class="font-semibold">Pague com Pix para confirmar</h2>
       <p class="text-sm text-gray-400 mt-1">
         Use o <strong class="text-white">mesmo CPF</strong> informado na compra — Pix de terceiro é estornado
         automaticamente por exigência de verificação de idade.
       </p>
+      {% else %}
+      <h2 class="font-semibold">Conclua o pagamento</h2>
+      <p class="text-sm text-gray-400 mt-1">
+        O pagamento é feito na página segura do Asaas. Assim que for aprovado, o status aqui muda sozinho.
+      </p>
+      {% endif %}
     </div>
 
     {% if payment.pix_qr_code %}
@@ -161,6 +168,39 @@
     {% endif %}
   </section>
   {% endif %}
+
+  {# ------------------------------------------------------------- conversa #}
+  <section class="card p-5 space-y-3" x-data="orderChat('{{ order.access_token }}')">
+    <div>
+      <p class="font-semibold">Conversa com {{ order.store.display_name }}</p>
+      <p class="text-xs text-gray-500 mt-0.5">
+        Combine detalhes por aqui. Mensagem pedindo contato ou pagamento fora da plataforma é bloqueada —
+        é o que mantém sua proteção valendo.
+      </p>
+    </div>
+
+    <div id="chat-scroll" class="space-y-2 max-h-72 overflow-y-auto">
+      <template x-if="!messages.length">
+        <p class="text-sm text-gray-500 py-4 text-center">Nenhuma mensagem ainda.</p>
+      </template>
+      <template x-for="message in messages" :key="message.id">
+        <div class="flex" :class="message.mine ? 'justify-end' : 'justify-start'">
+          <div class="max-w-[80%] rounded-2xl px-3 py-2"
+               :class="message.mine ? 'bg-brand/20 border border-brand/30' : 'bg-white/5 border border-surface-border'">
+            <p class="text-sm text-gray-200 whitespace-pre-line" x-text="message.body"></p>
+            <p class="text-[10px] text-gray-500 mt-1"
+               x-text="(message.sender === 'seller' ? 'Vendedora' : 'Comprador')"></p>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <form @submit.prevent="send()" class="flex gap-2">
+      <input type="text" x-model="text" maxlength="1000" class="input-field" placeholder="Escreva uma mensagem…">
+      <button type="submit" class="btn-primary !px-4 shrink-0" :disabled="sending">Enviar</button>
+    </form>
+    <p x-show="error" x-text="error" class="input-error"></p>
+  </section>
 
   {% if order.shipping_address %}
   <section class="card p-5 text-sm space-y-1">

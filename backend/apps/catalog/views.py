@@ -1,3 +1,5 @@
+import json
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
@@ -19,6 +21,7 @@ from apps.stores.models import Store
 from .models import (
     Category,
     Product,
+    ProductAddon,
     ProductAsset,
     ProductImage,
     ProductQuestion,
@@ -85,6 +88,175 @@ def product_detail(request, store_slug, product_slug):
             "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
             "is_authenticated": request.user.is_authenticated,
         },
+    )
+
+
+@login_required
+def seller_products_page(request):
+    """Lista os anúncios da loja para editar preço, estoque ou tirar do ar."""
+    store = getattr(request.user, "store", None)
+    if not store:
+        return render(request, "wallet/no_store.html")
+
+    products = (
+        store.products.select_related("category")
+        .prefetch_related("images")
+        .order_by("-created_at")
+    )
+    return render(
+        request,
+        "catalog/seller_products.html",
+        {
+            "store": store,
+            "products": products,
+            "categories": Category.objects.order_by("name"),
+            "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
+        },
+    )
+
+
+class ProductUpdateView(APIView):
+    """
+    PATCH /api/vendedora/anuncios/<id>/ — edição do anúncio.
+    POST  .../pausar/ e .../publicar/ — tirar do ar e voltar.
+
+    Mexer em título ou descrição devolve o anúncio para a fila de
+    moderação: é conteúdo novo, e conteúdo novo não vai ao ar sem
+    revisão (docs/BASE_JURIDICA.md § 3). Corrigir preço ou estoque não
+    tira o anúncio do ar.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "offers"
+
+    def get_product(self, request, product_id):
+        store = getattr(request.user, "store", None)
+        if not store:
+            raise PermissionDenied("Usuário não possui loja.")
+        product = get_object_or_404(Product, id=product_id, store=store)
+        if product.status not in Product.SELLER_EDITABLE_STATUSES:
+            raise PermissionDenied("Este anúncio está bloqueado pela moderação.")
+        return product
+
+    def patch(self, request, product_id):
+        from .serializers import ProductUpdateSerializer
+
+        product = self.get_product(request, product_id)
+        serializer = ProductUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        content_changed = False
+        for field in ("title", "description"):
+            if field in payload and payload[field] != getattr(product, field):
+                setattr(product, field, payload[field])
+                content_changed = True
+        if "category_id" in payload:
+            product.category = payload["category_id"]
+        for field in ("payout_amount", "stock", "weight_grams", "production_days"):
+            if field in payload:
+                setattr(product, field, payload[field])
+
+        # Estoque zerado por edição = esgotado, não "pausado pela moderação".
+        if product.stock == 0 and product.status == Product.Status.PUBLISHED:
+            product.status = Product.Status.SOLD
+        elif product.stock > 0 and product.status == Product.Status.SOLD:
+            product.status = Product.Status.PUBLISHED
+
+        flags = []
+        if content_changed:
+            flags = run_automated_filters(title=product.title, description=product.description)
+            product.status = Product.Status.PENDING_MODERATION
+
+        product.save()
+
+        if content_changed:
+            ModerationQueueItem.objects.create(
+                target_type=ModerationQueueItem.TargetType.PRODUCT,
+                content_type=ContentType.objects.get_for_model(Product),
+                object_id=str(product.id),
+                decision=(
+                    ModerationQueueItem.Decision.AUTO_FLAGGED
+                    if flags
+                    else ModerationQueueItem.Decision.PENDING
+                ),
+                automated_flags=flags,
+            )
+
+        return Response(
+            {
+                "id": str(product.id),
+                "status": product.status,
+                "status_label": product.get_status_display(),
+                "buyer_price": str(product.price),
+                "payout_amount": str(product.payout_amount),
+                "stock": product.stock,
+                "back_to_moderation": content_changed,
+            }
+        )
+
+
+class ProductPauseView(APIView):
+    """POST /api/vendedora/anuncios/<id>/pausar/ — tira o anúncio da vitrine."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "offers"
+
+    def post(self, request, product_id):
+        product = ProductUpdateView().get_product(request, product_id)
+        product.status = Product.Status.PAUSED
+        product.save(update_fields=["status"])
+        return Response({"status": product.status, "status_label": product.get_status_display()})
+
+
+class ProductResumeView(APIView):
+    """
+    POST /api/vendedora/anuncios/<id>/publicar/ — volta o anúncio ao ar.
+
+    Só sai do pausado; anúncio que a moderação derrubou não volta por aqui.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "offers"
+
+    def post(self, request, product_id):
+        product = ProductUpdateView().get_product(request, product_id)
+        if product.status != Product.Status.PAUSED:
+            return Response(
+                {"detail": "Só anúncio pausado pode ser reativado."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if product.stock < 1:
+            return Response(
+                {"detail": "Coloque pelo menos 1 unidade em estoque antes de reativar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        product.status = Product.Status.PUBLISHED
+        product.save(update_fields=["status"])
+        return Response({"status": product.status, "status_label": product.get_status_display()})
+
+
+@login_required
+def seller_questions_page(request):
+    """
+    Caixa de perguntas da vendedora. Responder rápido é o que destrava a
+    compra de quem está em dúvida — por isso as sem resposta vêm primeiro.
+    """
+    store = getattr(request.user, "store", None)
+    if not store:
+        return render(request, "wallet/no_store.html")
+
+    questions = (
+        ProductQuestion.objects.filter(product__store=store)
+        .select_related("product")
+        .order_by("answered_at", "-created_at")
+    )
+    pending = [q for q in questions if not q.answer]
+    answered = [q for q in questions if q.answer][:30]
+    return render(
+        request,
+        "catalog/seller_questions.html",
+        {"store": store, "pending": pending, "answered": answered},
     )
 
 
@@ -214,11 +386,23 @@ class ProductCreateView(APIView):
             raise PermissionDenied("Sua loja precisa estar ativa (aprovada na moderação) para anunciar.")
 
         data = request.data.copy()
+        # Os adicionais chegam como JSON num campo do multipart (nao da
+        # para aninhar objeto em FormData sem isso).
+        raw_addons = data.get("addons") or "[]"
+        try:
+            addons_payload = json.loads(raw_addons) if isinstance(raw_addons, str) else raw_addons
+        except json.JSONDecodeError:
+            return Response(
+                {"addons": "Formato inválido nos adicionais."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
         serializer = ProductCreateSerializer(
             data={
                 **data.dict(),
+                "addons": addons_payload or [],
                 "images": request.FILES.getlist("images"),
                 "videos": request.FILES.getlist("videos"),
+                "assets": request.FILES.getlist("assets"),
             }
         )
         serializer.is_valid(raise_exception=True)
@@ -239,11 +423,13 @@ class ProductCreateView(APIView):
             title=payload["title"],
             slug=slug,
             description=payload["description"],
+            kind=payload["kind"],
             payout_amount=payload["payout_amount"],
             weight_grams=payload["weight_grams"],
             length_cm=payload["length_cm"],
             width_cm=payload["width_cm"],
             height_cm=payload["height_cm"],
+            production_days=payload.get("production_days", 0),
             stock=payload["stock"],
             status=Product.Status.PENDING_MODERATION,
         )
@@ -251,6 +437,18 @@ class ProductCreateView(APIView):
             ProductImage.objects.create(product=product, file=image, is_cover=(index == 0), order=index)
         for index, video in enumerate(payload.get("videos", [])):
             ProductVideo.objects.create(product=product, file=video, order=index)
+        for index, asset in enumerate(payload.get("assets", [])):
+            ProductAsset.objects.create(
+                product=product, file=asset, label=asset.name[:80], order=index
+            )
+        for index, addon in enumerate(payload.get("addons", [])):
+            ProductAddon.objects.create(
+                product=product,
+                title=addon["title"],
+                description=addon.get("description", ""),
+                payout_amount=addon["payout_amount"],
+                order=index,
+            )
 
         ModerationQueueItem.objects.create(
             target_type=ModerationQueueItem.TargetType.PRODUCT,
