@@ -247,20 +247,43 @@
               </div>
             </template>
 
+            {# --- cartão: mesma jornada do Pix, com passo a passo explícito --- #}
+            <template x-if="paymentMethod === 'credit_card'">
+              <ol class="space-y-2 text-xs text-gray-400">
+                <li class="flex gap-2.5 items-start">
+                  <span class="text-brand-light font-bold shrink-0">1.</span>
+                  <span>A página segura do Asaas abre em outra aba. Nenhum dado do seu cartão passa por este site.</span>
+                </li>
+                <li class="flex gap-2.5 items-start">
+                  <span class="text-brand-light font-bold shrink-0">2.</span>
+                  <span>Ao concluir, o Asaas traz você de volta para a página do seu pedido, automaticamente.</span>
+                </li>
+                <li class="flex gap-2.5 items-start">
+                  <span class="text-brand-light font-bold shrink-0">3.</span>
+                  <span>Se fechar a aba sem querer, esta tela continua acompanhando — ou volte pelo link do pedido.</span>
+                </li>
+              </ol>
+            </template>
+
             <template x-if="charge && charge.payment_url">
               <a :href="charge.payment_url" target="_blank" rel="noopener"
                  :class="paymentMethod === 'credit_card' ? 'btn-primary w-full' : 'btn-secondary w-full'"
-                 x-text="paymentMethod === 'credit_card' ? 'Pagar com cartão no Asaas' : 'Abrir a página de pagamento do Asaas'"></a>
+                 x-text="paymentMethod === 'credit_card' ? 'Abrir pagamento com cartão' : 'Abrir a página de pagamento do Asaas'"></a>
             </template>
 
             <div class="flex items-center justify-center gap-2 text-xs text-gray-500">
               <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              Esta tela confirma sozinha assim que o Pix cair.
+              <span x-text="paymentMethod === 'pix'
+                ? 'Esta tela confirma sozinha assim que o Pix cair.'
+                : 'Esta tela confirma sozinha assim que o cartão for aprovado.'"></span>
             </div>
 
-            <a :href="charge && charge.track_url" class="block text-center text-sm text-brand hover:underline">
-              Acompanhar o pedido depois
+            <a :href="charge && charge.track_url" class="btn-secondary w-full">
+              Acompanhar meu pedido
             </a>
+            <p class="text-[11px] text-gray-600 text-center">
+              Guarde este link: é por ele que você acompanha o pagamento e a entrega, mesmo sem cadastro.
+            </p>
           </div>
         </template>
       </section>
@@ -297,10 +320,18 @@
           <span>Itens</span>
           <span x-text="money(summary ? summary.items_total : 0)"></span>
         </div>
+
+        {# Frete só existe depois do CEP: antes disso não há o que calcular. #}
         <div class="flex justify-between text-gray-400">
-          <span>Frete</span>
-          <span class="text-emerald-400">Grátis</span>
+          <span>Frete<span x-cloak x-show="freight" class="text-gray-600" x-text="freight ? ' · ' + freight.label : ''"></span></span>
+          <span x-cloak x-show="freightLoading" class="text-gray-600">calculando…</span>
+          <span x-cloak x-show="!freightLoading && freight" x-text="money(freightPrice)"></span>
+          <span x-cloak x-show="!freightLoading && !freight" class="text-gray-600">informe o CEP</span>
         </div>
+        <p x-cloak x-show="freight" class="text-[11px] text-gray-600 -mt-0.5">
+          Inclui a embalagem neutra. Calculado do CEP da vendedora até o seu.
+        </p>
+
         <div class="flex justify-between items-center pt-2">
           <span class="font-semibold">Total</span>
           <span class="text-2xl font-extrabold text-brand" x-text="totalLabel"></span>
@@ -308,8 +339,12 @@
       </div>
 
       <ul class="text-[11px] text-gray-500 space-y-1.5 border-t border-surface-border pt-3">
-        <li>✓ Cobrança discreta no extrato</li>
-        <li>✓ Embalagem sem identificação</li>
+        {% if statement_descriptor %}
+        <li>✓ No extrato aparece <strong class="text-gray-300">{{ statement_descriptor }}</strong></li>
+        {% else %}
+        <li>✓ Cobrança discreta: o extrato não cita o site nem o produto</li>
+        {% endif %}
+        <li>✓ Embalagem sem identificação nem remetente</li>
         <li>✓ Pagamento processado pelo Asaas</li>
       </ul>
     </aside>

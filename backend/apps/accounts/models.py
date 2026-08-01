@@ -106,23 +106,52 @@ class AgeVerification(models.Model):
         return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
 
+def generate_kyc_code() -> str:
+    """
+    Codigo curto que a vendedora escreve num papel e segura na selfie.
+
+    E a prova de vivacidade dos pobres: garante que a foto foi tirada
+    DEPOIS do cadastro e para este cadastro especifico, o que derruba
+    selfie salva de outra pessoa ou baixada da internet. Nao substitui
+    biometria com prova de vida (ver AgeVerification), mas e o que da
+    para fazer com revisao humana enquanto o bureau nao esta contratado.
+    """
+    import secrets
+
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sem I/O/0/1 (confunde na foto)
+    return "RR-" + "".join(secrets.choice(alphabet) for _ in range(6))
+
+
 class SellerKYC(models.Model):
     """
-    KYC completo da vendedora: documento frente/verso + selfie com
-    documento + termo de maioridade e cessao de imagem. Guardado
-    criptografado (a nivel de storage - AWS_QUERYSTRING_AUTH + bucket
-    privado) e com retencao minima.
+    KYC da vendedora: documento frente/verso + selfie segurando o
+    documento E um papel com o codigo desta conta + termo de maioridade
+    e cessao de imagem.
+
+    Revisao HUMANA (admin), com prazo publicado de 24h uteis. Guardado em
+    storage privado (AWS_QUERYSTRING_AUTH) e com retencao minima.
     """
 
     class Status(models.TextChoices):
-        PENDING = "pending", "Pendente"
+        NOT_SENT = "not_sent", "Não enviada"
+        PENDING = "pending", "Em análise"
         APPROVED = "approved", "Aprovada"
         REJECTED = "rejected", "Rejeitada"
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="seller_kyc")
-    document_front = models.FileField(upload_to="kyc/documents/")
-    document_back = models.FileField(upload_to="kyc/documents/")
-    selfie_with_document = models.FileField(upload_to="kyc/selfies/")
+    # Codigo que precisa aparecer escrito a mao na selfie.
+    verification_code = models.CharField(max_length=12, default=generate_kyc_code, editable=False)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True)
+    # Data de nascimento LIDA NO DOCUMENTO pelo revisor. E ela que vira a
+    # idade oficial da conta — nunca a data digitada no cadastro.
+    document_birth_date = models.DateField(null=True, blank=True)
+    # blank=True porque a linha nasce vazia (status NOT_SENT) assim que a
+    # vendedora abre a pagina — e isso que da um codigo estavel para ela
+    # escrever no papel. O envio de verdade e validado no serializer.
+    document_front = models.FileField(upload_to="kyc/documents/", blank=True)
+    document_back = models.FileField(upload_to="kyc/documents/", blank=True)
+    selfie_with_document = models.FileField(upload_to="kyc/selfies/", blank=True)
     majority_and_image_consent_term_signed_at = models.DateTimeField(null=True, blank=True)
 
     # Assinatura ELETRONICA do termo de maioridade + cessao de imagem via
@@ -136,18 +165,66 @@ class SellerKYC(models.Model):
     esign_signed_at = models.DateTimeField(null=True, blank=True)
     esign_signed_document_url = models.URLField(blank=True)
 
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.NOT_SENT)
     reviewed_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True, related_name="kyc_reviews"
     )
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def approve(self, reviewer: User):
+    def approve(self, reviewer: User, *, document_birth_date=None):
+        """
+        Aprova o KYC e, com a data de nascimento lida no documento,
+        promove a conta a "idade verificada".
+
+        Sem data do documento a conta continua NÃO verificada: a idade é
+        exigência legal (Lei 15.211/2025) e não pode sair de um aceite
+        administrativo às cegas.
+        """
+        from apps.payments.services import is_adult
+
         self.status = self.Status.APPROVED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
-        self.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+        self.rejection_reason = ""
+        if document_birth_date:
+            self.document_birth_date = document_birth_date
+        self.save(
+            update_fields=[
+                "status", "reviewed_by", "reviewed_at", "rejection_reason", "document_birth_date"
+            ]
+        )
+
+        if not self.document_birth_date:
+            return
+
+        if not is_adult(self.document_birth_date):
+            self.user.ban("Menor de idade confirmado na conferência do documento.")
+            return
+
+        verification, _ = AgeVerification.objects.get_or_create(
+            user=self.user,
+            defaults={"provider": "manual", "provider_reference_id": f"kyc:{self.pk}"},
+        )
+        verification.provider = "manual"
+        verification.status = AgeVerification.Status.APPROVED
+        verification.document_validated = True
+        verification.validated_birth_date = self.document_birth_date
+        verification.reviewed_at = timezone.now()
+        verification.save(
+            update_fields=[
+                "provider", "status", "document_validated", "validated_birth_date", "reviewed_at"
+            ]
+        )
+        self.user.is_age_verified = True
+        self.user.save(update_fields=["is_age_verified"])
+
+    def reject(self, reviewer: User, reason: str):
+        self.status = self.Status.REJECTED
+        self.reviewed_by = reviewer
+        self.reviewed_at = timezone.now()
+        self.rejection_reason = reason[:500]
+        self.save(update_fields=["status", "reviewed_by", "reviewed_at", "rejection_reason"])
 
 
 class PhoneVerification(models.Model):

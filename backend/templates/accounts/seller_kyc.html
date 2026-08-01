@@ -1,55 +1,114 @@
 {% extends "core/base.html" %}
-{% block title %}Verificação de vendedora — Renda &amp; Renda{% endblock %}
+{% block title %}Verificação de identidade — Renda &amp; Renda{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto card p-6 sm:p-8 space-y-6">
-  <div class="text-center">
-    <h1 class="text-xl font-bold">Verificação de vendedora</h1>
-    <p class="text-gray-500 text-sm mt-1">Documento + selfie + termo de maioridade e cessão de imagem — exigido antes de abrir sua loja.</p>
+<div class="max-w-lg mx-auto space-y-4">
+
+  <div class="text-center space-y-2">
+    <span class="eyebrow">Conta de vendedora</span>
+    <h1 class="text-2xl sm:text-3xl font-bold">Verificação de identidade</h1>
+    <p class="text-gray-500 text-sm">
+      Documento + selfie com o código da sua conta. Conferência humana em até
+      <strong class="text-gray-300">24h úteis</strong>.
+    </p>
   </div>
 
-  {% if not request.user.is_age_verified %}
-  <div class="card px-4 py-3 text-sm text-amber-300 bg-amber-400/5 border-amber-400/20">
-    Você precisa concluir a <a href="{% url 'accounts_pages:verification_page' %}" class="underline">verificação de idade</a> antes de enviar seu KYC de vendedora.
-  </div>
-  {% elif kyc.status == 'approved' %}
-  <div class="text-center space-y-3">
-    <span class="badge-verified text-sm px-3 py-1">Aprovada</span>
-    <p class="text-gray-400 text-sm">Seu KYC foi aprovado. Você já pode abrir sua loja.</p>
-    <a href="{% url 'stores:onboard_page' %}" class="btn-primary w-full">Abrir minha loja</a>
-  </div>
-  {% elif kyc.status == 'pending' %}
-  <div class="text-center space-y-3">
-    <span class="badge-pending text-sm px-3 py-1">Em análise</span>
-    <p class="text-gray-400 text-sm">Recebemos seus documentos. A revisão manual costuma levar até 24h.</p>
-  </div>
-  {% else %}
-  <form id="kyc-form" class="space-y-4" enctype="multipart/form-data">
-    {% if kyc.status == 'rejected' %}
-    <p class="input-error">Seu envio anterior não foi aprovado. Confira se as fotos estão nítidas e tente novamente.</p>
-    {% endif %}
+  {# ------------------------------------------------------------- estados #}
+  {% if kyc.status == 'approved' %}
+  <div class="card p-8 text-center space-y-4">
+    <div class="w-14 h-14 rounded-full bg-emerald-400/15 text-emerald-400 mx-auto flex items-center justify-center text-2xl">✓</div>
     <div>
-      <label class="input-label">Documento (frente)</label>
+      <p class="font-semibold">Identidade verificada</p>
+      <p class="text-gray-500 text-sm mt-1">Sua conta está liberada para vender.</p>
+    </div>
+    {% if request.user.has_store %}
+    <a href="{% url 'wallet:dashboard' %}" class="btn-primary w-full">Ir para a carteira</a>
+    {% else %}
+    <a href="{% url 'stores:onboard_page' %}" class="btn-primary w-full">Abrir minha loja</a>
+    {% endif %}
+  </div>
+
+  {% elif kyc.status == 'pending' %}
+  <div class="card p-8 text-center space-y-4">
+    <div class="w-14 h-14 rounded-full bg-accent-gold/15 text-accent-gold mx-auto flex items-center justify-center text-2xl">⏳</div>
+    <div>
+      <p class="font-semibold">Em análise</p>
+      <p class="text-gray-500 text-sm mt-1">
+        Recebemos seus documentos{% if kyc.submitted_at %} em {{ kyc.submitted_at|date:"d/m/Y H:i" }}{% endif %}.
+        A resposta sai em até 24h úteis, por e-mail.
+      </p>
+    </div>
+    <ol class="text-left text-xs text-gray-500 space-y-2 border-t border-surface-border pt-4">
+      <li class="flex gap-2"><span class="text-emerald-400">✓</span> Documentos recebidos</li>
+      <li class="flex gap-2"><span class="text-accent-gold">•</span> Conferência humana (documento, rosto e código)</li>
+      <li class="flex gap-2"><span class="text-gray-700">•</span> Liberação para vender</li>
+    </ol>
+  </div>
+
+  {% else %}
+  {# ------------------------------------------------------- envio/reenvio #}
+  {% if kyc.status == 'rejected' %}
+  <div class="card p-4 bg-brand/5 border-brand/30 text-sm">
+    <p class="font-semibold text-brand-light">Envio anterior não aprovado</p>
+    <p class="text-gray-400 mt-1">{{ kyc.rejection_reason|default:"Confira se as fotos estão nítidas e legíveis e envie de novo." }}</p>
+  </div>
+  {% endif %}
+
+  <div class="card p-5 space-y-3">
+    <p class="eyebrow">Passo 1 · seu código</p>
+    <p class="text-sm text-gray-400">
+      Escreva este código à mão em um papel e apareça com ele na selfie. É assim que confirmamos
+      que a foto é sua e foi tirada agora — não uma imagem salva.
+    </p>
+    <p class="font-display text-3xl tracking-[0.2em] text-center py-3 rounded-xl bg-surface-alt border border-surface-border text-accent-blush">
+      {{ kyc.verification_code }}
+    </p>
+  </div>
+
+  <form id="kyc-form" class="card p-5 space-y-4" enctype="multipart/form-data">
+    <p class="eyebrow">Passo 2 · documentos</p>
+
+    <div>
+      <label class="input-label">Documento com foto — frente</label>
       <input type="file" name="document_front" accept="image/*" capture="environment" required class="input-field">
+      <p class="input-help">RG, CNH ou passaporte. Precisa dar para ler a data de nascimento.</p>
     </div>
     <div>
-      <label class="input-label">Documento (verso)</label>
+      <label class="input-label">Documento com foto — verso</label>
       <input type="file" name="document_back" accept="image/*" capture="environment" required class="input-field">
     </div>
     <div>
-      <label class="input-label">Selfie segurando o documento</label>
+      <label class="input-label">Selfie com o documento e o papel do código</label>
       <input type="file" name="selfie_with_document" accept="image/*" capture="user" required class="input-field">
-      <p class="input-help">Rosto e documento visíveis e legíveis na mesma foto.</p>
+      <p class="input-help">
+        Seu rosto, o documento e o papel com <strong class="text-gray-300">{{ kyc.verification_code }}</strong>
+        na mesma foto, todos legíveis.
+      </p>
     </div>
-    <label class="flex items-start gap-2 text-sm text-gray-400">
-      <input type="checkbox" name="accepts_majority_and_image_consent_term" required class="mt-0.5 rounded border-surface-border bg-surface-alt text-brand focus:ring-brand">
-      Confirmo que sou maior de 18 anos e cedo o uso de imagem dos itens/mídias que eu publicar, conforme o
-      <a href="{% url 'core_pages:terms' %}" class="text-brand hover:underline" target="_blank">Termo de Maioridade e Cessão de Imagem</a>.
+
+    <label class="flex items-start gap-2 text-sm text-gray-400 border-t border-surface-border pt-4">
+      <input type="checkbox" name="accepts_majority_and_image_consent_term" required
+             class="mt-0.5 rounded border-surface-border bg-surface-alt text-brand focus:ring-brand">
+      <span>
+        Declaro que sou maior de 18 anos, que os documentos são meus e autorizo o uso das imagens
+        que eu publicar, conforme os
+        <a href="{% url 'core_pages:terms' %}" class="text-brand hover:underline" target="_blank">Termos de Uso</a>.
+      </span>
     </label>
+
     <p id="kyc-error" class="input-error hidden"></p>
     <button type="submit" class="btn-primary w-full">Enviar para análise</button>
+    <p class="text-[11px] text-gray-600 text-center">
+      Seus documentos ficam em armazenamento privado, são vistos só pela equipe de verificação e
+      apagados quando deixam de ser necessários.
+    </p>
   </form>
   {% endif %}
+
+  <p class="text-xs text-gray-600 text-center">
+    Para comprar você não precisa disso — a verificação é exigida de quem vende.
+  </p>
 </div>
 {% endblock %}
 
@@ -65,12 +124,14 @@ document.getElementById("kyc-form")?.addEventListener("submit", async (event) =>
   try {
     const resp = await fetch("{% url 'accounts:seller_kyc_submit' %}", {
       method: "POST",
-      headers: { "X-CSRFToken": "{{ csrf_token }}" },
+      headers: { "X-CSRFToken": window.getCsrfToken() },
       body: new FormData(form),
     });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
-      errorEl.textContent = data.detail || "Não foi possível enviar seus documentos. Confira os arquivos e tente novamente.";
+      errorEl.textContent =
+        data.detail || Object.values(data).flat().join(" ") ||
+        "Não foi possível enviar seus documentos. Confira os arquivos e tente novamente.";
       errorEl.classList.remove("hidden");
       return;
     }

@@ -61,23 +61,31 @@ class DisputeResolutionTests(ApiTestCase):
         self.assertEqual(self.product.status, Product.Status.PUBLISHED)
 
     def test_refund_wipes_the_seller_credit(self):
-        """O saldo da loja tem que voltar a zero — o dinheiro foi devolvido."""
-        self.assertEqual(self.balance(), self.order.seller_amount)
+        """
+        Reembolso tira da vendedora o que o comprador recebeu de volta.
+
+        O saldo fica NEGATIVO no valor do frete de propósito: esse Pix já
+        saiu na confirmação do pagamento, então virou dívida dela com a
+        plataforma. É o sinal para a conciliação humana — zerar aqui
+        esconderia dinheiro que saiu de verdade.
+        """
+        self.assertEqual(self.balance(), self.order.payout_total)
 
         refund_order(self.order)
 
-        self.assertEqual(self.balance(), Decimal("0.00"))
+        self.assertEqual(self.balance(), -self.order.shipping_total)
 
     def test_refunding_twice_does_not_double_reverse(self):
         refund_order(self.order)
+        balance_after_first = self.balance()
         refund_order(self.order)
 
-        self.assertEqual(self.balance(), Decimal("0.00"))
+        self.assertEqual(self.balance(), balance_after_first)
         self.assertEqual(
             WalletEntry.objects.filter(
                 order=self.order, kind=WalletEntry.Kind.ADJUSTMENT
             ).count(),
-            1,
+            2,  # um estorno do item, um do frete
         )
 
     def test_order_without_charge_cannot_be_refunded(self):
@@ -99,13 +107,19 @@ class DisputeResolutionTests(ApiTestCase):
         )
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.DISPUTED)
-        self.assertEqual(self.provider.withdrawals, [])
+        # Frete ja saiu na confirmacao do pagamento; o que nao pode ter
+        # saido antes da decisao e o valor do ITEM.
+        self.assertEqual(
+            [w for w in self.provider.withdrawals if w["reference"].startswith("pedido-")], []
+        )
 
         self.order.status = Order.Status.DELIVERED
         self.order.save(update_fields=["status"])
         self.assertTrue(release_and_payout(self.order))
 
-        self.assertEqual(len(self.provider.withdrawals), 1)
+        self.assertEqual(
+            len([w for w in self.provider.withdrawals if w["reference"].startswith("pedido-")]), 1
+        )
 
     def test_webhook_refund_also_reverses_the_credit(self):
         """Estorno que chega pelo webhook segue o mesmo caminho."""
@@ -119,4 +133,4 @@ class DisputeResolutionTests(ApiTestCase):
                 headers={"asaas-access-token": "tok"},
             )
 
-        self.assertEqual(self.balance(), Decimal("0.00"))
+        self.assertEqual(self.balance(), -self.order.shipping_total)

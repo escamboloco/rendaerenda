@@ -38,8 +38,10 @@ class CheckoutApiTests(ApiTestCase):
 
         order = Order.objects.get()
         self.assertEqual(order.status, Order.Status.AWAITING_PAYMENT)
-        self.assertEqual(order.grand_total, Decimal("120.00"))
-        self.assertEqual(order.seller_amount, Decimal("100.00"))
+        # 120 do item + frete (tarifa + embalagem neutra) cobrado a parte.
+        self.assertEqual(order.items_total, Decimal("120.00"))
+        self.assertEqual(order.grand_total, order.items_total + order.shipping_total)
+        self.assertEqual(order.payout_total, Decimal("100.00"))
         self.assertEqual(order.platform_amount, Decimal("20.00"))
         self.assertIsNotNone(order.expires_at)
 
@@ -217,8 +219,11 @@ class OrderStatusPollingTests(ApiTestCase):
         from apps.wallet.models import WalletEntry
 
         credit = WalletEntry.objects.get(order=self.order, kind=WalletEntry.Kind.SALE_CREDIT)
-        self.assertEqual(credit.amount, self.order.seller_amount)
-        self.assertEqual(self.provider.withdrawals, [])
+        # Custodia guarda so o item; o frete tem parcela propria e sai na hora.
+        self.assertEqual(credit.amount, self.order.payout_total)
+        self.assertEqual(
+            [w for w in self.provider.withdrawals if w["reference"].startswith("pedido-")], []
+        )
 
     def test_polling_twice_does_not_credit_twice(self):
         from apps.wallet.models import WalletEntry

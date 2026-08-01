@@ -178,6 +178,7 @@ class AsaasClient:
         description: str = "",
         split: list[dict] | None = None,
         due_days: int | None = None,
+        return_url: str = "",
     ) -> AsaasPayment:
         body: dict = {
             "customer": customer_id,
@@ -190,6 +191,11 @@ class AsaasClient:
             body["description"] = description[:500]
         if split:
             body["split"] = split
+        if return_url:
+            # Traz a pessoa de volta para a pagina do pedido assim que o
+            # pagamento termina no Asaas. Sem isso, quem paga com cartao
+            # fica preso numa aba do PSP sem saber o que fazer.
+            body["callback"] = {"successUrl": return_url, "autoRedirect": True}
         data = self._request("POST", "/payments", json=body)
         payment = self._to_payment(data)
         if billing_type == "PIX" and not payment.pix_copy_paste:
@@ -226,12 +232,30 @@ class AsaasClient:
         return self._request("POST", f"/payments/{payment_id}/refund", json=body)
 
     def get_payer_document(self, payment_id: str) -> str:
-        """CPF/CNPJ de quem efetivamente pagou o Pix (vazio se o Asaas nao informou)."""
+        """
+        CPF/CNPJ de quem efetivamente pagou.
+
+        Pix: vem da transacao Pix (conta de origem).
+        Cartao: vem do portador informado no checkout hospedado
+        (billingInfo). Vazio quando o Asaas ainda nao informou — nesse
+        caso a trava de CPF nao bloqueia (fail open consciente: melhor
+        deixar passar do que estornar compra legitima por falta de dado).
+        """
         try:
             data = self._request("GET", f"/payments/{payment_id}/pixTransaction")
+            document = _payer_from_pix_transaction(data)
+            if document:
+                return document
+        except AsaasError:
+            pass
+
+        try:
+            billing = self._request("GET", f"/payments/{payment_id}/billingInfo")
         except AsaasError:
             return ""
-        return _payer_from_pix_transaction(data)
+        card = billing.get("creditCard") or {}
+        holder = card.get("creditCardHolderInfo") or card.get("holderInfo") or {}
+        return digits(holder.get("cpfCnpj")) if isinstance(holder, dict) else ""
 
     # -------------------------------------------------------------- transfers
 

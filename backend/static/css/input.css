@@ -1,3 +1,60 @@
+/*
+ * Fontes self-hosted (npm @fontsource -> static/fonts/). Nada de CDN: a CSP
+ * do projeto e `font-src 'self'`, e fonte de terceiro vazaria o IP de quem
+ * navega para outro dominio.
+ *
+ * Bodoni Moda (display) + Space Grotesk (UI). Ver tailwind.config.js.
+ */
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/bodoni-moda-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/bodoni-moda-latin-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/bodoni-moda-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/bodoni-moda-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/space-grotesk-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/space-grotesk-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/space-grotesk-latin-700-normal.woff2") format("woff2");
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,6 +62,12 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+  }
+  /* Titulo editorial: didone pede tracking negativo e peso alto para nao
+     parecer frágil em tela escura. */
+  h1,
+  h2 {
+    @apply font-display tracking-tightest;
   }
   body {
     @apply bg-surface text-gray-100 antialiased;
@@ -125,6 +188,68 @@
 
   .table-row-alt > * {
     @apply odd:bg-white/[0.02];
+  }
+
+  /* ---------------------------------------------------------- vitrine ---
+     "Rail": prateleira horizontal com titulo + link, o padrao que faz uma
+     home de marketplace parecer curada em vez de um grid infinito. */
+  .rail {
+    @apply flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory;
+  }
+  .rail > * {
+    @apply snap-start shrink-0;
+  }
+  .rail-head {
+    @apply flex items-end justify-between gap-3 mb-3;
+  }
+  .rail-title {
+    @apply text-xl sm:text-2xl font-display font-bold text-white leading-none;
+  }
+  .rail-sub {
+    @apply text-xs text-gray-500 mt-1.5;
+  }
+  .rail-link {
+    @apply text-sm text-brand hover:text-brand-light shrink-0 font-medium;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-orchid;
+  }
+
+  .price {
+    @apply font-sans font-bold text-brand-light;
+  }
+  .price-old {
+    @apply text-xs text-gray-600 line-through font-normal;
+  }
+
+  /* Tile de categoria: imagem/inicial + nome, usado no indice e na home. */
+  .cat-tile {
+    @apply relative flex flex-col items-center justify-center gap-2 aspect-[4/3]
+      rounded-2xl border border-surface-border bg-surface-card overflow-hidden
+      text-center px-3 transition hover:border-brand/60 hover:shadow-glow;
+  }
+
+  /* Cartao de garantia (custodia, embalagem neutra, etc.). */
+  .trust-card {
+    @apply card p-5 space-y-2 bg-surface-card/80;
+  }
+  .trust-icon {
+    @apply w-10 h-10 rounded-xl bg-gradient-brand/10 border border-brand/25
+      flex items-center justify-center text-brand-light shrink-0;
+  }
+
+  .stat-value {
+    @apply font-display text-3xl sm:text-4xl font-bold text-white leading-none;
+  }
+  .stat-label {
+    @apply text-xs text-gray-500 mt-1;
+  }
+
+  /* Faixa fina do topo — recado curto e permanente (discricao/custodia). */
+  .topbar {
+    @apply text-[11px] text-center py-1.5 text-accent-blush/80 bg-gradient-brand/[0.12]
+      border-b border-surface-border;
   }
 
   .prose-legal {

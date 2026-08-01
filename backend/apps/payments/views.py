@@ -99,7 +99,10 @@ def checkout_page(request):
     return render(
         request,
         "payments/checkout.html",
-        {"free_shipping": getattr(settings, "CHECKOUT_FREE_SHIPPING", True)},
+        {
+            "free_shipping": getattr(settings, "CHECKOUT_FREE_SHIPPING", False),
+            "statement_descriptor": getattr(settings, "STATEMENT_DESCRIPTOR", ""),
+        },
     )
 
 

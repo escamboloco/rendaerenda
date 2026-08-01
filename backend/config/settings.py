@@ -254,7 +254,7 @@ REST_FRAMEWORK = {
 # (Product.payout_amount) - ela nunca "perde" a comissao; o comprador que paga
 # a mais. Sem assinatura/mensalidade: navegar, anunciar e comprar sao
 # gratuitos - a plataforma só ganha em cima da venda.
-PLATFORM_COMMISSION_PERCENT = config("PLATFORM_COMMISSION_PERCENT", default=Decimal("15"), cast=Decimal)
+PLATFORM_COMMISSION_PERCENT = config("PLATFORM_COMMISSION_PERCENT", default=Decimal("20"), cast=Decimal)
 WALLET_RELEASE_DAYS_AFTER_SHIPPING = config("WALLET_RELEASE_DAYS_AFTER_SHIPPING", default=3, cast=int)
 
 # --- Custódia (o dinheiro fica com a plataforma até a entrega) ---
@@ -277,12 +277,24 @@ AUTO_PAYOUT_ON_RELEASE = config("AUTO_PAYOUT_ON_RELEASE", default=True, cast=boo
 # Legado — modelo simplificado nao soma embalagem (frete inteiro pra vendedora).
 PACKAGING_FEE = config("PACKAGING_FEE", default=Decimal("0.00"), cast=Decimal)
 # Soft-launch: checkout sem cotacao de frete (frete R$ 0, serviço pac).
-CHECKOUT_FREE_SHIPPING = config("CHECKOUT_FREE_SHIPPING", default=True, cast=bool)
+CHECKOUT_FREE_SHIPPING = config("CHECKOUT_FREE_SHIPPING", default=False, cast=bool)
+# Frete usado quando nao ha contrato de transportadora configurado (ou a
+# cotacao falha). Sem isso, um Melhor Envio fora do ar derrubaria TODA
+# venda. Ajuste para o custo medio real de uma postagem sua.
+SHIPPING_FLAT_RATE = config("SHIPPING_FLAT_RATE", default=Decimal("0.00"), cast=Decimal)
 # Quanto tempo o pedido segura o estoque esperando o Pix. Passou disso, o
 # management command expire_orders devolve o item para a vitrine.
 ORDER_PAYMENT_TTL_MINUTES = config("ORDER_PAYMENT_TTL_MINUTES", default=60, cast=int)
 # Validade da cobranca no Asaas (dueDate). Com 0 o QR morre a meia-noite.
 PIX_DUE_DAYS = config("PIX_DUE_DAYS", default=3, cast=int)
+# Frete + embalagem neutra sao repassados a vendedora assim que o pagamento
+# confirma — e com esse dinheiro que ela compra a caixa e posta. O valor do
+# ITEM continua em custodia ate a entrega ser confirmada.
+AUTO_PAYOUT_SHIPPING_ON_PAYMENT = config("AUTO_PAYOUT_SHIPPING_ON_PAYMENT", default=True, cast=bool)
+# Precos da embalagem neutra por faixa de tamanho, em JSON. Os padroes de
+# apps/shipping/packaging.py sao REFERENCIA, nao cotacao oficial dos
+# Correios — confira antes de vender de verdade.
+NEUTRAL_BOX_PRICES = config("NEUTRAL_BOX_PRICES", default="")
 # Pix pago por CPF diferente do titular do pedido: estornar automaticamente.
 # E uma trava de idade (so adulto identificado compra), nao antifraude.
 REFUND_ON_PAYER_CPF_MISMATCH = config("REFUND_ON_PAYER_CPF_MISMATCH", default=True, cast=bool)
@@ -349,6 +361,12 @@ DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="Renda & Renda <no-rep
 # Caixa que recebe alerta de contestação e outros casos que exigem decisão
 # humana. Vazio = ninguém é avisado (só fica no log).
 MODERATION_ALERT_EMAIL = config("MODERATION_ALERT_EMAIL", default="")
+
+# Nome que aparece no extrato do cartao/Pix de quem compra. Quem define de
+# fato e o cadastro da conta Asaas (razao social / nome do titular) — esta
+# variavel serve para o site MOSTRAR ao comprador o mesmo nome que ele vai
+# ver na fatura. Preencha com exatamente o que o Asaas exibe.
+STATEMENT_DESCRIPTOR = config("STATEMENT_DESCRIPTOR", default="")
 _EMAIL_CONFIGURED = bool(EMAIL_HOST and EMAIL_HOST_USER)
 EMAIL_BACKEND = config(
     "EMAIL_BACKEND",

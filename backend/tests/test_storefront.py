@@ -30,9 +30,16 @@ class StorefrontTests(ApiTestCase):
         self.assertContains(response, "Corset preto")
         self.assertContains(response, "120,00")
 
+    def test_search_goes_to_the_catalog(self):
+        """Busca na home redireciona: prateleira curada e resultado de busca
+        na mesma tela confundem quem procurou uma coisa específica."""
+        response = self.client.get("/", {"q": "Corset"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/anuncios/", response["Location"])
+
     def test_search_matches_product_title(self):
         make_product(self.store, slug="meia-arrastao", payout=Decimal("30.00"))
-        response = self.client.get("/", {"q": "Corset"})
+        response = self.client.get("/anuncios/", {"q": "Corset"})
         self.assertContains(response, "Corset preto")
         self.assertNotContains(response, "meia-arrastao")
 
@@ -49,7 +56,7 @@ class StorefrontTests(ApiTestCase):
 
     def test_sorting_by_price(self):
         make_product(self.store, slug="item-barato", payout=Decimal("10.00"))
-        response = self.client.get("/", {"ordem": "menor-preco"})
+        response = self.client.get("/anuncios/", {"ordem": "menor-preco"})
         content = response.content.decode()
         self.assertLess(content.index("12,00"), content.index("120,00"))
 

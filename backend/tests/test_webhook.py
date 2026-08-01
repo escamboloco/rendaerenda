@@ -88,8 +88,11 @@ class AsaasWebhookTests(ApiTestCase):
         self.assertIsNotNone(self.order.paid_at)
         self.assertIsNone(self.order.expires_at)
         self.assertEqual(self.payment.status, Payment.Status.CONFIRMED)
-        # Custódia: a vendedora só recebe depois da entrega confirmada.
-        self.assertEqual(self.provider.withdrawals, [])
+        # Custódia: o valor do ITEM só sai depois da entrega confirmada.
+        # O frete sai antes, de propósito — é o dinheiro da postagem.
+        self.assertEqual(
+            [w for w in self.provider.withdrawals if w["reference"].startswith("pedido-")], []
+        )
         self.assertIsNone(self.order.payout_sent_at)
 
     def test_payment_confirmed_event_also_works(self):
@@ -105,15 +108,24 @@ class AsaasWebhookTests(ApiTestCase):
             WalletEntry.objects.filter(order=self.order, kind=WalletEntry.Kind.SALE_CREDIT).count(), 1
         )
 
-    def test_credit_is_payout_plus_shipping_only(self):
+    def test_credits_are_split_between_item_and_shipping(self):
+        """
+        Duas parcelas: item retido em custódia, frete liberado na hora.
+        Somadas, batem com o que a vendedora tem a receber; a diferença
+        para o total pago é exatamente a comissão da plataforma.
+        """
         self.send("PAYMENT_RECEIVED")
         self.order.refresh_from_db()
 
-        credit = WalletEntry.objects.get(
+        item = WalletEntry.objects.get(
             order=self.order, kind=WalletEntry.Kind.SALE_CREDIT
         ).amount
-        self.assertEqual(credit, self.order.payout_total + self.order.shipping_total)
-        self.assertEqual(self.order.grand_total - credit, self.order.platform_amount)
+        shipping = WalletEntry.objects.get(
+            order=self.order, kind=WalletEntry.Kind.SHIPPING_CREDIT
+        ).amount
+        self.assertEqual(item, self.order.payout_total)
+        self.assertEqual(shipping, self.order.shipping_total)
+        self.assertEqual(self.order.grand_total - item - shipping, self.order.platform_amount)
 
     def test_store_sales_counter_increases_once(self):
         self.send("PAYMENT_RECEIVED")

@@ -49,18 +49,42 @@ def _hold_until(order: Order):
 
 def credit_sale(order: Order) -> tuple[WalletEntry, bool]:
     """
-    Registra o credito da venda no ledger. Com custódia ligada o valor
-    entra RETIDO (available_at no futuro) — a vendedora vê o saldo, mas
-    só saca depois da liberação. Retorna (entry, created); created=False
-    quando o pedido já tinha sido creditado antes.
+    Credita o valor do ITEM (sem o frete) no ledger, RETIDO em custódia.
+
+    O frete tem parcela própria e liberação imediata — ver
+    credit_shipping(). Separar as duas é o que permite a vendedora postar
+    no mesmo dia sem adiantar dinheiro do bolso, mantendo o valor do
+    produto seguro até a entrega ser confirmada.
     """
     entry, created = WalletEntry.objects.get_or_create(
         order=order,
         kind=WalletEntry.Kind.SALE_CREDIT,
         defaults={
             "store": order.store,
-            "amount": order.seller_amount,
+            "amount": order.payout_total,
             "available_at": _hold_until(order),
+        },
+    )
+    return entry, created
+
+
+def credit_shipping(order: Order) -> tuple[WalletEntry | None, bool]:
+    """
+    Credita frete + embalagem neutra, JÁ LIBERADO para saque.
+
+    É o dinheiro da postagem: reter isso junto com o valor do item seria
+    obrigar a vendedora a financiar o envio até a entrega confirmar.
+    Pedido só digital não tem frete e não gera crédito.
+    """
+    if order.shipping_total <= 0:
+        return None, False
+    entry, created = WalletEntry.objects.get_or_create(
+        order=order,
+        kind=WalletEntry.Kind.SHIPPING_CREDIT,
+        defaults={
+            "store": order.store,
+            "amount": order.shipping_total,
+            "available_at": timezone.now(),
         },
     )
     return entry, created
@@ -77,6 +101,7 @@ def reverse_sale_credit(order: Order) -> bool:
     credit = order.wallet_entries.filter(kind=WalletEntry.Kind.SALE_CREDIT).first()
     if not credit:
         return False
+    _reverse_shipping_credit(order)
     already_reversed = order.wallet_entries.filter(
         kind=WalletEntry.Kind.ADJUSTMENT, amount=-credit.amount
     ).exists()
@@ -100,6 +125,24 @@ def reverse_sale_credit(order: Order) -> bool:
             order.store_id,
         )
     return True
+
+
+def _reverse_shipping_credit(order: Order) -> None:
+    """Reembolso desfaz tambem o credito de frete (mesma logica do item)."""
+    shipping = order.wallet_entries.filter(kind=WalletEntry.Kind.SHIPPING_CREDIT).first()
+    if not shipping:
+        return
+    if order.wallet_entries.filter(
+        kind=WalletEntry.Kind.ADJUSTMENT, amount=-shipping.amount
+    ).exists():
+        return
+    WalletEntry.objects.create(
+        store=order.store,
+        order=order,
+        kind=WalletEntry.Kind.ADJUSTMENT,
+        amount=-shipping.amount,
+        available_at=timezone.now(),
+    )
 
 
 def release_sale(order: Order) -> bool:
@@ -138,12 +181,52 @@ def credit_and_auto_payout(order: Order):
       PJ: o valor já caiu na subconta pelo split; o Pix é o saque dela.
     """
     _, created = credit_sale(order)
+    credit_shipping(order)
+
+    # Frete + embalagem saem na hora: e com esse dinheiro que ela compra a
+    # caixa neutra e posta. O valor do item continua em custodia.
+    if getattr(settings, "AUTO_PAYOUT_SHIPPING_ON_PAYMENT", True):
+        payout_shipping(order)
+
     if not created:
         logger.info("Pedido %s ja havia sido creditado — repasse nao repetido.", order.id)
         return
     if escrow_enabled() or not getattr(settings, "AUTO_PAYOUT_ON_PAYMENT", False):
         return
     _payout(order)
+
+
+def payout_shipping(order: Order) -> bool:
+    """
+    Pix do frete + embalagem para a vendedora, logo apos o pagamento.
+    Idempotente por Order.shipping_payout_sent_at.
+    """
+    if order.shipping_total <= 0:
+        return False
+    store = order.store
+    if not store.pix_key:
+        logger.warning("Pedido %s: loja sem chave Pix — frete fica na carteira.", order.id)
+        return False
+
+    with transaction.atomic():
+        locked = Order.objects.select_for_update().get(pk=order.pk)
+        if locked.shipping_payout_sent_at:
+            return False
+        locked.shipping_payout_sent_at = timezone.now()
+        locked.save(update_fields=["shipping_payout_sent_at"])
+    order.shipping_payout_sent_at = locked.shipping_payout_sent_at
+
+    try:
+        request_withdrawal(
+            store, order.shipping_total, reference=f"frete-{str(order.id)[:8]}"
+        )
+        return True
+    except Exception:
+        logger.exception(
+            "Falha no Pix do frete do pedido %s — valor segue disponivel para saque manual.",
+            order.id,
+        )
+        return False
 
 
 def release_matured_escrow() -> int:
@@ -199,7 +282,7 @@ def _payout(order: Order):
     order.payout_sent_at = locked.payout_sent_at
 
     try:
-        request_withdrawal(store, order.seller_amount, reference=f"pedido-{str(order.id)[:8]}")
+        request_withdrawal(store, order.payout_total, reference=f"pedido-{str(order.id)[:8]}")
     except Exception:
         logger.exception(
             "Falha no Pix do pedido %s — saldo continua disponivel para saque manual "

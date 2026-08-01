@@ -19,6 +19,28 @@ from apps.wallet.services import release_matured_escrow
 from .base import ApiTestCase
 from .factories import FakeProvider, checkout_payload, make_product
 
+
+class PayoutAssertionsMixin:
+    """
+    Separa o repasse do ITEM do repasse do FRETE.
+
+    O frete sai na hora do pagamento — é o dinheiro da postagem, e retê-lo
+    obrigaria a vendedora a adiantar do bolso. Custódia vale para o valor
+    do produto, e é isso que estes testes vigiam.
+    """
+
+    def item_payouts(self):
+        return [
+            w for w in self.provider.withdrawals
+            if str(w.get("reference", "")).startswith("pedido-")
+        ]
+
+    def shipping_payouts(self):
+        return [
+            w for w in self.provider.withdrawals
+            if str(w.get("reference", "")).startswith("frete-")
+        ]
+
 WEBHOOK_TOKEN = "token-webhook"
 
 
@@ -28,7 +50,7 @@ WEBHOOK_TOKEN = "token-webhook"
     ESCROW_ENABLED=True,
     AUTO_PAYOUT_ON_RELEASE=True,
 )
-class EscrowTests(ApiTestCase):
+class EscrowTests(PayoutAssertionsMixin, ApiTestCase):
     def setUp(self):
         super().setUp()
         self.provider = FakeProvider()
@@ -64,13 +86,13 @@ class EscrowTests(ApiTestCase):
 
         self.assertEqual(self.order.status, Order.Status.PAID)
         self.assertGreater(entry.available_at, timezone.now())
-        self.assertEqual(self.provider.withdrawals, [], "vendedora não pode receber antes da entrega")
+        self.assertEqual(self.item_payouts(), [], "valor do item não pode sair antes da entrega")
         self.assertIsNone(self.order.payout_sent_at)
 
     def test_available_balance_is_zero_while_in_escrow(self):
         self.assertEqual(WalletEntry.objects.available_balance(self.product.store), Decimal("0.00"))
         self.assertEqual(
-            WalletEntry.objects.pending_balance(self.product.store), self.order.seller_amount
+            WalletEntry.objects.pending_balance(self.product.store), self.order.payout_total
         )
 
     # ---------------------------------------------------------- liberacao
@@ -83,8 +105,8 @@ class EscrowTests(ApiTestCase):
         entry = WalletEntry.objects.get(order=self.order, kind=WalletEntry.Kind.SALE_CREDIT)
         self.assertEqual(self.order.status, Order.Status.DELIVERED)
         self.assertLessEqual(entry.available_at, timezone.now())
-        self.assertEqual(len(self.provider.withdrawals), 1)
-        self.assertEqual(self.provider.withdrawals[0]["amount"], self.order.seller_amount)
+        self.assertEqual(len(self.item_payouts()), 1)
+        self.assertEqual(self.item_payouts()[0]["amount"], self.order.payout_total)
         self.assertIsNotNone(self.order.payout_sent_at)
 
     def test_confirming_twice_does_not_pay_twice(self):
@@ -92,16 +114,16 @@ class EscrowTests(ApiTestCase):
         second = self._confirm("confirm")
 
         self.assertEqual(second.status_code, 409)
-        self.assertEqual(len(self.provider.withdrawals), 1)
+        self.assertEqual(len(self.item_payouts()), 1)
 
     def test_matured_escrow_is_paid_by_the_cron(self):
         WalletEntry.objects.filter(order=self.order).update(available_at=timezone.now())
 
         self.assertEqual(release_matured_escrow(), 1)
-        self.assertEqual(len(self.provider.withdrawals), 1)
+        self.assertEqual(len(self.item_payouts()), 1)
         # Rodar de novo não paga outra vez.
         self.assertEqual(release_matured_escrow(), 0)
-        self.assertEqual(len(self.provider.withdrawals), 1)
+        self.assertEqual(len(self.item_payouts()), 1)
 
     # ------------------------------------------------------------ disputa
 
@@ -111,14 +133,14 @@ class EscrowTests(ApiTestCase):
         self.assertEqual(response.status_code, 200)
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.DISPUTED)
-        self.assertEqual(self.provider.withdrawals, [])
+        self.assertEqual(self.item_payouts(), [])
 
     def test_disputed_order_is_skipped_by_the_release_cron(self):
         self._confirm("dispute")
         WalletEntry.objects.filter(order=self.order).update(available_at=timezone.now())
 
         self.assertEqual(release_matured_escrow(), 0)
-        self.assertEqual(self.provider.withdrawals, [])
+        self.assertEqual(self.item_payouts(), [])
 
     def test_cannot_confirm_after_disputing(self):
         self._confirm("dispute")
@@ -134,11 +156,11 @@ class EscrowTests(ApiTestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(self.provider.withdrawals, [])
+        self.assertEqual(self.item_payouts(), [])
 
 
 @override_settings(ASAAS_API_KEY="test-key", ESCROW_ENABLED=False, AUTO_PAYOUT_ON_PAYMENT=True)
-class NoEscrowTests(ApiTestCase):
+class NoEscrowTests(PayoutAssertionsMixin, ApiTestCase):
     """Modo sem custódia: repasse imediato na confirmação do pagamento."""
 
     def setUp(self):
@@ -158,6 +180,6 @@ class NoEscrowTests(ApiTestCase):
         order = Order.objects.get()
         self.client.get(reverse("payments:order_status", args=[order.access_token]))
 
-        self.assertEqual(len(self.provider.withdrawals), 1)
+        self.assertEqual(len(self.item_payouts()), 1)
         entry = WalletEntry.objects.get(order=order, kind=WalletEntry.Kind.SALE_CREDIT)
         self.assertLessEqual(entry.available_at, timezone.now())

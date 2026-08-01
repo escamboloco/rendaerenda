@@ -23,7 +23,14 @@ def verification_page(request):
 
 @login_required
 def seller_kyc_page(request):
-    kyc = getattr(request.user, "seller_kyc", None)
+    """
+    Página de verificação. A linha do KYC é criada já na primeira visita
+    para que o código que a vendedora escreve no papel não mude entre
+    abrir a página e tirar a selfie.
+    """
+    from .models import SellerKYC
+
+    kyc, _ = SellerKYC.objects.get_or_create(user=request.user)
     return render(request, "accounts/seller_kyc.html", {"kyc": kyc})
 
 
@@ -145,18 +152,24 @@ class PhoneVerificationConfirmView(APIView):
 
 
 class SellerKYCSubmitView(APIView):
-    """POST /api/vendedora/kyc/ — documento frente/verso + selfie + termo de maioridade e cessão de imagem."""
+    """
+    POST /api/vendedora/kyc/ — documento frente/verso + selfie com o
+    código da conta + termo de maioridade e cessão de imagem.
+
+    NÃO exige idade já verificada: é este envio que produz a verificação.
+    A conferência é humana (admin), e é lá que a data de nascimento do
+    documento vira a idade oficial da conta. Exigir `is_age_verified`
+    aqui criava um impasse — a única outra porta é o bureau biométrico,
+    que só existe quando `AGE_KYC_API_URL` está configurada.
+    """
 
     permission_classes = [IsAuthenticated]
     parser_classes = [parsers.MultiPartParser]
     throttle_scope = "checkout"
 
     def post(self, request):
-        if not request.user.is_age_verified:
-            return Response(
-                {"detail": "Verificação de idade precisa estar aprovada antes do KYC de vendedora."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        if request.user.is_banned:
+            return Response({"detail": "Conta suspensa."}, status=status.HTTP_403_FORBIDDEN)
         serializer = SellerKYCSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         kyc = serializer.save()

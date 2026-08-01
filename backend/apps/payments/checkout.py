@@ -97,6 +97,13 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
 
     quantities = {str(line.product_id): line.quantity for line in lines}
     weight = sum(p.weight_grams * quantities.get(str(p.id), 1) for p in products)
+    origin_cep = products[0].store.origin_cep
+
+    if not origin_cep:
+        raise CheckoutError(
+            "Esta loja ainda não cadastrou o CEP de postagem — o frete não pode ser calculado."
+        )
+
     try:
         options = calculate_freight_options(
             destination_cep=destination_cep,
@@ -104,24 +111,46 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
             length_cm=max(p.length_cm for p in products),
             width_cm=max(p.width_cm for p in products),
             height_cm=sum(p.height_cm * quantities.get(str(p.id), 1) for p in products),
-            origin_cep=products[0].store.origin_cep,
+            origin_cep=origin_cep,
             declared_value=sum(p.price for p in products),
         )
-    except Exception as exc:
-        logger.exception("Falha ao cotar frete para o CEP %s***", destination_cep[:5])
-        raise CheckoutError(
-            "Não conseguimos calcular o frete agora. Tente novamente em instantes.", status_code=502
-        ) from exc
+    except Exception:
+        # Transportadora fora do ar ou sem contrato: cai para a tarifa fixa
+        # em vez de derrubar a venda. Se a tarifa for zero, o frete some e
+        # a vendedora fica no prejuizo — por isso o valor e configuravel e
+        # esta no checklist de producao.
+        logger.exception("Falha ao cotar frete para o CEP %s*** — usando tarifa fixa.", destination_cep[:5])
+        options = []
 
     if not options:
-        raise CheckoutError("Nenhuma opção de envio disponível para este CEP.")
+        flat = Decimal(str(getattr(settings, "SHIPPING_FLAT_RATE", 0) or 0))
+        options = [
+            FreightOption(
+                service="pac",
+                label="Envio com rastreio",
+                price=float(flat),
+                deadline_days=8,
+                company="Correios",
+            )
+        ]
     chosen = next((o for o in options if o.service == preferred_service), options[0])
-    packaging = Decimal(str(getattr(settings, "PACKAGING_FEE", 0) or 0))
-    if packaging:
+
+    # Embalagem neutra entra no frete: a vendedora recebe esse valor junto
+    # com o envio e consegue comprar a caixa sem tirar do bolso.
+    from apps.shipping.packaging import neutral_box_for
+
+    box = neutral_box_for(
+        weight_grams=weight,
+        length_cm=max(p.length_cm for p in products),
+        width_cm=max(p.width_cm for p in products),
+        height_cm=sum(p.height_cm * quantities.get(str(p.id), 1) for p in products),
+    )
+    extra = box.price + Decimal(str(getattr(settings, "PACKAGING_FEE", 0) or 0))
+    if extra:
         chosen = FreightOption(
             service=chosen.service,
-            label=chosen.label,
-            price=float(Decimal(str(chosen.price)) + packaging),
+            label=f"{chosen.label} + {box.label.lower()}",
+            price=float(Decimal(str(chosen.price)) + extra),
             deadline_days=chosen.deadline_days,
             company=chosen.company,
         )
@@ -283,6 +312,19 @@ def _load_addons(chosen: dict[str, set[str]]) -> dict[str, list]:
 # 2. Cobranca
 # --------------------------------------------------------------------------
 
+def order_return_url(order: Order) -> str:
+    """
+    URL absoluta da pagina do pedido, usada como retorno do checkout
+    hospedado do Asaas (cartao). Precisa ser absoluta: quem redireciona e
+    o PSP, nao o nosso servidor.
+    """
+    domain = (getattr(settings, "SITE_DOMAIN", "") or "").strip()
+    if not domain:
+        return ""
+    scheme = "http" if getattr(settings, "DEBUG", False) else "https"
+    return f"{scheme}://{domain}{order.track_url}"
+
+
 def create_charge_for_order(order: Order, *, method: str = "pix") -> Payment:
     """
     Cria a cobranca no PSP e guarda o Pix no pedido. Chamado FORA de
@@ -308,6 +350,7 @@ def create_charge_for_order(order: Order, *, method: str = "pix") -> Payment:
             customer_cpf=order.payer_cpf,
             customer_name=order.payer_name,
             customer_email=order.payer_email,
+            return_url=order_return_url(order),
         )
     except AsaasError as exc:
         cancel_order(order, reason="falha_cobranca")

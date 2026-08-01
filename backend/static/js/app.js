@@ -410,6 +410,8 @@ function checkoutFunnel(config) {
     fieldErrors: {},
     cepLoading: false,
     cepError: "",
+    freight: null,
+    freightLoading: false,
     marketingOptIn: false,
     paymentMethod: "pix",
     guest: { name: "", email: "", cpf: "", birth_date: "" },
@@ -469,7 +471,7 @@ function checkoutFunnel(config) {
     },
 
     get totalLabel() {
-      return money(this.summary ? this.summary.grand_total : 0);
+      return money(this.orderTotal);
     },
 
     formatCPF() {
@@ -500,11 +502,45 @@ function checkoutFunnel(config) {
           const numberField = document.getElementById("address-number");
           if (numberField && !this.address.number) numberField.focus();
         });
+        this.quoteFreight();
       } catch (e) {
         this.cepError = "Não foi possível consultar o CEP. Preencha manualmente.";
       } finally {
         this.cepLoading = false;
       }
+    },
+
+    /* Frete so aparece depois do CEP: e o unico momento em que da para
+       calcular de verdade (origem = CEP da vendedora, destino = o dela). */
+    async quoteFreight() {
+      const cep = onlyDigits(this.address.cep);
+      const items = this.cart.items;
+      if (cep.length !== 8 || !items.length) return;
+      this.freightLoading = true;
+      try {
+        const { ok, data } = await postJSON("/api/frete/cotacao/", {
+          destination_cep: cep,
+          product_ids: items.map((item) => item.id),
+        });
+        if (!ok || !Array.isArray(data) || !data.length) {
+          this.freight = null;
+          return;
+        }
+        this.freight = data[0];
+      } catch (e) {
+        this.freight = null;
+      } finally {
+        this.freightLoading = false;
+      }
+    },
+
+    get freightPrice() {
+      return this.freight ? Number(this.freight.price) : 0;
+    },
+
+    get orderTotal() {
+      const items = this.summary ? Number(this.summary.grand_total) : 0;
+      return items + this.freightPrice;
     },
 
     validateIdentity() {

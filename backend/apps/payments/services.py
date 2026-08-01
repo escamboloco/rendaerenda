@@ -117,6 +117,7 @@ class PaymentProvider(ABC):
         customer_cpf: str,
         customer_name: str,
         customer_email: str,
+        return_url: str = "",
     ) -> ChargeResult: ...
 
     @abstractmethod
@@ -192,6 +193,7 @@ class AsaasProvider(PaymentProvider):
         customer_cpf: str,
         customer_name: str,
         customer_email: str,
+        return_url: str = "",
     ) -> ChargeResult:
         customer_id = self.client.get_or_create_customer(
             cpf_cnpj=customer_cpf, name=customer_name, email=customer_email
@@ -212,6 +214,7 @@ class AsaasProvider(PaymentProvider):
             external_reference=str(order_id),
             description=description,
             split=split,
+            return_url=return_url,
         )
         return _charge_result(payment)
 

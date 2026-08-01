@@ -6,6 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import Paginator
 from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
@@ -118,7 +119,17 @@ def home(request):
     """
     Vitrine principal: peças à venda (não lojas). É o que faz o marketplace
     parecer marketplace — a pessoa entra e já vê o que pode comprar.
+
+    Busca e filtro vão para o catálogo: a home é feita de prateleiras
+    curadas (destaques, novidades, mais vendidos) e misturar resultado de
+    busca com prateleira genérica confunde — a pessoa buscou uma coisa e
+    via outras dez sem relação.
     """
+    from django.shortcuts import redirect
+
+    if any(request.GET.get(key) for key in ("q", "categoria", "tipo", "ordem")):
+        return redirect(f"{reverse('stores:listing')}?{request.GET.urlencode()}")
+
     context = _product_feed(request, per_page=16)
     context.update(
         {
@@ -139,11 +150,55 @@ def home(request):
                 .prefetch_related("images")
                 .order_by("-sold_count")[:8]
             ),
+            "newest": (
+                Product.objects.filter(
+                    public_store_filter("store__"),
+                    status=Product.Status.PUBLISHED,
+                    visibility=Product.Visibility.PUBLIC,
+                    stock__gt=0,
+                )
+                .select_related("store")
+                .prefetch_related("images")
+                .order_by("-created_at")[:8]
+            ),
+            "home_categories": (
+                Category.objects.annotate(
+                    active_count=Count(
+                        "products",
+                        filter=Q(
+                            products__status=Product.Status.PUBLISHED,
+                            products__visibility=Product.Visibility.PUBLIC,
+                            products__stock__gt=0,
+                        ),
+                    )
+                )
+                .filter(active_count__gt=0)
+                .order_by("-active_count")[:8]
+            ),
             "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
             "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
+            "stats": _marketplace_stats(),
         }
     )
     return render(request, "stores/home.html", context)
+
+
+def _marketplace_stats() -> dict:
+    """
+    Números reais da vitrine (nunca inventados): se ainda não houver
+    volume, a home esconde a seção em vez de exibir prova social falsa.
+    """
+    from django.db.models import Avg
+
+    from apps.payments.models import Order
+
+    delivered = Order.objects.filter(status=Order.Status.DELIVERED).count()
+    rating = Store.objects.filter(review_count__gt=0).aggregate(value=Avg("avg_rating"))["value"]
+    return {
+        "delivered": delivered,
+        "rating": round(rating, 1) if rating else None,
+        "show": delivered >= 10,
+    }
 
 
 def listing(request):
@@ -277,7 +332,7 @@ class StoreOnboardView(APIView):
         if hasattr(user, "store"):
             return Response({"detail": "Você já tem uma loja."}, status=status.HTTP_409_CONFLICT)
 
-        serializer = StoreOnboardSerializer(data=request.data)
+        serializer = StoreOnboardSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
         plan = payload.get("plan_id")

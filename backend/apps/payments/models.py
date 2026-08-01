@@ -67,6 +67,9 @@ class Order(models.Model):
     # Quando o dinheiro saiu da custódia para a vendedora. Trava de
     # idempotência do repasse: preenchido, nunca mais paga de novo.
     payout_sent_at = models.DateTimeField(null=True, blank=True)
+    # Repasse do frete + embalagem, feito assim que o pagamento confirma.
+    # Separado de payout_sent_at porque sai antes e por outro motivo.
+    shipping_payout_sent_at = models.DateTimeField(null=True, blank=True)
     # Trava de idempotencia: garante que o estoque so volta uma vez,
     # mesmo com webhook repetido + cron de expiracao rodando junto.
     stock_restored = models.BooleanField(default=False)
