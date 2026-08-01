@@ -1,0 +1,62 @@
+{% comment %}
+Prateleira em carrossel, reutilizavel na home e na pagina de loja.
+
+Espera: `items` (produtos), `title`, `subtitle`, `link` e `link_label`.
+
+Por que scroll nativo em vez de carrossel em JS: o navegador ja resolve
+gesto de toque, momentum, teclado e leitor de tela. Biblioteca de carrossel
+costuma quebrar tudo isso para ganhar uma animacao. Aqui o JS so adiciona
+as setas e a barra de progresso — se ele falhar, continua sendo uma lista
+rolavel que funciona.
+{% endcomment %}
+<section class="section" x-data="carousel()">
+  <div class="rail-head">
+    <div class="min-w-0">
+      <h2 class="section-title">{{ title }}</h2>
+      {% if subtitle %}<p class="section-sub">{{ subtitle }}</p>{% endif %}
+    </div>
+
+    <div class="flex items-center gap-2 shrink-0">
+      {% if link %}
+      <a href="{{ link }}" class="rail-link hidden sm:inline">{{ link_label|default:"ver todos" }} →</a>
+      {% endif %}
+
+      {# Setas so aparecem onde existe mouse — no toque o gesto e melhor. #}
+      <div class="hidden md:flex items-center gap-1.5">
+        <button type="button" class="carousel-btn" @click="scrollBy(-1)" :disabled="!canPrev"
+                aria-label="Anterior">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <button type="button" class="carousel-btn" @click="scrollBy(1)" :disabled="!canNext"
+                aria-label="Próximo">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="carousel">
+    <div class="rail" x-ref="track" @scroll.passive="measure()">
+      {% for product in items %}
+        {% include "catalog/_product_card.html" with product=product show_store=show_store compact=True %}
+      {% endfor %}
+    </div>
+
+    {# Sombras nas bordas indicam que ha mais conteudo fora da tela. #}
+    <div class="carousel-fade carousel-fade--left" x-cloak x-show="canPrev"></div>
+    <div class="carousel-fade carousel-fade--right" x-cloak x-show="canNext"></div>
+  </div>
+
+  {# Barra de progresso: substitui os "dots", que ficam inviaveis com 20 itens. #}
+  <div class="carousel-progress" x-cloak x-show="canPrev || canNext">
+    <div class="carousel-progress__bar" :style="'width: ' + Math.max(progress, 6) + '%'"></div>
+  </div>
+
+  {% if link %}
+  <a href="{{ link }}" class="rail-link sm:hidden inline-block mt-3">{{ link_label|default:"ver todos" }} →</a>
+  {% endif %}
+</section>

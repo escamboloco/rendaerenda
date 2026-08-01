@@ -215,8 +215,9 @@
       <template x-if="!messages.length">
         <div class="text-center py-8 space-y-3">
           <p class="text-sm text-gray-500">Nenhuma mensagem ainda.</p>
-          {# Sugestão de primeira mensagem: quase ninguém sabe o que
-             escrever, e conversa iniciada reduz contestação depois. #}
+          {% comment %} Sugestão de primeira mensagem: quase ninguém sabe o que
+             escrever, e conversa iniciada reduz contestação depois.
+{% endcomment %}
           <div class="flex flex-wrap justify-center gap-2">
             <template x-for="suggestion in suggestions" :key="suggestion">
               <button type="button" class="chip !text-xs !py-1.5" @click="text = suggestion; $refs.input.focus()"

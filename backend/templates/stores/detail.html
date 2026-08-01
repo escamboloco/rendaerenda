@@ -33,9 +33,10 @@
     {% include "moderation/_report_button.html" with target_type="store" object_id=store.id %}
   </div>
 
-  {# Painel de confiança: o que a pessoa precisa saber antes de comprar de
+  {% comment %} Painel de confiança: o que a pessoa precisa saber antes de comprar de
      alguém que ela não conhece. Tudo vem do banco — nenhum número aqui é
-     decorativo. #}
+     decorativo.
+{% endcomment %}
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
     <div class="card p-4 text-center">
       <p class="font-display text-2xl text-white">{{ store.sales_count }}</p>

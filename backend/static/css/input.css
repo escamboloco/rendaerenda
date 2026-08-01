@@ -212,6 +212,43 @@
     @apply text-sm text-brand hover:text-brand-light shrink-0 font-medium;
   }
 
+  /* -------------------------------------------------------- carrossel ---
+     Scroll nativo com snap. As bordas em degrade sinalizam conteudo fora
+     da tela melhor que qualquer seta, e funcionam mesmo sem JS. */
+  .carousel {
+    @apply relative;
+  }
+  .carousel-btn {
+    @apply w-8 h-8 rounded-full border border-surface-border bg-surface-alt
+      text-gray-300 flex items-center justify-center transition
+      hover:border-brand/60 hover:text-white
+      disabled:opacity-25 disabled:pointer-events-none;
+  }
+  .carousel-fade {
+    @apply pointer-events-none absolute inset-y-0 w-14 z-10 hidden sm:block;
+  }
+  .carousel-fade--left {
+    @apply left-0;
+    background: linear-gradient(90deg, #0b0709 10%, transparent);
+  }
+  .carousel-fade--right {
+    @apply right-0;
+    background: linear-gradient(270deg, #0b0709 10%, transparent);
+  }
+  .carousel-progress {
+    @apply h-[3px] rounded-full bg-surface-border overflow-hidden mt-1 max-w-[8rem];
+  }
+  .carousel-progress__bar {
+    @apply h-full rounded-full bg-gradient-brand transition-[width] duration-200;
+  }
+  /* Esconde a barra de rolagem sem tirar a rolagem. */
+  .rail {
+    scrollbar-width: none;
+  }
+  .rail::-webkit-scrollbar {
+    display: none;
+  }
+
   .eyebrow {
     @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-orchid;
   }

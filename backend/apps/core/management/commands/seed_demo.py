@@ -23,7 +23,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 from apps.accounts.models import AgeVerification, SellerKYC, User
 from apps.catalog.models import Category, Product, ProductImage
@@ -183,6 +183,61 @@ def _draw_garment(d: ImageDraw.ImageDraw, w: int, category: str, c, cd, cl):
         d.line([(P(.455), P(.54)), (P(.545), P(.54))], fill=cl, width=trim)
 
 
+
+def _lace_texture(w: int, color, seed: int) -> Image.Image:
+    """
+    Malha de renda procedural: arcos entrelaçados em grade hexagonal.
+
+    É o detalhe que separa "silhueta chapada" de "parece tecido". Gerado
+    na hora, então não depende de nenhum arquivo externo nem de imagem de
+    terceiro — só de matemática.
+    """
+    rnd = random.Random(seed)
+    tex = Image.new("RGBA", (w, w), (0, 0, 0, 0))
+    d = ImageDraw.Draw(tex)
+    passo = max(w // 26, 8)
+    raio = int(passo * 0.62)
+    linha = max(1, w // 620)
+    for linha_i, y in enumerate(range(-passo, w + passo, int(passo * 0.72))):
+        desloc = (passo // 2) if linha_i % 2 else 0
+        for x in range(-passo + desloc, w + passo, passo):
+            jx, jy = rnd.randint(-1, 1), rnd.randint(-1, 1)
+            caixa = [x - raio + jx, y - raio + jy, x + raio + jx, y + raio + jy]
+            d.arc(caixa, 200, 340, fill=color, width=linha)
+            d.arc(caixa, 20, 160, fill=color, width=linha)
+    return tex
+
+
+def _fabric_shading(w: int, seed: int) -> Image.Image:
+    """Dobras e brilho do tecido: manchas claras/escuras borradas."""
+    rnd = random.Random(seed + 7)
+    sombra = Image.new("L", (w, w), 128)
+    d = ImageDraw.Draw(sombra)
+    for _ in range(14):
+        cx, cy = rnd.randint(0, w), rnd.randint(int(w * .25), int(w * .8))
+        rx, ry = rnd.randint(w // 12, w // 5), rnd.randint(w // 16, w // 6)
+        tom = rnd.choice([96, 104, 150, 162])
+        d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=tom)
+    return sombra.filter(ImageFilter.GaussianBlur(w // 22))
+
+
+def _vignette(w: int) -> Image.Image:
+    """
+    Vinheta de softbox: centro claro (255), bordas escurecidas.
+
+    Desenha do maior para o menor com valor CRESCENTE — o inverso escurece
+    justamente o miolo da foto, que é onde a peça está.
+    """
+    v = Image.new("L", (w, w), 0)
+    d = ImageDraw.Draw(v)
+    passos = 24
+    for i in range(passos):
+        f = i / passos                      # 0 = borda, 1 = centro
+        margem = int(w * 0.5 * f * 0.9)
+        d.ellipse([margem, margem, w - margem, w - margem], fill=int(60 + 195 * f))
+    return v.filter(ImageFilter.GaussianBlur(w // 12))
+
+
 def make_product_image(category: str, title: str, variant: int) -> bytes:
     """Ilustração 800x800 da peça (supersampling 2x) sobre fundo de estúdio."""
     w, ss = 800, 2
@@ -200,9 +255,35 @@ def make_product_image(category: str, title: str, variant: int) -> bytes:
     layer = Image.new("RGBA", (wk, wk), (0, 0, 0, 0))
     _draw_garment(ImageDraw.Draw(layer), wk, category, c, cd, cl)
     layer = layer.resize((w, w), Image.LANCZOS)
+
+    semente = abs(hash((title, variant))) % 9973
+
+    # Renda: desenhada sobre a peça e recortada pela silhueta, para a malha
+    # acompanhar exatamente o contorno em vez de vazar para o fundo.
+    renda = _lace_texture(w, _lighter(cl) + (110,), semente)
+    silhueta = layer.split()[3]
+    renda.putalpha(Image.composite(renda.split()[3], Image.new("L", (w, w), 0), silhueta))
+    layer = Image.alpha_composite(layer, renda)
+
+    # Dobras/brilho: multiplica o sombreado só dentro da peça.
+    # Dobras: mistura suave entre a cor chapada e a versao sombreada.
+    # Multiply puro escurece demais e mata a cor — 35% de mistura basta
+    # para sugerir volume sem apagar a peca.
+    sombreado = _fabric_shading(w, semente)
+    base = layer.convert("RGB")
+    volume = ImageChops.multiply(base, Image.merge("RGB", (sombreado,) * 3)).point(
+        lambda v: min(255, int(v * 2.0))
+    )
+    rgb = Image.blend(base, volume, 0.35)
+    layer = Image.merge("RGBA", (*rgb.split(), silhueta))
+
     if variant == 1:  # 2a foto: leve angulo, como se fosse outro shot
         layer = layer.rotate(-8, resample=Image.BICUBIC, expand=False)
     bg.paste(layer, (0, 0), layer)
+
+    # Vinheta por cima de tudo: dá o acabamento de foto tirada em estúdio.
+    bordas = Image.new("RGB", (w, w), (176, 166, 190))
+    bg = Image.blend(bg, Image.composite(bg, bordas, _vignette(w)), 0.75)
 
     dd = ImageDraw.Draw(bg)
     wm_font, has_unicode = _font(22)

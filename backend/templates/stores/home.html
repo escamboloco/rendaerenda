@@ -5,9 +5,10 @@
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 
 {% block extra_head %}
-{# FAQ estruturada: o Google pode exibir as perguntas direto no resultado
+{% comment %} FAQ estruturada: o Google pode exibir as perguntas direto no resultado
    de busca. É o tipo de ganho que só existe se o dado for o mesmo da
-   página — por isso a lista vem do mesmo lugar (stores.views.HOME_FAQ). #}
+   página — por isso a lista vem do mesmo lugar (stores.views.HOME_FAQ).
+{% endcomment %}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -26,6 +27,7 @@
 {% endblock %}
 
 {% block content %}
+{% url 'stores:listing' as listing_url %}
 
 {# ============================================================== hero ==== #}
 <section class="relative -mx-4 sm:-mx-6 px-4 sm:px-6 pt-6 pb-12 mb-10 overflow-hidden">
@@ -69,59 +71,12 @@
 
 {# ====================================================== destaques ==== #}
 {% if products %}
-<section class="section">
-  <div class="rail-head">
-    <div>
-      <h2 class="section-title">Em destaque agora</h2>
-      <p class="section-sub">O que a vitrine está mostrando primeiro</p>
-    </div>
-    <a href="{% url 'stores:listing' %}" class="rail-link">ver todos →</a>
-  </div>
-  <div class="rail">
-    {% for product in products|slice:":10" %}
-      {% include "catalog/_product_card.html" with product=product show_store=True compact=True %}
-    {% endfor %}
-  </div>
-</section>
+{% include "catalog/_carousel.html" with items=products|slice:":10" title="Em destaque agora" subtitle="O que a vitrine está mostrando primeiro" link=listing_url link_label="ver todos" show_store=True %}
 {% endif %}
 
 {# ====================================================== categorias ==== #}
 {% if home_categories %}
-<section class="section">
-  <div class="rail-head">
-    <div>
-      <h2 class="section-title">Explore por categoria</h2>
-      <p class="section-sub">Cada categoria tem regra própria de envio e entrega</p>
-    </div>
-    <a href="{% url 'stores:categories' %}" class="rail-link">todas →</a>
-  </div>
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-    {% for category in home_categories %}
-    <a href="{% url 'stores:listing' %}?categoria={{ category.slug }}" class="cat-tile group">
-      <span class="font-display text-lg text-white group-hover:text-accent-blush transition">{{ category.name }}</span>
-      <span class="text-[11px] text-gray-500">{{ category.active_count }} anúncio{{ category.active_count|pluralize }}</span>
-    </a>
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
-
-{# ==================================================== mais vendidos ==== #}
-{% if top_sellers %}
-<section class="section">
-  <div class="rail-head">
-    <div>
-      <h2 class="section-title">Mais vendidos</h2>
-      <p class="section-sub">Quem já saiu daqui com entrega confirmada</p>
-    </div>
-    <a href="{% url 'stores:listing' %}?ordem=relevancia" class="rail-link">ver mais →</a>
-  </div>
-  <div class="rail">
-    {% for product in top_sellers %}
-      {% include "catalog/_product_card.html" with product=product show_store=True compact=True %}
-    {% endfor %}
-  </div>
-</section>
+{% include "catalog/_carousel.html" with items=top_sellers title="Mais vendidos" subtitle="Quem já saiu daqui com entrega confirmada" link=listing_url|add:"?ordem=relevancia" link_label="ver mais" show_store=True %}
 {% endif %}
 
 {# ========================================================= custódia ==== #}
@@ -212,20 +167,7 @@ importante (a custódia) ocupar o espaço que ela merece.
 
 {# ========================================================= novidades ==== #}
 {% if newest %}
-<section class="section">
-  <div class="rail-head">
-    <div>
-      <h2 class="section-title">Acabou de entrar</h2>
-      <p class="section-sub">Anúncios recém-aprovados pela moderação</p>
-    </div>
-    <a href="{% url 'stores:listing' %}?ordem=recentes" class="rail-link">ver mais →</a>
-  </div>
-  <div class="rail">
-    {% for product in newest %}
-      {% include "catalog/_product_card.html" with product=product show_store=True compact=True %}
-    {% endfor %}
-  </div>
-</section>
+{% include "catalog/_carousel.html" with items=newest title="Acabou de entrar" subtitle="Anúncios recém-aprovados pela moderação" link=listing_url|add:"?ordem=recentes" link_label="ver mais" show_store=True %}
 {% endif %}
 
 {# ============================================================ lojas ==== #}

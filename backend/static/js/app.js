@@ -378,6 +378,43 @@ function questionForm(productId) {
   };
 }
 
+/* Carrossel das prateleiras da vitrine.
+ *
+ * Scroll nativo com scroll-snap (o navegador cuida do gesto de toque e do
+ * momentum) + setas e barra de progresso para desktop. Nada de biblioteca:
+ * carrossel em JS costuma quebrar acessibilidade e teclado, e aqui o
+ * conteudo continua sendo uma lista rolavel de verdade. */
+function carousel() {
+  return {
+    canPrev: false,
+    canNext: false,
+    progress: 0,
+
+    init() {
+      this.$nextTick(() => this.measure());
+      // Imagem que carrega depois muda a largura total da trilha.
+      window.addEventListener("resize", () => this.measure(), { passive: true });
+    },
+
+    measure() {
+      const track = this.$refs.track;
+      if (!track) return;
+      const max = track.scrollWidth - track.clientWidth;
+      this.canPrev = track.scrollLeft > 4;
+      this.canNext = track.scrollLeft < max - 4;
+      this.progress = max > 0 ? Math.min(100, (track.scrollLeft / max) * 100) : 0;
+    },
+
+    /* Avanca ~85% da area visivel: deixa um item parcialmente a mostra,
+       que e o que sinaliza "tem mais coisa" melhor que qualquer seta. */
+    scrollBy(direction) {
+      const track = this.$refs.track;
+      if (!track) return;
+      track.scrollBy({ left: direction * track.clientWidth * 0.85, behavior: "smooth" });
+    },
+  };
+}
+
 /* Galeria da pagina de produto. */
 function productGallery(images) {
   return {
