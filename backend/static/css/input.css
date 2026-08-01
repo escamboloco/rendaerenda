@@ -235,7 +235,7 @@
     @apply card p-5 space-y-2 bg-surface-card/80;
   }
   .trust-icon {
-    @apply w-10 h-10 rounded-xl bg-gradient-brand/10 border border-brand/25
+    @apply w-10 h-10 rounded-xl bg-brand/10 border border-brand/25
       flex items-center justify-center text-brand-light shrink-0;
   }
 
@@ -246,9 +246,109 @@
     @apply text-xs text-gray-500 mt-1;
   }
 
+  /* ------------------------------------------------------------ marca ---
+     Monograma 3D em CSS puro. `perspective` no palco + `translateZ`
+     diferente por camada = paralaxe de verdade ao girar, sem WebGL. */
+  .logo3d {
+    @apply inline-block shrink-0 w-9 h-9;
+    perspective: 320px;
+  }
+  .logo3d--sm {
+    @apply w-7 h-7;
+  }
+  .logo3d__stage {
+    @apply relative block w-full h-full;
+    transform-style: preserve-3d;
+    animation: logo-float 7s ease-in-out infinite;
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .logo3d__layer {
+    @apply absolute inset-0 w-full h-full;
+  }
+  .logo3d__layer--back {
+    transform: translateZ(-9px) scale(1.04);
+    filter: blur(0.6px);
+    opacity: 0.85;
+  }
+  .logo3d__layer--front {
+    transform: translateZ(7px);
+  }
+  /* Giro no hover só onde existe mouse — em toque, hover fica "grudado". */
+  @media (hover: hover) and (pointer: fine) {
+    a:hover > .logo3d .logo3d__stage,
+    .logo3d:hover .logo3d__stage {
+      transform: rotateY(28deg) rotateX(-8deg) scale(1.06);
+      animation-play-state: paused;
+    }
+  }
+  @keyframes logo-float {
+    0%, 100% { transform: rotateY(-11deg) rotateX(4deg); }
+    50%      { transform: rotateY(11deg) rotateX(-4deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .logo3d__stage {
+      animation: none;
+      transform: none;
+    }
+  }
+
+  .logo-word {
+    @apply font-display text-lg font-bold tracking-tightest leading-none whitespace-nowrap;
+  }
+  .logo-word__amp {
+    @apply text-gradient-brand italic px-[1px];
+  }
+
+  /* --------------------------------------------------------- estrutura ---
+     Ritmo de secao unico. "Organizado" e, na pratica, todo bloco
+     respirando a mesma distancia — sem margens ad hoc por template. */
+  .section {
+    @apply mb-14 sm:mb-20;
+  }
+  .section-head {
+    @apply mb-6;
+  }
+  .section-title {
+    @apply text-2xl sm:text-[2rem] font-display font-bold text-white leading-[1.1];
+  }
+  .section-sub {
+    @apply text-sm text-gray-500 mt-2 max-w-xl;
+  }
+
+  /* Superficie elevada com borda em gradiente — profundidade sem sombra
+     pesada, que em tema escuro vira mancha. */
+  .surface-raised {
+    @apply relative rounded-2xl border border-surface-border bg-surface-card;
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 55%);
+  }
+
+  /* ------------------------------------------------------------ bento ---
+     Grade de blocos de tamanhos diferentes. Organiza a informacao sem a
+     monotonia de uma fileira de cards iguais, e deixa o bloco mais
+     importante ocupar o espaco que merece. Mobile empilha tudo. */
+  .bento {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 auto-rows-auto;
+  }
+  .bento-item {
+    @apply min-w-0;
+  }
+  .bento-item--wide {
+    @apply sm:col-span-2 lg:col-span-3;
+  }
+  .bento-item--tall {
+    @apply sm:row-span-2;
+  }
+
+  /* Grao sutil: tira o aspecto "chapado" do preto puro. */
+  .grain::after {
+    content: "";
+    @apply pointer-events-none absolute inset-0 opacity-[0.035] mix-blend-overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
   /* Faixa fina do topo — recado curto e permanente (discricao/custodia). */
   .topbar {
-    @apply text-[11px] text-center py-1.5 text-accent-blush/80 bg-gradient-brand/[0.12]
+    @apply text-[11px] text-center py-1.5 text-accent-blush/80 bg-accent-orchid/10
       border-b border-surface-border;
   }
 

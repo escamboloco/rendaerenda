@@ -4,10 +4,10 @@ Espera `product` com store/images ja pre-carregados. `show_store` liga a
 linha com o nome da loja (na pagina da propria loja fica redundante).
 `compact` deixa o card estreito para uso dentro de .rail.
 {% endcomment %}
-<article class="card card-hover group flex flex-col {% if compact %}w-44 sm:w-52{% endif %}"
+<article class="surface-raised card-hover group flex flex-col overflow-hidden {% if compact %}w-[10.5rem] sm:w-[12.5rem]{% endif %}"
          x-data="buyButton('{{ product.id }}', '{{ product.store.slug }}')">
   <a href="{% url 'catalog:detail' product.store.slug product.slug %}"
-     class="aspect-square bg-surface-alt overflow-hidden block relative">
+     class="aspect-[4/5] bg-surface-alt overflow-hidden block relative">
     {% with cover=product.images.first %}
     {% if cover %}
     <img src="{{ cover.file.url }}" alt="{{ product.title }}" loading="lazy"
@@ -46,7 +46,7 @@ linha com o nome da loja (na pagina da propria loja fica redundante).
     </a>
     {% endif %}
 
-    <p class="price text-lg mt-auto pt-1">R$ {{ product.price }}</p>
+    <p class="price text-[1.35rem] leading-none mt-auto pt-1.5">R$ {{ product.price }}</p>
 
     <button type="button" class="btn-primary w-full !py-2 !min-h-0 text-xs" @click="add()">
       <span x-show="!added">Adicionar à sacola</span>

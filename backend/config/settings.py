@@ -126,6 +126,13 @@ AWS_QUERYSTRING_EXPIRE = config("AWS_S3_SIGNED_URL_EXPIRE_SECONDS", default=300,
 AWS_DEFAULT_ACL = None
 USE_S3_MEDIA = bool(AWS_STORAGE_BUCKET_NAME)
 
+# Em DEBUG o WhiteNoise reconsulta o disco a cada request. Sem isso ele
+# guarda o estatico em memoria na subida do processo e continua servindo a
+# versao antiga depois de um `npm run build:css` — erro que custa horas de
+# depuracao porque o arquivo em disco esta certo e a tela, errada.
+WHITENOISE_AUTOREFRESH = DEBUG
+WHITENOISE_MAX_AGE = 0 if DEBUG else 31536000
+
 STORAGES = {
     "default": {
         "BACKEND": (

@@ -229,7 +229,7 @@
       <template x-for="message in messages" :key="message.id">
         <div class="flex gap-2 items-end" :class="message.mine ? 'justify-end' : 'justify-start'">
           <div x-show="!message.mine"
-               class="w-7 h-7 rounded-full bg-gradient-brand/25 border border-surface-border shrink-0
+               class="w-7 h-7 rounded-full bg-accent-orchid/25 border border-surface-border shrink-0
                       flex items-center justify-center text-[10px] text-accent-blush"
                x-text="message.sender === 'seller' ? 'V' : 'C'"></div>
 
