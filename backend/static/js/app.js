@@ -798,6 +798,24 @@ function orderChat(token) {
     sending: false,
     error: "",
     timer: null,
+    // Atalhos de primeira mensagem: quem abre o chat costuma travar no
+    // "o que eu escrevo?", e conversa iniciada evita contestacao depois.
+    suggestions: [
+      "Oi! Quando você consegue postar?",
+      "Pode me avisar o código de rastreio?",
+      "Confirma o tamanho da peça, por favor?",
+    ],
+
+    formatTime(value) {
+      if (!value) return "";
+      const date = new Date(value);
+      if (isNaN(date.getTime())) return "";
+      const today = new Date();
+      const sameDay = date.toDateString() === today.toDateString();
+      return sameDay
+        ? date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+        : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    },
 
     init() {
       this.load();
@@ -813,11 +831,21 @@ function orderChat(token) {
         });
         if (!response.ok) return;
         const data = await response.json();
+        const isFirstLoad = !this.messages.length;
+        const grew = data.messages.length > this.messages.length;
         this.messages = data.messages;
         this.role = data.role;
+        if (isFirstLoad || grew) this.scrollToEnd();
       } catch (e) {
         /* silencioso: e so atualizacao de fundo */
       }
+    },
+
+    scrollToEnd() {
+      this.$nextTick(() => {
+        const box = document.getElementById("chat-scroll");
+        if (box) box.scrollTop = box.scrollHeight;
+      });
     },
 
     async send() {
@@ -833,10 +861,7 @@ function orderChat(token) {
         }
         this.messages = [...this.messages, data];
         this.text = "";
-        this.$nextTick(() => {
-          const box = document.getElementById("chat-scroll");
-          if (box) box.scrollTop = box.scrollHeight;
-        });
+        this.scrollToEnd();
       } catch (e) {
         this.error = "Falha de conexão. Tente de novo.";
       } finally {

@@ -80,9 +80,48 @@ def order_page(request, token):
             "payment": getattr(order, "payment", None),
             "digital_assets": digital_assets,
             "can_confirm": can_confirm,
+            "timeline": _order_timeline(order, shipment),
             "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
         },
     )
+
+
+def _order_timeline(order, shipment):
+    """
+    Etapas do pedido com a informação que a pessoa realmente quer: onde o
+    dinheiro está em cada momento. Pedido só digital não tem postagem.
+    """
+    paid = order.status in (
+        Order.Status.PAID, Order.Status.SHIPPED, Order.Status.DELIVERED, Order.Status.DISPUTED
+    )
+    posted = bool(shipment and shipment.posted_at) or order.status in (
+        Order.Status.SHIPPED, Order.Status.DELIVERED
+    )
+    delivered = order.status == Order.Status.DELIVERED or bool(shipment and shipment.delivered_at)
+    released = bool(order.payout_sent_at)
+
+    if order.is_digital_only:
+        steps = [
+            ("Pagamento", "aguardando", paid),
+            ("Liberado", "arquivo disponível", paid),
+            ("Confirmação", "você confirma", delivered or released),
+            ("Concluído", "vendedora recebe", released),
+        ]
+    else:
+        steps = [
+            ("Pagamento", "valor retido", paid),
+            ("Postagem", "frete repassado", posted),
+            ("Entrega", "a caminho", delivered),
+            ("Liberação", "vendedora recebe", released),
+        ]
+
+    timeline, current_marked = [], False
+    for label, hint, done in steps:
+        current = not done and not current_marked
+        if current:
+            current_marked = True
+        timeline.append({"label": label, "hint": hint, "done": done, "current": current})
+    return timeline
 
 
 # Nome antigo mantido para não quebrar imports/urls existentes.

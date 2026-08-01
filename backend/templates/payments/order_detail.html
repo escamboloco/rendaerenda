@@ -16,6 +16,38 @@
     </span>
   </div>
 
+  {# ------------------------------------------------------ linha do tempo #}
+  {% if order.status != 'expired' and order.status != 'canceled' and order.status != 'refunded' %}
+  {% with s=order.shipment %}
+  <section class="card p-5">
+    {% comment %}
+    Cada etapa sabe onde o dinheiro está. É a dúvida real de quem comprou
+    num site que não conhece: "já pagaram a vendedora?".
+    {% endcomment %}
+    <ol class="grid grid-cols-4 gap-2 text-center">
+      {% for step in timeline %}
+      <li class="space-y-2">
+        <div class="h-1 rounded-full {% if step.done %}bg-brand{% elif step.current %}bg-brand/40{% else %}bg-surface-border{% endif %}"></div>
+        <p class="text-[11px] font-medium {% if step.done or step.current %}text-gray-200{% else %}text-gray-600{% endif %}">
+          {{ step.label }}
+        </p>
+        <p class="text-[10px] leading-tight {% if step.current %}text-accent-blush{% else %}text-gray-600{% endif %}">
+          {{ step.hint }}
+        </p>
+      </li>
+      {% endfor %}
+    </ol>
+
+    {% if order.status == 'paid' or order.status == 'shipped' %}
+    <p class="text-[11px] text-gray-500 mt-4 pt-3 border-t border-surface-border">
+      O valor do item está retido com a plataforma. A vendedora só recebe quando você confirmar —
+      ou {{ dispute_window_days }} dias após a entrega, se você não responder.
+    </p>
+    {% endif %}
+  </section>
+  {% endwith %}
+  {% endif %}
+
   {# ------------------------------------------------ pagamento em aberto #}
   {% if order.is_open_for_payment %}
   <section class="card p-5 space-y-4">
@@ -179,27 +211,55 @@
       </p>
     </div>
 
-    <div id="chat-scroll" class="space-y-2 max-h-72 overflow-y-auto">
+    <div id="chat-scroll" class="space-y-3 max-h-80 overflow-y-auto pr-1">
       <template x-if="!messages.length">
-        <p class="text-sm text-gray-500 py-4 text-center">Nenhuma mensagem ainda.</p>
+        <div class="text-center py-8 space-y-3">
+          <p class="text-sm text-gray-500">Nenhuma mensagem ainda.</p>
+          {# Sugestão de primeira mensagem: quase ninguém sabe o que
+             escrever, e conversa iniciada reduz contestação depois. #}
+          <div class="flex flex-wrap justify-center gap-2">
+            <template x-for="suggestion in suggestions" :key="suggestion">
+              <button type="button" class="chip !text-xs !py-1.5" @click="text = suggestion; $refs.input.focus()"
+                      x-text="suggestion"></button>
+            </template>
+          </div>
+        </div>
       </template>
+
       <template x-for="message in messages" :key="message.id">
-        <div class="flex" :class="message.mine ? 'justify-end' : 'justify-start'">
-          <div class="max-w-[80%] rounded-2xl px-3 py-2"
-               :class="message.mine ? 'bg-brand/20 border border-brand/30' : 'bg-white/5 border border-surface-border'">
-            <p class="text-sm text-gray-200 whitespace-pre-line" x-text="message.body"></p>
-            <p class="text-[10px] text-gray-500 mt-1"
-               x-text="(message.sender === 'seller' ? 'Vendedora' : 'Comprador')"></p>
+        <div class="flex gap-2 items-end" :class="message.mine ? 'justify-end' : 'justify-start'">
+          <div x-show="!message.mine"
+               class="w-7 h-7 rounded-full bg-gradient-brand/25 border border-surface-border shrink-0
+                      flex items-center justify-center text-[10px] text-accent-blush"
+               x-text="message.sender === 'seller' ? 'V' : 'C'"></div>
+
+          <div class="max-w-[78%] rounded-2xl px-3.5 py-2.5"
+               :class="message.mine
+                 ? 'bg-brand/20 border border-brand/30 rounded-br-sm'
+                 : 'bg-surface-alt border border-surface-border rounded-bl-sm'">
+            <p class="text-sm text-gray-100 whitespace-pre-line break-words" x-text="message.body"></p>
+            <p class="text-[10px] text-gray-600 mt-1 flex items-center gap-1.5">
+              <span x-text="message.sender === 'seller' ? 'Vendedora' : 'Comprador'"></span>
+              <span x-show="message.created_at">·</span>
+              <span x-text="formatTime(message.created_at)"></span>
+            </p>
           </div>
         </div>
       </template>
     </div>
 
     <form @submit.prevent="send()" class="flex gap-2">
-      <input type="text" x-model="text" maxlength="1000" class="input-field" placeholder="Escreva uma mensagem…">
-      <button type="submit" class="btn-primary !px-4 shrink-0" :disabled="sending">Enviar</button>
+      <input type="text" x-ref="input" x-model="text" maxlength="1000" class="input-field"
+             placeholder="Escreva uma mensagem…" :disabled="sending">
+      <button type="submit" class="btn-primary !px-4 shrink-0" :disabled="sending || !text.trim()">
+        <span x-show="!sending">Enviar</span>
+        <span x-cloak x-show="sending">…</span>
+      </button>
     </form>
     <p x-show="error" x-text="error" class="input-error"></p>
+    <p class="text-[11px] text-gray-600">
+      A conversa fica registrada e serve de prova se houver contestação.
+    </p>
   </section>
 
   {% if order.shipping_address %}

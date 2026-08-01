@@ -39,6 +39,59 @@ KIND_FILTERS = {
 }
 
 
+# Conteudo estatico da home. Fica aqui (e nao no template) para o texto
+# ser reaproveitado na FAQ estruturada (schema.org) sem duplicar redacao.
+INCLUDED_IN_EVERY_ORDER = [
+    ("Pagamento em custódia", "O valor fica com a plataforma até você confirmar que recebeu."),
+    ("Embalagem neutra", "Caixa sem logo, sem tema e sem remetente que entregue o conteúdo."),
+    ("Extrato discreto", "A cobrança aparece com nome neutro, sem citar o site nem o produto."),
+    ("Envio rastreado", "Você acompanha o pedido pelo link, do pagamento até a entrega."),
+    ("Conversa protegida", "Fale com a vendedora aqui dentro, sem passar telefone nem rede social."),
+    ("Direito de contestar", "7 dias após a entrega para abrir disputa e travar o pagamento."),
+]
+
+HOME_FAQ = [
+    (
+        "Preciso criar conta para comprar?",
+        "Não. Dá para comprar informando nome, e-mail, CPF e data de nascimento na "
+        "hora do pagamento. A conta serve para acompanhar todas as compras num lugar "
+        "só, mas não é obrigatória.",
+    ),
+    (
+        "O que aparece na fatura do meu cartão ou no extrato do Pix?",
+        "Um nome neutro, que não menciona o site, o tipo de produto nem a vendedora. "
+        "Quem olhar o seu extrato não descobre o que foi comprado.",
+    ),
+    (
+        "Como sei que a vendedora vai enviar?",
+        "O dinheiro não vai para ela quando você paga. Fica retido na plataforma e só "
+        "é liberado quando você confirma o recebimento — ou 7 dias depois da entrega, "
+        "se você não responder. Se não chegar, você contesta e o valor trava.",
+    ),
+    (
+        "Por que o Pix precisa sair do mesmo CPF?",
+        "Porque é assim que garantimos que quem está comprando é um adulto "
+        "identificado. Pagamento vindo de outro CPF é estornado automaticamente.",
+    ),
+    (
+        "Como a embalagem chega?",
+        "Sem logotipo, sem indicação do conteúdo e sem remetente que entregue o "
+        "assunto. O custo dessa embalagem neutra já está incluído no frete.",
+    ),
+    (
+        "E se eu comprar conteúdo digital?",
+        "O arquivo fica disponível na página do pedido assim que o pagamento é "
+        "confirmado. Não tem envio nem frete.",
+    ),
+    (
+        "Quanto a plataforma cobra de quem vende?",
+        "20% sobre o valor do item, cobrados por cima do que a vendedora pediu — ela "
+        "recebe o líquido inteiro. O frete é repassado a ela integralmente. Não há "
+        "mensalidade nem taxa para anunciar.",
+    ),
+]
+
+
 def public_store_filter(prefix: str = "") -> Q:
     """
     Loja visível ao público: ativa e com plano em dia (plano nulo = grátis).
@@ -175,12 +228,36 @@ def home(request):
                 .filter(active_count__gt=0)
                 .order_by("-active_count")[:8]
             ),
+            # Depoimentos = avaliacoes REAIS de pedidos entregues. Nunca
+            # texto inventado: depoimento fabricado e publicidade enganosa
+            # (CDC art. 37) e a plataforma responde por isso.
+            "testimonials": _recent_testimonials(),
+            "included_items": INCLUDED_IN_EVERY_ORDER,
+            "faq": HOME_FAQ,
             "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
             "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
             "stats": _marketplace_stats(),
         }
     )
     return render(request, "stores/home.html", context)
+
+
+def _recent_testimonials(limit: int = 6):
+    """
+    Avaliações recentes com comentário, para a prova social da home.
+
+    Só entram avaliações presas a pedido entregue (o model já garante
+    isso) e com nota alta o suficiente para servir de destaque — as
+    demais continuam visíveis na página da loja, sem curadoria.
+    """
+    from apps.reviews.models import Review
+
+    return (
+        Review.objects.filter(rating__gte=4)
+        .exclude(comment="")
+        .select_related("store", "buyer")
+        .order_by("-created_at")[:limit]
+    )
 
 
 def _marketplace_stats() -> dict:
@@ -261,10 +338,32 @@ def store_detail(request, slug):
         .order_by("-created_at")
     )
     reviews = store.reviews.select_related("buyer").order_by("-created_at")[:20]
+
+    # Distribuicao das notas: dizer "4,8 de 5" e abstrato; mostrar quantas
+    # deram 5, 4, 3... e o que faz a pessoa confiar (ou desconfiar) com base
+    # em dado, nao em media.
+    breakdown = []
+    if store.review_count:
+        counts = dict(
+            store.reviews.values_list("rating").annotate(total=Count("rating")).values_list("rating", "total")
+        )
+        for score in (5, 4, 3, 2, 1):
+            total = counts.get(score, 0)
+            breakdown.append(
+                {"score": score, "total": total, "percent": round(total * 100 / store.review_count)}
+            )
+
     return render(
         request,
         "stores/detail.html",
-        {"store": store, "products": products, "reviews": reviews, "product_count": products.count()},
+        {
+            "store": store,
+            "products": products,
+            "reviews": reviews,
+            "product_count": products.count(),
+            "rating_breakdown": breakdown,
+            "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
+        },
     )
 
 
