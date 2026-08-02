@@ -92,8 +92,12 @@ aninhados (x-data proprio) continuam funcionando normalmente.
             {% endif %}
           {% endif %}
           <a href="{% url 'accounts_pages:profile_page' %}" class="nav-link hidden sm:inline">Conta</a>
+          {% if request.user.is_staff %}
+          <a href="{% url 'backoffice:dashboard' %}" class="btn-secondary !py-2 !px-3 !min-h-0 hidden sm:inline-flex text-xs">Painel admin</a>
+          {% endif %}
         {% else %}
           <a href="{% url 'account_login' %}" class="nav-link">Entrar</a>
+          <a href="{% url 'backoffice:login' %}" class="nav-link hidden lg:inline text-gray-500 hover:text-gray-300">Admin</a>
           <a href="{% url 'account_signup' %}" class="btn-primary !py-2 !px-3 !min-h-0 hidden sm:inline-flex text-xs">Criar conta</a>
         {% endif %}
 
@@ -138,9 +142,13 @@ aninhados (x-data proprio) continuam funcionando normalmente.
             <a href="{% url 'stores:onboard_page' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 text-brand-light">Abrir minha loja</a>
           {% endif %}
           <a href="{% url 'accounts_pages:profile_page' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Minha conta</a>
+          {% if request.user.is_staff %}
+          <a href="{% url 'backoffice:dashboard' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 font-semibold text-brand-light">Painel administrador</a>
+          {% endif %}
           <a href="{% url 'account_logout' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 text-gray-400">Sair</a>
         {% else %}
           <a href="{% url 'account_login' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Entrar</a>
+          <a href="{% url 'backoffice:login' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Entrar como administrador</a>
           <a href="{% url 'account_signup' %}" class="btn-primary mt-1">Criar conta grátis</a>
         {% endif %}
       </nav>
@@ -332,6 +340,13 @@ aninhados (x-data proprio) continuam funcionando normalmente.
         <ul class="space-y-1.5 text-gray-500">
           <li><a href="{% url 'core_pages:terms' %}" class="hover:text-gray-300">Termos de Uso</a></li>
           <li><a href="{% url 'core_pages:privacy' %}" class="hover:text-gray-300">Privacidade</a></li>
+          <li>
+            {% if request.user.is_authenticated and request.user.is_staff %}
+            <a href="{% url 'backoffice:dashboard' %}" class="hover:text-gray-300">Painel administrador</a>
+            {% else %}
+            <a href="{% url 'backoffice:login' %}" class="hover:text-gray-300">Login administrador</a>
+            {% endif %}
+          </li>
         </ul>
         <p class="text-gray-600 text-[11px] leading-relaxed mt-2">Verificação de idade obrigatória. Denuncie conteúdo suspeito pelo botão em cada anúncio.</p>
       </div>

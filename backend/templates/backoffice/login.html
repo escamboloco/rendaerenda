@@ -10,15 +10,18 @@
 </head>
 <body>
   <main class="box">
-    <h1>Acesso restrito</h1>
-    <p>Entre com a conta autorizada da equipe.</p>
+    <h1>Login administrador</h1>
+    <p>Entre com a conta autorizada da equipe para gestão, KYC e moderação.</p>
     <form method="post" autocomplete="on">
       {% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
       {{ form.non_field_errors }}
       <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>{{ form.email }}
       <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>{{ form.password }}
-      <button type="submit">Entrar</button>
+      <button type="submit">Entrar como administrador</button>
     </form>
+    <p style="margin:18px 0 0;font-size:13px;text-align:center">
+      <a href="{% url 'account_login' %}" style="color:#a7b0be">Voltar ao login de comprador/vendedora</a>
+    </p>
   </main>
 </body>
 </html>
