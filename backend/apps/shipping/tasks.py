@@ -7,6 +7,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+from .labels import purchase_label_for_order
 from .models import Shipment
 from .services import mark_delivered, track_shipment
 
@@ -42,130 +43,18 @@ def buy_label_for_order(self, order_id: str):
     SuperFrete com o frete pago pelo comprador. Remetente = nome neutro
     da plataforma; CEP de origem = da vendedora.
     """
-    from apps.payments.models import Order
-
-    from . import superfrete
-    from .services import platform_buys_shipping_label, shipping_sender
-
-    if not platform_buys_shipping_label():
+    result = purchase_label_for_order(order_id)
+    if result.ok:
         return
-
-    order = Order.objects.select_related("store__owner", "buyer", "shipment").get(id=order_id)
-    if not hasattr(order, "shipment"):
-        return
-    shipment = order.shipment
-    if shipment.label_url:
-        return
-
-    if not shipment.service.startswith("sf-"):
-        # Cotação flat / Correios direto: sem compra automática.
-        logger.info(
-            "Pedido %s sem serviço SuperFrete (%s) — etiqueta manual.",
-            order_id,
-            shipment.service,
-        )
-        return
-
-    physical_items = [
-        item
-        for item in order.items.select_related("product").all()
-        if item.product.requires_shipping
-    ]
-    if not physical_items:
-        return
-
-    from .package_defaults import quote_package
-
-    products = [item.product for item in physical_items]
-    quantities = {str(item.product_id): item.quantity for item in physical_items}
-    weight, length, width, height = quote_package(products, quantities)
-
-    try:
-        if shipment.provider_order_id:
-            if shipment.shipping_provider != "superfrete":
-                logger.warning(
-                    "Pedido %s possui etiqueta de outro integrador; compra SuperFrete ignorada.",
-                    order_id,
-                )
-                return
-            provider_order_id = shipment.provider_order_id
-        else:
-            address = order.shipping_address or {}
-            provider_order_id = superfrete.create_label(
-                service_id=int(shipment.service.removeprefix("sf-")),
-                sender=shipping_sender(order.store),
-                recipient={
-                    "name": order.payer_name,
-                    "document": order.payer_cpf,
-                    "email": order.payer_email,
-                    "postal_code": address.get("cep", ""),
-                    "address": address.get("street", ""),
-                    "number": address.get("number", ""),
-                    "complement": address.get("complement", ""),
-                    "district": address.get("neighborhood", ""),
-                    "city": address.get("city", ""),
-                    "state_abbr": address.get("state", ""),
-                },
-                # Declaração neutra, mas verdadeira, sem expor o título íntimo.
-                products=[
-                    {
-                        "name": "Peça de vestuário usada",
-                        "quantity": item.quantity,
-                        "unitary_value": item.unit_price,
-                    }
-                    for item in physical_items
-                ],
-                weight_grams=weight,
-                length_cm=length,
-                width_cm=width,
-                height_cm=height,
-                declared_value=order.items_total,
-                order_reference=str(order.id),
-            )
-            shipment.provider_order_id = provider_order_id
-            shipment.shipping_provider = "superfrete"
-            shipment.save(update_fields=["provider_order_id", "shipping_provider"])
-
-        bought = superfrete.finalize_label(provider_order_id)
-    except superfrete.SuperFreteConfigurationError as exc:
-        logger.warning("Etiqueta do pedido %s não configurada: %s", order_id, exc)
-        return
-    except superfrete.SuperFreteError as exc:
-        logger.warning("Falha ao comprar etiqueta do pedido %s: %s", order_id, exc)
-        raise self.retry(exc=exc)
-
-    shipment.provider_order_id = bought.order_id
-    shipment.shipping_provider = "superfrete"
-    shipment.label_url = bought.label_url
-    if bought.tracking_code:
-        shipment.tracking_code = bought.tracking_code
-    shipment.save(
-        update_fields=[
-            "provider_order_id",
-            "shipping_provider",
-            "label_url",
-            "tracking_code",
-        ]
+    # Sem worker Celery no Render (ALWAYS_EAGER): o cron buy_pending_labels
+    # retenta. Com broker real, reagendamos aqui.
+    if result.retryable and not getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+        raise self.retry(exc=Exception(result.detail or "etiqueta pendente"))
+    logger.warning(
+        "Etiqueta do pedido %s pendente (%s) — será retentada pelo cron.",
+        order_id,
+        result.detail,
     )
-
-    seller_email = order.store.owner.email
-    if seller_email:
-        try:
-            send_mail(
-                subject=f"Etiqueta pronta — pedido #{str(order.id)[:8]}",
-                message=render_to_string(
-                    "emails/label_ready.txt",
-                    {
-                        "order": order,
-                        "shipment": shipment,
-                        "site_name": settings.SITE_NAME,
-                    },
-                ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[seller_email],
-            )
-        except Exception:
-            logger.exception("Falha ao enviar e-mail de etiqueta do pedido %s", order_id)
 
 
 @shared_task

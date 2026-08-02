@@ -207,6 +207,31 @@ services:
       - key: SUPERFRETE_TOKEN
         sync: false
 
+  # Retenta etiquetas SuperFrete que falharam no pagamento (token/saldo/API).
+  - type: cron
+    name: rendaerenda-buy-labels
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "*/15 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py buy_pending_labels"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: SUPERFRETE_TOKEN
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+
   # Confere no Asaas os Pix pendentes (rede de seguranca caso o webhook
   # falhe) e devolve para a vitrine o estoque de pedido nao pago.
   - type: cron

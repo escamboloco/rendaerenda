@@ -136,6 +136,9 @@ class PlatformLabelFlowTests(ApiTestCase):
         shipment = order.shipment
         shipment.service = "sf-1"
         shipment.save(update_fields=["service"])
+        # Pagamento precisa estar pago para comprar etiqueta.
+        order.status = Order.Status.PAID
+        order.save(update_fields=["status"])
 
         with mock.patch(
             "apps.shipping.superfrete.create_label",
@@ -147,7 +150,7 @@ class PlatformLabelFlowTests(ApiTestCase):
                 tracking_code="AA123456789BR",
                 label_url="https://superfrete.example/label.pdf",
             ),
-        ) as finalize, mock.patch("apps.shipping.tasks.send_mail"):
+        ) as finalize, mock.patch("apps.shipping.labels.send_mail") as mail:
             buy_label_for_order(str(order.id))
 
         create.assert_called_once()
@@ -162,3 +165,80 @@ class PlatformLabelFlowTests(ApiTestCase):
         self.assertEqual(shipment.provider_order_id, "sf-order-1")
         self.assertEqual(shipment.label_url, "https://superfrete.example/label.pdf")
         self.assertEqual(shipment.tracking_code, "AA123456789BR")
+        mail.assert_called_once()
+
+    @override_settings(
+        PLATFORM_BUYS_SHIPPING_LABEL=True,
+        SUPERFRETE_SERVICES="17,1,2",
+        SUPERFRETE_TOKEN="token-test",
+    )
+    def test_buy_label_recovers_from_pac_service(self):
+        """Checkout com tarifa fixa (pac) ainda compra Mini Envios/SuperFrete."""
+        self.client.post(
+            reverse("payments:checkout"),
+            checkout_payload(self.product),
+            content_type="application/json",
+        )
+        order = Order.objects.get()
+        order.status = Order.Status.PAID
+        order.save(update_fields=["status"])
+        shipment = order.shipment
+        shipment.service = "pac"
+        shipment.save(update_fields=["service"])
+
+        with mock.patch(
+            "apps.shipping.labels.calculate_freight_options",
+            side_effect=Exception("offline"),
+        ), mock.patch(
+            "apps.shipping.superfrete.create_label",
+            return_value="sf-order-17",
+        ) as create, mock.patch(
+            "apps.shipping.superfrete.finalize_label",
+            return_value=BoughtLabel(
+                order_id="sf-order-17",
+                tracking_code="BB123456789BR",
+                label_url="https://superfrete.example/mini.pdf",
+            ),
+        ), mock.patch("apps.shipping.labels.send_mail"):
+            buy_label_for_order(str(order.id))
+
+        create.assert_called_once()
+        self.assertEqual(create.call_args.kwargs["service_id"], 17)
+        shipment.refresh_from_db()
+        self.assertEqual(shipment.service, "sf-17")
+        self.assertEqual(shipment.label_url, "https://superfrete.example/mini.pdf")
+
+    def test_seller_can_request_label_from_wallet_api(self):
+        self.client.post(
+            reverse("payments:checkout"),
+            checkout_payload(self.product),
+            content_type="application/json",
+        )
+        order = Order.objects.get()
+        order.status = Order.Status.PAID
+        order.save(update_fields=["status"])
+        order.shipment.service = "sf-1"
+        order.shipment.save(update_fields=["service"])
+
+        self.client.force_login(self.product.store.owner)
+        with mock.patch(
+            "apps.shipping.superfrete.create_label",
+            return_value="sf-order-api",
+        ), mock.patch(
+            "apps.shipping.superfrete.finalize_label",
+            return_value=BoughtLabel(
+                order_id="sf-order-api",
+                tracking_code="CC123456789BR",
+                label_url="https://superfrete.example/api.pdf",
+            ),
+        ), mock.patch("apps.shipping.labels.send_mail"):
+            response = self.client.post(
+                reverse("shipping:request_label", args=[order.id]),
+                {},
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["status"], "ready")
+        self.assertEqual(body["label_url"], "https://superfrete.example/api.pdf")

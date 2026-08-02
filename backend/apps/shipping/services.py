@@ -45,6 +45,9 @@ def shipping_sender(store=None) -> dict:
     """
     Remetente discreto impresso na etiqueta: razão social / nome neutro
     da plataforma — não o apelido da loja nem o nome artístico.
+
+    Sem CNPJ da plataforma, usa CPF da titular da loja só no documento
+    (necessário para a SuperFrete emitir a etiqueta em soft-launch PF).
     """
     name = (
         (getattr(settings, "SHIPPING_SENDER_NAME", "") or "").strip()
@@ -55,12 +58,18 @@ def shipping_sender(store=None) -> dict:
         (getattr(settings, "SHIPPING_SENDER_DOCUMENT", "") or "").strip()
         or (getattr(settings, "PLATFORM_CNPJ", "") or "").strip()
     )
+    phone = (getattr(settings, "SHIPPING_SENDER_PHONE", "") or "").strip()
+    email = (getattr(settings, "SHIPPING_SENDER_EMAIL", "") or "").strip() or (
+        getattr(settings, "DEFAULT_FROM_EMAIL", "") or ""
+    ).strip()
+    # "Nome <email@x.com>" → só o e-mail (SuperFrete rejeita o formato RFC).
+    if "<" in email and ">" in email:
+        email = email.split("<", 1)[1].split(">", 1)[0].strip()
     sender = {
         "name": name,
         "document": document,
-        "email": (getattr(settings, "SHIPPING_SENDER_EMAIL", "") or "").strip()
-        or (getattr(settings, "DEFAULT_FROM_EMAIL", "") or "").strip(),
-        "phone": (getattr(settings, "SHIPPING_SENDER_PHONE", "") or "").strip(),
+        "email": email,
+        "phone": phone,
         "address": (getattr(settings, "SHIPPING_SENDER_STREET", "") or "").strip(),
         "number": (getattr(settings, "SHIPPING_SENDER_NUMBER", "") or "").strip(),
         "district": (getattr(settings, "SHIPPING_SENDER_DISTRICT", "") or "").strip(),
@@ -69,8 +78,16 @@ def shipping_sender(store=None) -> dict:
         "postal_code": (getattr(settings, "CORREIOS_ORIGIN_CEP", "") or "").strip(),
     }
     if store:
-        # O nome/documento continuam neutros; apenas o endereço operacional
-        # de postagem/retorno vem da vendedora e não é exposto na vitrine.
+        owner = getattr(store, "owner", None)
+        # Nome/fantasia da etiqueta seguem neutros; documento/telefone
+        # podem cair no CPF/celular da titular se a plataforma ainda
+        # não tiver CNPJ/telefone configurados.
+        if not sender["document"] and owner and getattr(owner, "cpf", ""):
+            sender["document"] = owner.cpf
+        if not sender["phone"] and owner and getattr(owner, "phone_number", ""):
+            sender["phone"] = owner.phone_number
+        if (not sender["email"] or "@" not in sender["email"]) and owner and owner.email:
+            sender["email"] = owner.email
         sender.update(
             {
                 "address": store.origin_street or sender["address"],

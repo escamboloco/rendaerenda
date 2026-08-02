@@ -124,6 +124,53 @@ class MarkPostedView(APIView):
         return Response({"status": shipment.status, "tracking_code": shipment.tracking_code})
 
 
+class RequestLabelView(APIView):
+    """
+    POST /api/vendedora/pedidos/<order_id>/etiqueta/ — a vendedora pede
+    (ou retenta) a compra da etiqueta SuperFrete e recebe o link do PDF.
+    """
+
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "checkout"
+
+    def post(self, request, order_id):
+        from .labels import purchase_label_for_order
+
+        store = getattr(request.user, "store", None)
+        if not store:
+            raise PermissionDenied("Usuário não possui loja.")
+        order = get_object_or_404(Order, id=order_id, store=store)
+        if order.status not in (Order.Status.PAID, Order.Status.SHIPPED):
+            return Response(
+                {"detail": "Só é possível gerar etiqueta de pedido pago."},
+                status=http_status.HTTP_409_CONFLICT,
+            )
+        if not hasattr(order, "shipment"):
+            return Response(
+                {"detail": "Este pedido não tem envio físico."},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = purchase_label_for_order(str(order.id))
+        if result.ok:
+            return Response(
+                {
+                    "status": "ready",
+                    "label_url": result.label_url,
+                    "tracking_code": result.tracking_code,
+                    "detail": result.detail,
+                }
+            )
+        return Response(
+            {
+                "status": "pending",
+                "detail": result.detail
+                or "Ainda não foi possível gerar a etiqueta. Tente de novo em instantes.",
+            },
+            status=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+
 class DeliveryConfirmationView(APIView):
     """
     POST /api/pedidos/<order_id>/recebimento/ — o comprador confirma que

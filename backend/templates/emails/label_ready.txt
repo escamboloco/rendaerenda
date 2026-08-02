@@ -9,8 +9,13 @@ A etiqueta de envio já foi comprada e paga pela plataforma. É só:
 3. Colar a etiqueta na embalagem
 4. Levar a um ponto de postagem da transportadora indicada na etiqueta
 
-O rastreio é automático — você não precisa digitar nada. O valor da
-venda aparece na sua carteira e é liberado após a confirmação de
-recebimento pelo comprador (ou automaticamente 1 dia depois da entrega).
+{% if shipment.tracking_code %}Rastreio: {{ shipment.tracking_code }}
+{% endif %}
+Você também encontra o botão “Abrir / imprimir etiqueta” na sua carteira:
+{{ wallet_url }}
+
+O rastreio atualiza sozinho. O valor da venda fica em custódia e é liberado
+depois que o comprador confirmar o recebimento (ou automaticamente após a
+janela de confirmação).
 
 {{ site_name }}
