@@ -1,10 +1,10 @@
 # Contas de demonstração — Renda & Renda
 
-> ⚠️ **APENAS DESENVOLVIMENTO/DEMONSTRAÇÃO.** Estas contas são criadas
-> por `python manage.py seed_demo` (local) ou `seed_demo --force` no
-> Render quando `SEED_PAYMENT_TEST=True`. Com `SEED_PAYMENT_TEST=False`
-> o build roda `purge_demo_and_test_data` e apaga o catálogo demo. As
-> senhas abaixo são públicas de propósito; jamais reutilize em ambiente real.
+> ⚠️ **APENAS DESENVOLVIMENTO LOCAL.** Estas contas são criadas por
+> `python manage.py seed_demo`. Em produção (`SEED_PAYMENT_TEST=False` no
+> `render.yaml`) o build roda `purge_demo_and_test_data --force` e apaga
+> lojas/produtos/contas demo — elas **não** devem existir no site ao vivo.
+> As senhas abaixo são públicas de propósito; jamais reutilize em ambiente real.
 
 **Senha de todas as contas:** `demo12345`
 
