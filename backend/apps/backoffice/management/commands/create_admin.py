@@ -67,15 +67,42 @@ class Command(BaseCommand):
             raise CommandError(f"Dados do administrador inválidos: {exc}") from exc
 
         user = User.objects.filter(email__iexact=email).first()
+        by_cpf = User.objects.filter(cpf=cpf).first()
+
+        # E-mail e CPF apontam para contas diferentes: promove a do CPF
+        # (identidade civil) e não derruba o deploy.
+        if user and by_cpf and user.pk != by_cpf.pk:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"ADMIN_EMAIL ({email}) e ADMIN_CPF pertencem a contas "
+                    f"diferentes. Promovendo a conta do CPF ({by_cpf.email})."
+                )
+            )
+            user = by_cpf
+        elif not user and by_cpf:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"ADMIN_CPF já está na conta {by_cpf.email}. "
+                    "Promovendo essa conta em vez de criar outra."
+                )
+            )
+            user = by_cpf
+
         if user:
-            # Com as quatro ADMIN_* preenchidas, promover é intencional
-            # (primeiro bootstrap). Sem --reset-password a senha atual fica.
             user.is_staff = True
             user.is_superuser = True
             user.is_active = True
+            update_fields = ["is_staff", "is_superuser", "is_active"]
             if not user.username:
                 user.username = email
-            update_fields = ["is_staff", "is_superuser", "is_active", "username"]
+                update_fields.append("username")
+            # Alinha o e-mail ao ADMIN_EMAIL quando estiver livre (evita
+            # criar segunda conta no próximo deploy).
+            if user.email.lower() != email and not User.objects.filter(
+                email__iexact=email
+            ).exclude(pk=user.pk).exists():
+                user.email = email
+                update_fields.append("email")
             if options["reset_password"]:
                 user.set_password(password)
                 update_fields.append("password")
@@ -86,11 +113,6 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(message))
             return
 
-        if User.objects.filter(cpf=cpf).exists():
-            raise CommandError(
-                "ADMIN_CPF já pertence a outra conta. Use o e-mail dessa conta "
-                "em ADMIN_EMAIL para promovê-la."
-            )
         User.objects.create_superuser(
             username=email,
             email=email,

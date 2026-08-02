@@ -332,3 +332,27 @@ class CreateAdminCommandTests(TestCase):
         self.assertTrue(admin.is_staff)
         self.assertTrue(admin.is_superuser)
         self.assertTrue(admin.check_password("Senha-Original-123!"))
+
+    def test_promotes_existing_account_when_admin_cpf_already_used(self):
+        """Deploy não pode falhar se ADMIN_CPF já está em outra conta."""
+        existing = User.objects.create_user(
+            username="conta@antiga.com",
+            email="conta@antiga.com",
+            password="Senha-Original-123!",
+            cpf="98765432100",
+            birth_date=date(1990, 1, 1),
+        )
+        env = {
+            "ADMIN_EMAIL": "novo-admin@example.com",
+            "ADMIN_PASSWORD": "Senha-Administrativa-123!",
+            "ADMIN_CPF": existing.cpf,
+            "ADMIN_BIRTH_DATE": "1990-01-01",
+        }
+        with patch.dict("os.environ", env):
+            call_command("create_admin")
+        existing.refresh_from_db()
+        self.assertTrue(existing.is_staff)
+        self.assertTrue(existing.is_superuser)
+        self.assertEqual(existing.email, "novo-admin@example.com")
+        self.assertFalse(User.objects.filter(email="conta@antiga.com").exists())
+        self.assertEqual(User.objects.filter(cpf=existing.cpf).count(), 1)
