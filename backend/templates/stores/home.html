@@ -104,9 +104,6 @@
         <span class="hero-orbit__ring hero-orbit__ring--three"></span>
         <span class="hero-orbit__gem"></span>
       </div>
-      {# As quatro garantias giram em volta do objeto, igualmente espaçadas.
-         Mesma ordem da trust-strip logo abaixo — quem lê as duas vê a
-         mesma promessa duas vezes, não quatro promessas diferentes. #}
       <div class="hero-orbit__satellites">
         <span class="hero-orbit__satellite badge-verified shadow-lift">identidade verificada</span>
         <span class="hero-orbit__satellite badge-neutral shadow-lift">pagamento em custódia</span>
@@ -429,8 +426,6 @@ importante (a custódia) ocupar o espaço que ela merece.
         {% include "reviews/_stars.html" with rating=review.rating size="w-3.5 h-3.5" %}
         <span class="badge bg-emerald-400/10 text-emerald-400">compra verificada</span>
       </div>
-      {# meta_text e nao truncatechars: em pt-BR o truncatechars devolve o
-         texto com um espaco na frente, e aqui isso vira “ Comentario…” #}
       <blockquote class="text-sm text-gray-300 leading-relaxed">“{{ review.comment|meta_text:180 }}”</blockquote>
       <figcaption class="text-xs text-gray-600 flex items-center justify-between gap-2">
         <span>{{ review.buyer.interaction_name }}</span>

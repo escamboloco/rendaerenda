@@ -569,15 +569,15 @@
   }
 
   .nav-link {
-    @apply relative text-sm font-medium text-gray-300 hover:text-white transition min-h-[44px]
-      inline-flex items-center;
+    @apply relative text-sm font-medium text-gray-300 hover:text-white transition h-11 px-1.5
+      inline-flex items-center justify-center leading-none;
   }
   .nav-link::after {
     content: "";
-    @apply absolute left-0 right-full bottom-1 h-px bg-brand-light transition-all duration-300;
+    @apply absolute left-1.5 right-full bottom-2 h-px bg-brand-light transition-all duration-300;
   }
   .nav-link:hover::after {
-    @apply right-0;
+    @apply right-1.5;
   }
 
   .store-discovery {
