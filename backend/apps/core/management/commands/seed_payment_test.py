@@ -39,15 +39,33 @@ PRODUCTS = [
 ]
 
 
-def _placeholder_image(label: str) -> bytes:
-    img = Image.new("RGB", (800, 800), (236, 228, 232))
+def _placeholder_image(label: str, accent: tuple[int, int, int]) -> bytes:
+    """Gera JPEG visível (gradiente + faixa) para a vitrine de smoke test."""
+    img = Image.new("RGB", (900, 900), (32, 28, 36))
     draw = ImageDraw.Draw(img)
-    draw.rectangle([40, 40, 760, 760], outline=(120, 80, 110), width=4)
-    draw.text((80, 360), "TESTE R$ 5", fill=(90, 50, 80))
-    draw.text((80, 420), label[:40], fill=(90, 50, 80))
+    for y in range(900):
+        mix = y / 900
+        color = (
+            int(32 + (accent[0] - 32) * mix * 0.55),
+            int(28 + (accent[1] - 28) * mix * 0.45),
+            int(36 + (accent[2] - 36) * mix * 0.5),
+        )
+        draw.line([(0, y), (900, y)], fill=color)
+    draw.rounded_rectangle([60, 60, 840, 840], radius=36, outline=accent, width=6)
+    draw.rounded_rectangle([140, 320, 760, 560], radius=24, fill=(18, 16, 22))
+    draw.text((180, 360), "SMOKE TEST", fill=(255, 255, 255))
+    draw.text((180, 420), "R$ 5,00", fill=accent)
+    draw.text((180, 480), (label or "Item teste")[:42], fill=(210, 200, 215))
     buf = BytesIO()
-    img.save(buf, format="JPEG", quality=85)
+    img.save(buf, format="JPEG", quality=88)
     return buf.getvalue()
+
+
+PRODUCT_ACCENTS = {
+    "teste-pagamento-calcinha": (216, 77, 121),
+    "teste-pagamento-sutia": (120, 160, 220),
+    "teste-pagamento-meia": (90, 190, 150),
+}
 
 
 class Command(BaseCommand):
@@ -58,6 +76,11 @@ class Command(BaseCommand):
             "--force",
             action="store_true",
             help="Permite rodar com DEBUG=False (produção).",
+        )
+        parser.add_argument(
+            "--refresh-images",
+            action="store_true",
+            help="Recria as imagens dos itens mesmo se já existirem.",
         )
         parser.add_argument(
             "--pix-key",
@@ -193,15 +216,22 @@ class Command(BaseCommand):
                 },
             )
             # Garante preço público exatamente igual ao pedido (evita arredondamento 4.99/5.01).
-            Product.objects.filter(pk=product.pk).update(price=target_price)
+            Product.objects.filter(pk=product.pk).update(
+                price=target_price,
+                status=Product.Status.PUBLISHED,
+                visibility=Product.Visibility.PUBLIC,
+                stock=20,
+            )
             product.refresh_from_db()
 
-            if was_created or not product.images.exists():
+            refresh_images = options["refresh_images"] or was_created or not product.images.exists()
+            if refresh_images:
                 product.images.all().delete()
+                accent = PRODUCT_ACCENTS.get(slug, (216, 77, 121))
                 ProductImage.objects.create(
                     product=product,
                     file=ContentFile(
-                        _placeholder_image(title),
+                        _placeholder_image(title, accent),
                         name=f"{slug}.jpg",
                     ),
                     is_cover=True,

@@ -134,10 +134,10 @@ envVarGroups:
         sync: false
       - key: MEDIA_ROOT
         value: "/var/data/media"
-      # False = produção limpa (build roda purge_demo_and_test_data).
-      # True só para smoke test interno — NUNCA com o site aberto ao público.
+      # True = recria loja/itens de smoke test (R$ 5 + imagens) em todo deploy.
+      # Coloque False antes de abrir o site ao público amplo.
       - key: SEED_PAYMENT_TEST
-        value: "False"
+        value: "True"
 
 services:
   - type: web
