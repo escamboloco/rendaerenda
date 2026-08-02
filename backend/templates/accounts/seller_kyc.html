@@ -3,18 +3,17 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto space-y-4">
+<div class="max-w-lg mx-auto space-y-4" x-data="kycSelfieCapture('{{ kyc.verification_code|escapejs }}')">
 
   <div class="text-center space-y-2">
     <span class="eyebrow">Conta de vendedora</span>
     <h1 class="text-2xl sm:text-3xl font-bold">Verificação de identidade</h1>
     <p class="text-gray-500 text-sm">
-      Documento + selfie com o código da sua conta. Conferência humana em até
+      Documento + selfie com o código da conta carimbado na foto. Conferência humana em até
       <strong class="text-gray-300">24h úteis</strong>.
     </p>
   </div>
 
-  {# ------------------------------------------------------------- estados #}
   {% if kyc.status == 'approved' %}
   <div class="card p-8 text-center space-y-4">
     <div class="w-14 h-14 rounded-full bg-emerald-400/15 text-emerald-400 mx-auto flex items-center justify-center text-2xl">✓</div>
@@ -47,19 +46,20 @@
   </div>
 
   {% else %}
-  {# ------------------------------------------------------- envio/reenvio #}
   {% if kyc.status == 'rejected' %}
-  <div class="card p-4 bg-brand/5 border-brand/30 text-sm">
+  <div class="card p-4 bg-brand/5 border-brand/30 text-sm space-y-3">
     <p class="font-semibold text-brand-light">Envio anterior não aprovado</p>
-    <p class="text-gray-400 mt-1">{{ kyc.rejection_reason|default:"Confira se as fotos estão nítidas e legíveis e envie de novo." }}</p>
+    <p class="text-gray-400">{{ kyc.rejection_reason|default:"Confira se as fotos estão nítidas e legíveis e envie de novo." }}</p>
+    <a href="?novo_codigo=1" class="btn-secondary w-full text-center text-xs">Gerar código novo e tentar de novo</a>
   </div>
   {% endif %}
 
   <div class="card p-5 space-y-3">
     <p class="eyebrow">Passo 1 · seu código</p>
-    <p class="text-sm text-gray-400">
-      Escreva este código à mão em um papel e apareça com ele na selfie. É assim que confirmamos
-      que a foto é sua e foi tirada agora — não uma imagem salva.
+    <p class="text-sm text-gray-400 leading-relaxed">
+      <strong class="text-gray-200">Não precisa de papel.</strong>
+      Na selfie você segura só o documento; o site carimba este código na foto na hora da captura.
+      Assim confirmamos que a imagem é sua e foi tirada agora.
     </p>
     <p class="font-display text-3xl tracking-[0.2em] text-center py-3 rounded-xl bg-surface-alt border border-surface-border text-accent-blush">
       {{ kyc.verification_code }}
@@ -78,13 +78,44 @@
       <label class="input-label">Documento com foto — verso</label>
       <input type="file" name="document_back" accept="image/*" capture="environment" required class="input-field">
     </div>
-    <div>
-      <label class="input-label">Selfie com o documento e o papel do código</label>
-      <input type="file" name="selfie_with_document" accept="image/*" capture="user" required class="input-field">
+
+    <div class="space-y-3 border-t border-surface-border pt-4">
+      <p class="input-label">Selfie com o documento (código carimbado)</p>
       <p class="input-help">
-        Seu rosto, o documento e o papel com <strong class="text-gray-300">{{ kyc.verification_code }}</strong>
-        na mesma foto, todos legíveis.
+        Abra a câmera, posicione o rosto e o documento aberto ao lado. O código
+        <strong class="text-gray-300">{{ kyc.verification_code }}</strong> entra sozinho na foto.
       </p>
+
+      <div class="relative overflow-hidden rounded-2xl border border-surface-border bg-black aspect-[3/4]">
+        <video x-ref="video" class="absolute inset-0 w-full h-full object-cover" playsinline muted autoplay x-show="cameraOn"></video>
+        <img x-show="previewUrl" :src="previewUrl" alt="Prévia da selfie" class="absolute inset-0 w-full h-full object-cover">
+        <div x-show="!cameraOn && !previewUrl" class="absolute inset-0 grid place-items-center p-6 text-center text-sm text-gray-400">
+          Toque em “Abrir câmera” para tirar a selfie com o documento.
+        </div>
+        <div x-show="cameraOn || previewUrl" class="pointer-events-none absolute left-3 right-3 bottom-3 rounded-xl bg-black/70 px-3 py-2 text-center">
+          <p class="font-display text-xl tracking-[0.18em] text-accent-blush" x-text="code"></p>
+          <p class="text-[10px] text-gray-400 mt-0.5">Código da conta · Renda &amp; Renda</p>
+        </div>
+      </div>
+      <canvas x-ref="canvas" class="hidden"></canvas>
+      <input type="file" name="selfie_with_document" x-ref="selfieInput" accept="image/*" class="hidden" required>
+
+      <div class="flex flex-col sm:flex-row gap-2">
+        <button type="button" class="btn-secondary flex-1" @click="startCamera()" x-show="!cameraOn || previewUrl">Abrir câmera</button>
+        <button type="button" class="btn-primary flex-1" @click="capture()" x-show="cameraOn && !previewUrl">Tirar foto com código</button>
+        <button type="button" class="btn-secondary flex-1" @click="retake()" x-show="previewUrl">Tirar de novo</button>
+      </div>
+      <p class="text-[11px] text-gray-600" x-show="cameraError" x-text="cameraError"></p>
+      <details class="text-xs text-gray-500">
+        <summary class="cursor-pointer text-gray-400 hover:text-gray-300">Câmera não funciona? Enviar arquivo</summary>
+        <div class="mt-2 space-y-2">
+          <input type="file" accept="image/*" capture="user" class="input-field" @change="useFile($event)">
+          <p class="input-help">
+            Se enviar arquivo, o código precisa aparecer na foto (escreva num post-it colado no documento,
+            ou fotografe a tela com o código junto do documento usando outro celular).
+          </p>
+        </div>
+      </details>
     </div>
 
     <label class="flex items-start gap-2 text-sm text-gray-400 border-t border-surface-border pt-4">
@@ -98,7 +129,7 @@
     </label>
 
     <p id="kyc-error" class="input-error hidden"></p>
-    <button type="submit" class="btn-primary w-full">Enviar para análise</button>
+    <button type="submit" class="btn-primary w-full" :disabled="!hasSelfie">Enviar para análise</button>
     <p class="text-[11px] text-gray-600 text-center">
       Seus documentos ficam em armazenamento privado, são vistos só pela equipe de verificação e
       apagados quando deixam de ser necessários.
@@ -114,11 +145,107 @@
 
 {% block extra_body %}
 <script>
+function kycSelfieCapture(code) {
+  return {
+    code,
+    cameraOn: false,
+    previewUrl: "",
+    hasSelfie: false,
+    cameraError: "",
+    stream: null,
+    async startCamera() {
+      this.cameraError = "";
+      this.previewUrl = "";
+      this.hasSelfie = false;
+      if (this.$refs.selfieInput) this.$refs.selfieInput.value = "";
+      try {
+        if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 1280 } },
+        });
+        this.$refs.video.srcObject = this.stream;
+        await this.$refs.video.play();
+        this.cameraOn = true;
+      } catch (err) {
+        this.cameraOn = false;
+        this.cameraError = "Não foi possível abrir a câmera. Use “Enviar arquivo” abaixo.";
+      }
+    },
+    stopCamera() {
+      if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+      this.cameraOn = false;
+    },
+    async capture() {
+      const video = this.$refs.video;
+      const canvas = this.$refs.canvas;
+      if (!video || !canvas || !video.videoWidth) return;
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, w, h);
+      // Espelho: câmera frontal costuma vir invertida no preview.
+      // Mantemos o frame como capturado; o carimbo fica legível.
+      const barH = Math.max(72, Math.round(h * 0.14));
+      ctx.fillStyle = "rgba(0,0,0,0.72)";
+      ctx.fillRect(0, h - barH, w, barH);
+      ctx.fillStyle = "#f2a7b8";
+      ctx.font = `700 ${Math.round(barH * 0.42)}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(this.code, w / 2, h - barH * 0.55);
+      ctx.fillStyle = "#9ca3af";
+      ctx.font = `500 ${Math.round(barH * 0.18)}px ui-sans-serif, system-ui, sans-serif`;
+      ctx.fillText("Código da conta · Renda & Renda", w / 2, h - barH * 0.22);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+      if (!blob) {
+        this.cameraError = "Falha ao gerar a foto. Tente de novo.";
+        return;
+      }
+      const file = new File([blob], "selfie-kyc.jpg", { type: "image/jpeg" });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      this.$refs.selfieInput.files = dt.files;
+      this.previewUrl = URL.createObjectURL(blob);
+      this.hasSelfie = true;
+      this.stopCamera();
+    },
+    retake() {
+      if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+      this.previewUrl = "";
+      this.hasSelfie = false;
+      this.$refs.selfieInput.value = "";
+      this.startCamera();
+    },
+    useFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      this.$refs.selfieInput.files = dt.files;
+      if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+      this.previewUrl = URL.createObjectURL(file);
+      this.hasSelfie = true;
+      this.stopCamera();
+      this.cameraError = "";
+    },
+  };
+}
+
 document.getElementById("kyc-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
   const btn = form.querySelector("button[type=submit]");
   const errorEl = document.getElementById("kyc-error");
+  const selfie = form.querySelector('input[name="selfie_with_document"]');
+  if (!selfie?.files?.length) {
+    errorEl.textContent = "Tire a selfie com a câmera (código carimbado) antes de enviar.";
+    errorEl.classList.remove("hidden");
+    return;
+  }
   btn.disabled = true;
   errorEl.classList.add("hidden");
   try {

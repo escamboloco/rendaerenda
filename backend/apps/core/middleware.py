@@ -9,6 +9,7 @@ AGE_GATE_EXEMPT_PREFIXES = (
     "/entrada/",
     "/admin/",
     "/gestao/",
+    "/contas/",  # login, cadastro, reset de senha (link do e-mail)
     "/static/",
     "/media/protegido/",
     "/healthz",

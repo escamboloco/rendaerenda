@@ -92,6 +92,10 @@ aninhados (x-data proprio) continuam funcionando normalmente.
             {% endif %}
           {% endif %}
           <a href="{% url 'accounts_pages:profile_page' %}" class="nav-link hidden sm:inline">Conta</a>
+          <form method="post" action="{% url 'account_logout' %}" class="hidden sm:inline">
+            {% csrf_token %}
+            <button type="submit" class="nav-link text-gray-400 hover:text-gray-200">Sair</button>
+          </form>
           {% if request.user.is_staff %}
           <a href="{% url 'backoffice:dashboard' %}" class="btn-secondary !py-2 !px-3 !min-h-0 hidden sm:inline-flex text-xs">Painel admin</a>
           {% endif %}
@@ -145,7 +149,10 @@ aninhados (x-data proprio) continuam funcionando normalmente.
           {% if request.user.is_staff %}
           <a href="{% url 'backoffice:dashboard' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 font-semibold text-brand-light">Painel administrador</a>
           {% endif %}
-          <a href="{% url 'account_logout' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 text-gray-400">Sair</a>
+          <form method="post" action="{% url 'account_logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="w-full text-left px-3 py-3 rounded-xl hover:bg-white/5 text-gray-400">Sair</button>
+          </form>
         {% else %}
           <a href="{% url 'account_login' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Entrar</a>
           <a href="{% url 'backoffice:login' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Entrar como administrador</a>

@@ -108,13 +108,11 @@ class AgeVerification(models.Model):
 
 def generate_kyc_code() -> str:
     """
-    Codigo curto que a vendedora escreve num papel e segura na selfie.
+    Codigo curto carimbado na selfie (camera do site) — prova de que a
+    foto foi tirada agora para esta conta. Sem papel separado: a vendedora
+    segura só o documento; o app grava o código na imagem.
 
-    E a prova de vivacidade dos pobres: garante que a foto foi tirada
-    DEPOIS do cadastro e para este cadastro especifico, o que derruba
-    selfie salva de outra pessoa ou baixada da internet. Nao substitui
-    biometria com prova de vida (ver AgeVerification), mas e o que da
-    para fazer com revisao humana enquanto o bureau nao esta contratado.
+    Nao substitui biometria com prova de vida (ver AgeVerification).
     """
     import secrets
 
@@ -124,9 +122,9 @@ def generate_kyc_code() -> str:
 
 class SellerKYC(models.Model):
     """
-    KYC da vendedora: documento frente/verso + selfie segurando o
-    documento E um papel com o codigo desta conta + termo de maioridade
-    e cessao de imagem.
+    KYC da vendedora: documento frente/verso + selfie com o documento
+    (código da conta carimbado na foto pela captura do site) + termo de
+    maioridade e cessão de imagem.
 
     Revisao HUMANA (admin), com prazo publicado de 24h uteis. Guardado em
     storage privado (AWS_QUERYSTRING_AUTH) e com retencao minima.
@@ -139,7 +137,7 @@ class SellerKYC(models.Model):
         REJECTED = "rejected", "Rejeitada"
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="seller_kyc")
-    # Codigo que precisa aparecer escrito a mao na selfie.
+    # Codigo que precisa aparecer carimbado (ou legivel) na selfie.
     verification_code = models.CharField(max_length=12, default=generate_kyc_code, editable=False)
     submitted_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.TextField(blank=True)

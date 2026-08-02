@@ -1,0 +1,20 @@
+{% extends "core/base.html" %}
+{% block title %}Sair — Renda &amp; Renda{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="max-w-sm mx-auto">
+  <div class="card p-6 sm:p-8 space-y-5 text-center">
+    <h1 class="text-xl font-bold">Sair da conta?</h1>
+    <p class="text-sm text-gray-400">Você pode entrar de novo quando quiser com o mesmo e-mail.</p>
+    <form method="post" action="{% url 'account_logout' %}" class="space-y-3">
+      {% csrf_token %}
+      {% if redirect_field_value %}
+      <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+      {% endif %}
+      <button type="submit" class="btn-primary w-full">Sair agora</button>
+    </form>
+    <a href="{% url 'accounts_pages:profile_page' %}" class="btn-secondary w-full text-center">Continuar logada</a>
+  </div>
+</div>
+{% endblock %}

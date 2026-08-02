@@ -124,7 +124,7 @@
       <label class="muted" for="document_birth_date">Data de nascimento lida no documento</label>
       <input id="document_birth_date" type="date" name="document_birth_date" required>
       <button class="btn ok-bg" type="submit">Aprovar KYC e liberar loja</button>
-      <p class="muted">Confira se o rosto bate, se o código {{ kyc.verification_code }} aparece na selfie e se a data no documento é legível.</p>
+      <p class="muted">Confira se o rosto bate, se o código {{ kyc.verification_code }} aparece carimbado (ou legível) na selfie e se a data no documento é legível.</p>
     </form>
     <form method="post" action="{% url 'backoffice:kyc_decide' kyc.id 'reject' %}" class="stack">
       {% csrf_token %}

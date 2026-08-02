@@ -9,6 +9,15 @@
   <div class="card px-4 py-3 text-sm text-emerald-400">Alterações salvas.</div>
   {% endif %}
 
+  <div class="card p-5 space-y-3 text-sm">
+    <h2 class="font-semibold text-sm text-gray-400 uppercase tracking-wide">Sessão</h2>
+    <p class="text-gray-300">{{ request.user.email }}</p>
+    <form method="post" action="{% url 'account_logout' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn-secondary w-full">Sair da conta</button>
+    </form>
+  </div>
+
   <div class="card p-5 space-y-4">
     <h2 class="font-semibold text-sm text-gray-400 uppercase tracking-wide">Privacidade na interação</h2>
     <form method="post" class="space-y-3">
@@ -43,6 +52,25 @@
       Cadastre seu CPF para comprar e receber com segurança.
     </p>
     {% endif %}
+  </div>
+
+  <div class="card p-5 space-y-3 text-sm">
+    <h2 class="font-semibold text-sm text-gray-400 uppercase tracking-wide">Senha</h2>
+    <a href="{% url 'account_change_password' %}" class="btn-secondary w-full text-center">Trocar senha</a>
+    <a href="{% url 'account_reset_password' %}" class="block text-center text-brand hover:underline text-xs">
+      Esqueci minha senha — receber link por e-mail
+    </a>
+  </div>
+
+  <div class="card p-5 space-y-3 text-sm border-brand/30">
+    <h2 class="font-semibold text-sm text-brand-light uppercase tracking-wide">Excluir conta</h2>
+    <p class="text-gray-400 leading-relaxed">
+      Remove seu acesso e anonimiza dados pessoais (LGPD). Pedidos fiscais podem
+      manter registro mínimo por obrigação legal.
+    </p>
+    <a href="{% url 'accounts_pages:delete_account' %}" class="btn-secondary w-full text-center !border-brand/40 !text-brand-light">
+      Quero excluir minha conta
+    </a>
   </div>
 </div>
 {% endblock %}

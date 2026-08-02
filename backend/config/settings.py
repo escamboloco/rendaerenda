@@ -427,6 +427,8 @@ EMAIL_BACKEND = config(
 LOGIN_URL = "/contas/login/"
 LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+# Logout só via POST (formulário com CSRF) — evita CSRF por link GET.
+ACCOUNT_LOGOUT_ON_GET = False
 BACKOFFICE_LOGIN_URL = "/gestao/entrar/"
 ACCOUNT_ADAPTER = "apps.accounts.adapter.AgeGatedAccountAdapter"
 ACCOUNT_SIGNUP_FORM_CLASS = "apps.accounts.forms.SignupForm"

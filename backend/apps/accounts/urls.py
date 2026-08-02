@@ -19,5 +19,6 @@ page_urlpatterns = [
     path("verificacao-idade/", views.verification_page, name="verification_page"),
     path("verificacao-telefone/", views.phone_page, name="phone_page"),
     path("minha-conta/", views.profile_page, name="profile_page"),
+    path("minha-conta/excluir/", views.delete_account_page, name="delete_account"),
     path("vendedora/kyc/", views.seller_kyc_page, name="seller_kyc_page"),
 ]
