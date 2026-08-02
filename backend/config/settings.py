@@ -324,6 +324,8 @@ NEUTRAL_BOX_PRICES = config("NEUTRAL_BOX_PRICES", default="")
 # E uma trava de idade (so adulto identificado compra), nao antifraude.
 REFUND_ON_PAYER_CPF_MISMATCH = config("REFUND_ON_PAYER_CPF_MISMATCH", default=True, cast=bool)
 REQUIRE_PAYER_DOCUMENT = config("REQUIRE_PAYER_DOCUMENT", default=True, cast=bool)
+# True forcaria KYC biometrico no checkout. Padrao False: a trava e o
+# CPF do Pix bater com o cadastrado (REFUND_ON_PAYER_CPF_MISMATCH).
 REQUIRE_VERIFIED_BUYER_AGE = config(
     "REQUIRE_VERIFIED_BUYER_AGE", default=False, cast=bool
 )

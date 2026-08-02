@@ -20,8 +20,8 @@
                class="input-field">
         <p class="input-help">
           Usado apenas na conversa e nos pedidos personalizados com a outra parte.
-          Seus dados reais (nome e CPF) continuam valendo em pedidos, pagamentos,
-          notas fiscais e verificação — exigência legal da plataforma.
+          Seus dados reais (nome e CPF) continuam valendo em pedidos, pagamentos
+          e notas fiscais.
         </p>
       </div>
       <button type="submit" class="btn-primary w-full">Salvar</button>
@@ -29,17 +29,20 @@
   </div>
 
   <div class="card p-5 space-y-3 text-sm">
-    <h2 class="font-semibold text-sm text-gray-400 uppercase tracking-wide">Verificações</h2>
-    <div class="flex items-center justify-between">
-      <span class="text-gray-300">Idade (CPF + biometria)</span>
-      {% if request.user.is_age_verified %}<span class="badge-verified">Verificada</span>
-      {% else %}<a href="{% url 'accounts_pages:verification_page' %}" class="text-brand hover:underline">Verificar</a>{% endif %}
-    </div>
-    <div class="flex items-center justify-between">
-      <span class="text-gray-300">Celular vinculado ao CPF</span>
-      {% if request.user.is_phone_verified %}<span class="badge-verified">Verificado</span>
-      {% else %}<a href="{% url 'accounts_pages:phone_page' %}" class="text-brand hover:underline">Verificar</a>{% endif %}
-    </div>
+    <h2 class="font-semibold text-sm text-gray-400 uppercase tracking-wide">Pagamento e CPF</h2>
+    <p class="text-gray-300 leading-relaxed">
+      O Pix da compra precisa sair da conta do <strong class="text-white">mesmo CPF</strong> cadastrado.
+      Se outra pessoa pagar, o valor é <strong class="text-white">estornado automaticamente</strong> para a conta original.
+    </p>
+    {% if request.user.cpf %}
+    <p class="text-xs text-gray-500">
+      CPF da conta: •••.•••.{{ request.user.cpf|slice:"6:9" }}-{{ request.user.cpf|slice:"9:11" }}
+    </p>
+    {% else %}
+    <p class="text-xs text-amber-300">
+      Cadastre seu CPF para comprar e receber com segurança.
+    </p>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

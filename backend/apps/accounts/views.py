@@ -42,7 +42,7 @@ def phone_page(request):
 
 @login_required
 def profile_page(request):
-    """Perfil minimo: apelido de interacao + status das verificacoes."""
+    """Perfil minimo: apelido de interacao + aviso do CPF no Pix."""
     if request.method == "POST":
         alias = request.POST.get("public_alias", "").strip()[:40]
         request.user.public_alias = alias
