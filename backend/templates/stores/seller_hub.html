@@ -187,11 +187,7 @@
     {% for order in recent_orders %}
     <a href="{% url 'payments_pages:guest_order' order.access_token %}" class="card card-hover px-4 py-3 flex items-center justify-between gap-3 text-sm">
       <div class="min-w-0">
-<<<<<<< HEAD
-        <p class="font-medium truncate">Pedido {{ order.id|meta_text:10 }}</p>
-=======
         <p class="font-medium truncate">Pedido {{ order.short_id }}</p>
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
         <p class="text-xs text-gray-500">{{ order.get_status_display }} · {{ order.created_at|date:"d/m/Y H:i" }}</p>
       </div>
       <p class="font-bold text-brand shrink-0">R$ {{ order.items_total }}</p>

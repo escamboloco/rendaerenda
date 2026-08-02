@@ -1,32 +1,21 @@
-<<<<<<< HEAD
-=======
 from django.contrib.auth import logout
 from django.http import JsonResponse
-from django.shortcuts import redirect
-from django.urls import reverse
 
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
 # Paths acessiveis sem age gate (ex.: a propria pagina de age gate,
 # admin, estaticos, healthcheck). Tudo mais exige confirmacao.
 AGE_GATE_EXEMPT_PREFIXES = (
     "/entrada/",
     "/admin/",
     "/gestao/",
-<<<<<<< HEAD
-=======
     "/contas/",  # login, cadastro, reset de senha (link do e-mail)
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
     "/static/",
     "/media/protegido/",
     "/healthz",
     "/webhooks/",
-<<<<<<< HEAD
     # API responde JSON e nunca renderiza o portao - marcar a requisicao
     # aqui nao teria efeito. Autenticacao/permissao de cada view
     # (IsAuthenticated, is_age_verified) continua valendo.
     "/api/",
-=======
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
     # robots.txt/sitemap.xml precisam ser legiveis por crawlers sem
     # sessao/cookie - nunca colocar HTML atras do gate aqui.
     "/robots.txt",
@@ -65,11 +54,6 @@ class AgeGateMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-<<<<<<< HEAD
-        request.age_gate_pending = not request.path.startswith(
-            AGE_GATE_EXEMPT_PREFIXES
-        ) and not request.session.get(AGE_GATE_SESSION_KEY)
-=======
         user = getattr(request, "user", None)
         if (
             user
@@ -80,22 +64,16 @@ class AgeGateMiddleware:
             if request.path.startswith("/api/"):
                 return JsonResponse({"detail": "Conta suspensa."}, status=403)
 
-        if not request.path.startswith(AGE_GATE_EXEMPT_PREFIXES):
-            # Conta autenticada já passou pela declaração de maioridade no
-            # cadastro. O age gate visual vale para visitantes anônimos.
-            authenticated_adult = bool(
-                user and user.is_authenticated and user.is_active
-            )
-            if not authenticated_adult and not request.session.get(AGE_GATE_SESSION_KEY):
-                if request.path.startswith("/api/"):
-                    return JsonResponse(
-                        {"detail": "Confirme que você é maior de 18 anos."},
-                        status=403,
-                    )
-                gate_url = reverse("core:age_gate")
-                if request.path != gate_url:
-                    return redirect(f"{gate_url}?next={request.path}")
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
+        # Conta autenticada já passou pela declaração de maioridade no
+        # cadastro. O age gate visual vale para visitantes anônimos.
+        authenticated_adult = bool(
+            user and user.is_authenticated and user.is_active
+        )
+        request.age_gate_pending = (
+            not request.path.startswith(AGE_GATE_EXEMPT_PREFIXES)
+            and not authenticated_adult
+            and not request.session.get(AGE_GATE_SESSION_KEY)
+        )
 
         response = self.get_response(request)
 

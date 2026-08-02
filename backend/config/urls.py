@@ -43,10 +43,7 @@ webhook_urlpatterns = [
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-<<<<<<< HEAD
     # Painel de operacao (staff). Fica fora do sitemap e do age gate.
-=======
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
     path("gestao/", include("apps.backoffice.urls")),
     path("entrada/", include("apps.core.urls")),
     path("contas/", include("allauth.urls")),
