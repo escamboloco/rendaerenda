@@ -21,6 +21,7 @@ para o público, e como conferir. O checklist **jurídico** é o da seção 7 de
 | 9 | Crons `release-deliveries` e `release-escrow` rodando | Sem eles o dinheiro fica preso na custódia e a vendedora nunca recebe |
 | 10 | `manage.py createcachetable` executado | Sem a tabela, o rate limit quebra |
 | 11 | `SEED_PAYMENT_TEST=False` depois do primeiro teste de pagamento | Senão a loja de teste com itens de R$ 5 fica pública |
+| 12 | SuperFrete em produção (token + saldo + sandbox off) | Ver seção 8 abaixo; `manage.py check_superfrete` |
 
 ## 2. Teste de fumaça (fazer com dinheiro real, valor baixo)
 
@@ -48,6 +49,9 @@ para o público, e como conferir. O checklist **jurídico** é o da seção 7 de
     volta para a vitrine.
 12. Abrir uma contestação em outro pedido e conferir que `release_escrow`
     **não** repassa o valor.
+13. Com SuperFrete ligado: no checkout o frete deve listar PAC/SEDEX (não
+    tarifa fixa). Depois do Pix, o `Shipment` precisa ter `label_url` e a
+    vendedora recebe o e-mail com o PDF.
 
 ## 3. Pagamento por CPF divergente
 
@@ -68,9 +72,9 @@ Antes de abrir para volume, decida:
 | KYC de vendedora (`REQUIRE_SELLER_KYC=False`) | Desligado no soft-launch | Qualquer conta abre loja |
 | Verificação de telefone (bureau + SMS) | Sem provider configurado | Pedido personalizado exige `is_phone_verified`, então fica bloqueado na prática |
 | NFS-e (`NFSE_PROVIDER_API_KEY`) | Não configurada; a task pula sem erro | Comissão sem nota fiscal |
-| Cotação de frete real | `CHECKOUT_FREE_SHIPPING=False` + `SUPERFRETE_TOKEN` + saldo SuperFrete | Sem token, cai na tarifa fixa; sem saldo a etiqueta não é liberada |
+| Cotação de frete real | Ver seção 8 (go-live SuperFrete) | Sem token, cai na tarifa fixa; sem saldo a etiqueta não é liberada |
 | Remetente discreto | `SHIPPING_SENDER_NAME` + `SHIPPING_SENDER_DOCUMENT` (CNPJ) | Sem isso, usa `PLATFORM_LEGAL_NAME` / `SITE_NAME` |
-| Etiqueta pré-paga | `PLATFORM_BUYS_SHIPPING_LABEL=True` | Vendedora só imprime PDF na carteira / e-mail |
+| Etiqueta pré-paga | `PLATFORM_BUYS_SHIPPING_LABEL=True` (já no `render.yaml`) | Vendedora só imprime PDF na carteira / e-mail |
 | Cartão de crédito | Funciona pela página hospedada do Asaas (sem formulário no site) | Um passo a mais que o Pix; parcelamento fica nas mãos do Asaas |
 | Boost de loja | `StoreBoostPurchaseView` cria o boost sem cobrar | Receita não realizada — desative a compra ou implemente a cobrança |
 | Mídia em disco do Render | `/var/data` com 5 GB | Disco cheio derruba upload; migrar para S3 antes de escalar |
@@ -124,3 +128,61 @@ propósito e um ERROR vai para o log — recuperar o valor é ação humana.
   se acumular, o cron `expire-orders` parou.
 - Admin → `WithdrawalRequest` com `status=failed`: repasse que não saiu,
   precisa de Pix manual pelo painel do Asaas.
+- Logs SuperFrete: `SuperFrete recusou`, `etiqueta` / `buy_label_for_order`.
+  Cron `poll-shipments` precisa rodar de hora em hora para o rastreio.
+
+## 8. Go-live SuperFrete (produção)
+
+O código já usa SuperFrete (`SHIPPING_PROVIDER=superfrete`). Falta só
+credencial e saldo reais no Render.
+
+### Painel SuperFrete
+1. Conta em [web.superfrete.com](https://web.superfrete.com) (produção — **não** sandbox).
+2. **Integrar → Desenvolvedores → Confirmar** e copiar o token.
+3. Recarregar saldo (Pix) — sem saldo a cotação funciona, mas
+   `POST /api/v1/orders/finalize` falha e a vendedora não recebe o PDF.
+4. Conferir serviços ativos (PAC=1, SEDEX=2, Mini Envios=17, Jadlog=3).
+
+Docs: [primeiros passos](https://superfrete.readme.io/reference/primeiros-passos).
+
+### Variáveis no Render (Environment Group `rendaerenda-shared` + Web)
+
+| Variável | Valor produção |
+|---|---|
+| `SHIPPING_PROVIDER` | `superfrete` (já no blueprint) |
+| `SUPERFRETE_SANDBOX` | `False` (já no blueprint) |
+| `SUPERFRETE_TOKEN` | token de **produção** (sync:false — preencher à mão) |
+| `SUPERFRETE_SERVICES` | `1,2,17,3` |
+| `SUPERFRETE_USER_AGENT` | `Renda & Renda/1.0 (suporte@rendaerenda.com.br)` |
+| `PLATFORM_BUYS_SHIPPING_LABEL` | `True` |
+| `CHECKOUT_FREE_SHIPPING` | `False` |
+| `SHIPPING_SENDER_NAME` | razão social / nome neutro na etiqueta |
+| `SHIPPING_SENDER_DOCUMENT` | CNPJ da plataforma |
+| `SHIPPING_SENDER_EMAIL` | `suporte@rendaerenda.com.br` |
+| `SHIPPING_SENDER_PHONE` | telefone com DDD |
+
+O token precisa existir **também** no cron `rendaerenda-poll-shipments`
+(já declarado no `render.yaml`).
+
+### Depois de salvar as env vars
+1. **Manual Deploy** do serviço web (e do cron de shipments, se não herdar).
+2. No Shell do Render (web):
+   ```bash
+   python manage.py check_superfrete
+   ```
+   Tem que listar opções PAC/SEDEX/etc. Se reclamar de sandbox ou token, a
+   variável não entrou — confira o Environment Group.
+3. Admin → Lojas: toda loja ativa precisa de CEP **e** rua/número/bairro/cidade/UF
+   de postagem (campos privados `origin_*`). Lojas antigas sem isso bloqueiam
+   a compra da etiqueta.
+4. Pedido real de valor baixo → pagar → conferir:
+   - `Shipment.shipping_provider=superfrete`
+   - `provider_order_id` preenchido
+   - `label_url` com PDF
+   - e-mail `label_ready` para a vendedora
+5. Após postagem, o cron `poll_shipments` atualiza o rastreio sozinho.
+
+### Não misturar ambientes
+- Token de sandbox **não** funciona em `api.superfrete.com`.
+- Com `SUPERFRETE_SANDBOX=True` as etiquetas **não** são válidas para postagem.
+- Remova qualquer `MELHOR_ENVIO_*` antigo do painel — não é mais lido.

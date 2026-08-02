@@ -80,12 +80,25 @@ envVarGroups:
         value: "24"
       - key: SHIPPING_PROVIDER
         value: "superfrete"
+      # False = API real (api.superfrete.com). Nunca True em produção.
       - key: SUPERFRETE_SANDBOX
         value: "False"
       - key: SUPERFRETE_SERVICES
         value: "1,2,17,3"
       - key: SUPERFRETE_USER_AGENT
         value: "Renda & Renda/1.0 (suporte@rendaerenda.com.br)"
+      # Plataforma compra a etiqueta com o frete pago pelo comprador.
+      - key: PLATFORM_BUYS_SHIPPING_LABEL
+        value: "True"
+      # Remetente neutro impresso na etiqueta (não o apelido da loja).
+      - key: SHIPPING_SENDER_NAME
+        sync: false
+      - key: SHIPPING_SENDER_DOCUMENT
+        sync: false
+      - key: SHIPPING_SENDER_EMAIL
+        value: "suporte@rendaerenda.com.br"
+      - key: SHIPPING_SENDER_PHONE
+        sync: false
       - key: PAYMENT_PROVIDER
         value: "asaas"
       - key: ASAAS_API_URL
