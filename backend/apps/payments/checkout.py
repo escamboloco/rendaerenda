@@ -69,7 +69,7 @@ def order_ttl_minutes() -> int:
 def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_service: str = "pac"):
     """
     Cotacao de frete do checkout. Roda ANTES da reserva porque pode fazer
-    chamada externa (Melhor Envio) — nunca dentro da transacao que trava
+    chamada externa (SuperFrete) — nunca dentro da transacao que trava
     o estoque.
 
     Com CHECKOUT_FREE_SHIPPING (padrao no lancamento) devolve frete zero
@@ -460,7 +460,7 @@ def confirm_paid_order(payment: Payment, webhook_payload: dict | None = None) ->
 
 
 def _enqueue_shipping_label(order: Order) -> None:
-    """Compra a etiqueta Melhor Envio quando a plataforma fica com o frete."""
+    """Compra a etiqueta SuperFrete quando a plataforma fica com o frete."""
     from apps.shipping.services import platform_buys_shipping_label
 
     if not order.requires_shipping or not platform_buys_shipping_label():

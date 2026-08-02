@@ -68,9 +68,36 @@
       </div>
       <div>
         <label class="input-label">CEP de postagem</label>
-        <input type="text" x-model="originCep" required pattern="\d{8}" maxlength="8" inputmode="numeric" placeholder="01001000" class="input-field">
-        <p class="input-help">Usado para calcular o frete e gerar a etiqueta pré-paga. Seu endereço não aparece na loja.</p>
+        <input type="text" x-model="originCep" @blur="lookupCep()" required pattern="\d{8}" maxlength="8" inputmode="numeric" placeholder="01001000" class="input-field">
+        <p class="input-help">Usado para calcular o frete e gerar a etiqueta SuperFrete. Seu endereço não aparece na loja.</p>
       </div>
+      <div class="grid sm:grid-cols-6 gap-3">
+        <div class="sm:col-span-4">
+          <label class="input-label">Rua</label>
+          <input type="text" x-model="originStreet" required maxlength="120" autocomplete="address-line1" class="input-field">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="input-label">Número</label>
+          <input type="text" x-model="originNumber" required maxlength="20" class="input-field">
+        </div>
+        <div class="sm:col-span-3">
+          <label class="input-label">Complemento <span class="text-gray-600 normal-case">(opcional)</span></label>
+          <input type="text" x-model="originComplement" maxlength="60" class="input-field">
+        </div>
+        <div class="sm:col-span-3">
+          <label class="input-label">Bairro</label>
+          <input type="text" x-model="originDistrict" required maxlength="80" class="input-field">
+        </div>
+        <div class="sm:col-span-4">
+          <label class="input-label">Cidade</label>
+          <input type="text" x-model="originCity" required maxlength="80" class="input-field">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="input-label">UF</label>
+          <input type="text" x-model="originState" required pattern="[A-Za-z]{2}" maxlength="2" class="input-field uppercase">
+        </div>
+      </div>
+      <p x-show="cepError" x-text="cepError" class="input-help"></p>
       <div>
         <label class="input-label">CPF para receber os repasses</label>
         <input type="text" x-model="pixKey" required maxlength="14" inputmode="numeric" placeholder="O mesmo CPF verificado no cadastro" class="input-field">
@@ -106,10 +133,36 @@ function storeOnboarding() {
     slug: "",
     bio: "",
     originCep: "",
+    originStreet: "",
+    originNumber: "",
+    originComplement: "",
+    originDistrict: "",
+    originCity: "",
+    originState: "",
+    cepError: "",
     pixKey: "",
     pixKeyType: "CPF",
     loading: false,
     error: "",
+    async lookupCep() {
+      const cep = this.originCep.replace(/\D/g, "");
+      this.cepError = "";
+      if (cep.length !== 8) return;
+      try {
+        const resp = await fetch(`/api/cep/${cep}/`, { credentials: "same-origin" });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          this.cepError = data.detail || "CEP não encontrado. Preencha o endereço manualmente.";
+          return;
+        }
+        this.originStreet = data.street || this.originStreet;
+        this.originDistrict = data.neighborhood || this.originDistrict;
+        this.originCity = data.city || this.originCity;
+        this.originState = data.state || this.originState;
+      } catch (e) {
+        this.cepError = "Não foi possível consultar o CEP. Preencha manualmente.";
+      }
+    },
     async createStore() {
       this.loading = true;
       this.error = "";
@@ -122,6 +175,12 @@ function storeOnboarding() {
             display_name: this.displayName,
             bio: this.bio,
             origin_cep: this.originCep,
+            origin_street: this.originStreet,
+            origin_number: this.originNumber,
+            origin_complement: this.originComplement,
+            origin_district: this.originDistrict,
+            origin_city: this.originCity,
+            origin_state: this.originState,
             pix_key: this.pixKey,
             pix_key_type: this.pixKeyType,
           }),

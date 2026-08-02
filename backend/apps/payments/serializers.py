@@ -75,7 +75,7 @@ class CheckoutSerializer(serializers.Serializer):
 
     items = CheckoutItemSerializer(many=True)
     shipping_service = serializers.RegexField(
-        r"^(pac|sedex|me-\d+)$", max_length=20, required=False, default="pac"
+        r"^(pac|sedex|sf-\d+)$", max_length=20, required=False, default="pac"
     )
     # Opcional: pedido só de conteúdo digital não tem entrega física.
     shipping_address = serializers.JSONField(required=False, default=dict)

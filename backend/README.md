@@ -55,7 +55,7 @@ chamar o Asaas de verdade, é sinal de que alguém importou
 | `subscriptions` | Assinatura opcional do comprador, checkout, NF de serviço |
 | `payments` | Pedido, checkout, integração Asaas, webhook, NF de comissão, e-mails |
 | `wallet` | Ledger da vendedora, dashboard, saque/repasse Pix |
-| `shipping` | Cotação de frete e rastreio (Correios / Melhor Envio) |
+| `shipping` | Cotação de frete e rastreio (Correios / SuperFrete) |
 | `moderation` | Fila de moderação prévia + denúncias |
 | `offers` | Pedidos personalizados |
 | `core` | Age gate, SEO, consulta de CEP, middleware de segurança, filtro de logs |
@@ -86,7 +86,7 @@ Marketplace +18 de **itens** e **conteúdo** — nunca de serviço presencial.
 | Mensalidade | Nenhuma. Abrir loja e anunciar é grátis |
 | Tipos de anúncio | `physical` (correio), `digital` (arquivo entregue pelo site), `custom` (sob encomenda) |
 | Adicionais | `ProductAddon` — extras pagos escolhidos no anúncio, cobrados no mesmo pedido, com a mesma regra de comissão |
-| Frete | Cotado CEP loja → CEP comprador. Plataforma compra etiqueta Melhor Envio (remetente neutro); embalagem neutra vai para a vendedora. `CHECKOUT_FREE_SHIPPING=True` zera no soft-launch |
+| Frete | Cotado CEP loja → CEP comprador. Plataforma compra etiqueta SuperFrete (remetente neutro); embalagem neutra vai para a vendedora. `CHECKOUT_FREE_SHIPPING=True` zera no soft-launch |
 
 ## Fluxo de uma compra
 
@@ -178,7 +178,7 @@ Blueprint em `render.yaml` (raiz do repo). Sobe Postgres + web + 4 crons:
 
 1. `npm run build:css` e commite `static/css/tailwind.css`.
 2. Push → Render → **New → Blueprint**.
-3. Preencha as variáveis `sync: false` (Asaas, Melhor Envio, SMTP, Pix de teste).
+3. Preencha as variáveis `sync: false` (Asaas, SuperFrete, SMTP, Pix de teste).
 4. DNS na Hostinger: `A @ → 216.24.57.1`, `CNAME www → rendaerenda-web.onrender.com`, sem `AAAA`.
 5. Shell do web → `python manage.py createsuperuser`.
 6. Configure o webhook do Asaas (seção acima).

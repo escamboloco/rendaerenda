@@ -145,6 +145,11 @@ class Command(BaseCommand):
                 "pix_key": pix_key,
                 "pix_key_type": "CPF" if pix_key.isdigit() and len(pix_key) == 11 else "EVP",
                 "origin_cep": "01310100",
+                "origin_street": "Avenida Paulista",
+                "origin_number": "1000",
+                "origin_district": "Bela Vista",
+                "origin_city": "São Paulo",
+                "origin_state": "SP",
             },
         )
 

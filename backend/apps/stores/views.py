@@ -531,6 +531,12 @@ class StoreOnboardView(APIView):
             pix_key=pix_key,
             pix_key_type=pix_key_type,
             origin_cep=payload["origin_cep"],
+            origin_street=payload["origin_street"],
+            origin_number=payload["origin_number"],
+            origin_complement=payload.get("origin_complement", ""),
+            origin_district=payload["origin_district"],
+            origin_city=payload["origin_city"],
+            origin_state=payload["origin_state"],
         )
         # Nome/bio da loja nunca podem ser canal de contato pessoal (telefone,
         # whatsapp, @handle) - mesma trava usada em pedidos personalizados e

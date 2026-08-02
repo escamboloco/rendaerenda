@@ -7,11 +7,8 @@ A etiqueta de envio já foi comprada e paga pela plataforma. É só:
 1. Imprimir a etiqueta: {{ shipment.label_url }}
 2. Embalar o item (embalagem neutra, sem identificação do conteúdo)
 3. Colar a etiqueta na embalagem
-{% if nearest %}4. Levar no ponto de postagem mais próximo:
-   {{ nearest.name }}
-   {{ nearest.address.address }}, {{ nearest.address.number }} - {{ nearest.address.city }}/{{ nearest.address.state_abbr }}
-{% else %}4. Levar em qualquer ponto de postagem da transportadora
-{% endif %}
+4. Levar a um ponto de postagem da transportadora indicada na etiqueta
+
 O rastreio é automático — você não precisa digitar nada. O valor da
 venda aparece na sua carteira e é liberado após a confirmação de
 recebimento pelo comprador (ou automaticamente 1 dia depois da entrega).

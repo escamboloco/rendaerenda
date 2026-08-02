@@ -286,7 +286,7 @@ PACKAGING_FEE = config("PACKAGING_FEE", default=Decimal("0.00"), cast=Decimal)
 # Soft-launch: checkout sem cotacao de frete (frete R$ 0, serviço pac).
 CHECKOUT_FREE_SHIPPING = config("CHECKOUT_FREE_SHIPPING", default=False, cast=bool)
 # Frete usado quando nao ha contrato de transportadora configurado (ou a
-# cotacao falha). Sem isso, um Melhor Envio fora do ar derrubaria TODA
+# cotacao falha). Sem isso, uma indisponibilidade da SuperFrete derrubaria TODA
 # venda. Ajuste para o custo medio real de uma postagem sua.
 SHIPPING_FLAT_RATE = config("SHIPPING_FLAT_RATE", default=Decimal("0.00"), cast=Decimal)
 # Quanto tempo o pedido segura o estoque esperando o Pix. Passou disso, o
@@ -294,7 +294,7 @@ SHIPPING_FLAT_RATE = config("SHIPPING_FLAT_RATE", default=Decimal("0.00"), cast=
 ORDER_PAYMENT_TTL_MINUTES = config("ORDER_PAYMENT_TTL_MINUTES", default=60, cast=int)
 # Validade da cobranca no Asaas (dueDate). Com 0 o QR morre a meia-noite.
 PIX_DUE_DAYS = config("PIX_DUE_DAYS", default=3, cast=int)
-# True (padrao): plataforma compra a etiqueta Melhor Envio com o frete do
+# True (padrao): plataforma compra a etiqueta SuperFrete com o frete do
 # comprador; vendedora so imprime e posta. False: frete inteiro vai pra ela.
 PLATFORM_BUYS_SHIPPING_LABEL = config("PLATFORM_BUYS_SHIPPING_LABEL", default=True, cast=bool)
 # Pix da EMBALAGEM NEUTRA para a vendedora na confirmacao do pagamento
@@ -355,12 +355,19 @@ PLATFORM_LEGAL_NAME = config("PLATFORM_LEGAL_NAME", default="")   # razao social
 PLATFORM_CNPJ = config("PLATFORM_CNPJ", default="")
 PLATFORM_MUNICIPAL_SERVICE_CODE = config("PLATFORM_MUNICIPAL_SERVICE_CODE", default="")
 
-# "correios" (contrato CWS direto) ou "melhor_envio" (recomendado -
-# multi-transportadora + pontos de coleta + etiqueta automatica, ver
-# docs/checkout.md e apps/shipping/melhor_envio.py).
-SHIPPING_PROVIDER = config("SHIPPING_PROVIDER", default="melhor_envio")
-MELHOR_ENVIO_TOKEN = config("MELHOR_ENVIO_TOKEN", default="")
-MELHOR_ENVIO_SANDBOX = config("MELHOR_ENVIO_SANDBOX", default=True, cast=bool)
+# "correios" (contrato CWS direto) ou "superfrete" (recomendado -
+# multi-transportadora + etiqueta automatica, ver
+# docs/checkout.md e apps/shipping/superfrete.py).
+SHIPPING_PROVIDER = config("SHIPPING_PROVIDER", default="superfrete")
+SUPERFRETE_TOKEN = config("SUPERFRETE_TOKEN", default="")
+SUPERFRETE_SANDBOX = config("SUPERFRETE_SANDBOX", default=True, cast=bool)
+# Serviços: PAC, SEDEX, Mini Envios e Jadlog. Loggi é controlada nas
+# configurações do token SuperFrete; J&T exige telefone do destinatário.
+SUPERFRETE_SERVICES = config("SUPERFRETE_SERVICES", default="1,2,17,3")
+SUPERFRETE_USER_AGENT = config(
+    "SUPERFRETE_USER_AGENT",
+    default=f"{SITE_NAME}/1.0 (suporte@{SITE_DOMAIN})",
+)
 
 CORREIOS_CWS_USER = config("CORREIOS_CWS_USER", default="")
 CORREIOS_CWS_PASSWORD = config("CORREIOS_CWS_PASSWORD", default="")

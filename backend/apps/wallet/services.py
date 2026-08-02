@@ -73,7 +73,7 @@ def credit_shipping(order: Order) -> tuple[WalletEntry | None, bool]:
     Credita a parcela de envio que vai para a vendedora, já liberada.
 
     Com etiqueta pela plataforma: só a embalagem neutra (ela compra a
-    caixa; a transportadora é paga via Melhor Envio pela plataforma).
+    caixa; a transportadora é paga via SuperFrete pela plataforma).
     Modo legado: frete inteiro + embalagem.
     Pedido só digital não gera crédito.
     """

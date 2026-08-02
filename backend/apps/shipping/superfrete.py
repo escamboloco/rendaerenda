@@ -102,7 +102,7 @@ def calculate(
             },
         },
     )
-    data = response.json()
+    data = _json(response)
     if not isinstance(data, list):
         raise SuperFreteError("Resposta inválida na cotação da SuperFrete.")
     return [option for option in data if isinstance(option, dict) and not option.get("error")]
@@ -161,7 +161,7 @@ def create_label(
             "platform": settings.SITE_NAME,
         },
     )
-    data = response.json()
+    data = _json(response)
     order_id = str(data.get("id") or "")
     if not order_id:
         raise SuperFreteError("SuperFrete não retornou o ID da etiqueta.")
@@ -197,7 +197,7 @@ def finalize_label(order_id: str) -> BoughtLabel:
 def track(order_id: str) -> dict[str, Any]:
     """GET /api/v0/order/info/{id}."""
     response = _request("GET", f"/api/v0/order/info/{order_id}", timeout=20)
-    data = response.json()
+    data = _json(response)
     if not isinstance(data, dict):
         raise SuperFreteError("Resposta inválida no rastreio da SuperFrete.")
     return data
@@ -248,3 +248,10 @@ def _full_name(value: str) -> str:
 
 def _digits(value: Any) -> str:
     return "".join(character for character in str(value or "") if character.isdigit())
+
+
+def _json(response: requests.Response) -> Any:
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise SuperFreteError("SuperFrete retornou uma resposta inválida.") from exc

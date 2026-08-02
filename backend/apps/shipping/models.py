@@ -61,7 +61,7 @@ class Shipment(models.Model):
     # impede que registros antigos sejam consultados no integrador errado.
     shipping_provider = models.CharField(max_length=20, blank=True)
     provider_order_id = models.CharField(max_length=64, blank=True)
-    label_url = models.URLField(blank=True)
+    label_url = models.URLField(max_length=500, blank=True)
 
     # Confirmacao de recebimento pelo comprador (docs/checkout.md): apos a
     # entrega ele tem DELIVERY_CONFIRMATION_WINDOW_HOURS para confirmar ou

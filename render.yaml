@@ -3,7 +3,7 @@
 # PRODUCAO — rendaerenda.com.br (modelo intermediario simples)
 # Sobe: Postgres + Web + 2 Cron Jobs.
 #
-# Variaveis sync:false = essenciais: Asaas + Melhor Envio + e-mail.
+# Variaveis sync:false = essenciais: Asaas + SuperFrete + e-mail.
 # Fotos ficam no disco persistente do web (/var/data) — sem AWS.
 #
 # Como usar:
@@ -43,7 +43,7 @@ envVarGroups:
       - key: PACKAGING_FEE
         value: "0"
       - key: CHECKOUT_FREE_SHIPPING
-        value: "True"
+        value: "False"
       # Tempo que o pedido segura o estoque esperando o Pix (min).
       - key: ORDER_PAYMENT_TTL_MINUTES
         value: "60"
@@ -79,9 +79,13 @@ envVarGroups:
       - key: DELIVERY_CONFIRMATION_WINDOW_HOURS
         value: "24"
       - key: SHIPPING_PROVIDER
-        value: "melhor_envio"
-      - key: MELHOR_ENVIO_SANDBOX
+        value: "superfrete"
+      - key: SUPERFRETE_SANDBOX
         value: "False"
+      - key: SUPERFRETE_SERVICES
+        value: "1,2,17,3"
+      - key: SUPERFRETE_USER_AGENT
+        value: "Renda & Renda/1.0 (suporte@rendaerenda.com.br)"
       - key: PAYMENT_PROVIDER
         value: "asaas"
       - key: ASAAS_API_URL
@@ -135,7 +139,7 @@ services:
         sync: false
       - key: ASAAS_WEBHOOK_TOKEN
         sync: false
-      - key: MELHOR_ENVIO_TOKEN
+      - key: SUPERFRETE_TOKEN
         sync: false
       - key: EMAIL_HOST
         sync: false
@@ -162,7 +166,7 @@ services:
         fromDatabase:
           name: rendaerenda-db
           property: connectionString
-      - key: MELHOR_ENVIO_TOKEN
+      - key: SUPERFRETE_TOKEN
         sync: false
 
   # Confere no Asaas os Pix pendentes (rede de seguranca caso o webhook

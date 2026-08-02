@@ -58,6 +58,11 @@ def make_store(owner=None, *, slug=None, pix_key=CPF_SELLER, **extra):
         pix_key=pix_key,
         pix_key_type="CPF",
         origin_cep="01310100",
+        origin_street="Avenida Paulista",
+        origin_number="1000",
+        origin_district="Bela Vista",
+        origin_city="São Paulo",
+        origin_state="SP",
         **extra,
     )
 

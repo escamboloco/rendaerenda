@@ -17,6 +17,14 @@ class StoreOnboardSerializer(serializers.Serializer):
     display_name = serializers.CharField(max_length=80)
     bio = serializers.CharField(max_length=500, required=False, allow_blank=True)
     origin_cep = serializers.RegexField(r"^\d{8}$")
+    origin_street = serializers.CharField(max_length=120)
+    origin_number = serializers.CharField(max_length=20)
+    origin_complement = serializers.CharField(
+        max_length=60, required=False, allow_blank=True
+    )
+    origin_district = serializers.CharField(max_length=80)
+    origin_city = serializers.CharField(max_length=80)
+    origin_state = serializers.RegexField(r"^[A-Za-z]{2}$")
     # Chave Pix da vendedora — para onde o Asaas envia o split automaticamente.
     pix_key = serializers.CharField(max_length=140)
     pix_key_type = serializers.ChoiceField(
@@ -46,6 +54,9 @@ class StoreOnboardSerializer(serializers.Serializer):
                 "Não é possível receber em conta de outra pessoa."
             )
         return digits
+
+    def validate_origin_state(self, value):
+        return value.upper()
 
     def validate(self, attrs):
         # Tipo derivado, nunca escolhido: a chave é sempre o CPF da titular.

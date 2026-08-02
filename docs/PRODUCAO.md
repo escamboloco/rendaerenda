@@ -68,7 +68,7 @@ Antes de abrir para volume, decida:
 | KYC de vendedora (`REQUIRE_SELLER_KYC=False`) | Desligado no soft-launch | Qualquer conta abre loja |
 | Verificação de telefone (bureau + SMS) | Sem provider configurado | Pedido personalizado exige `is_phone_verified`, então fica bloqueado na prática |
 | NFS-e (`NFSE_PROVIDER_API_KEY`) | Não configurada; a task pula sem erro | Comissão sem nota fiscal |
-| Cotação de frete real | `CHECKOUT_FREE_SHIPPING=False` + `MELHOR_ENVIO_TOKEN` + saldo ME | Sem token, cai na tarifa fixa; sem saldo ME a etiqueta falha |
+| Cotação de frete real | `CHECKOUT_FREE_SHIPPING=False` + `SUPERFRETE_TOKEN` + saldo SuperFrete | Sem token, cai na tarifa fixa; sem saldo a etiqueta não é liberada |
 | Remetente discreto | `SHIPPING_SENDER_NAME` + `SHIPPING_SENDER_DOCUMENT` (CNPJ) | Sem isso, usa `PLATFORM_LEGAL_NAME` / `SITE_NAME` |
 | Etiqueta pré-paga | `PLATFORM_BUYS_SHIPPING_LABEL=True` | Vendedora só imprime PDF na carteira / e-mail |
 | Cartão de crédito | Funciona pela página hospedada do Asaas (sem formulário no site) | Um passo a mais que o Pix; parcelamento fica nas mãos do Asaas |

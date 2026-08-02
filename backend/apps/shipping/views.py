@@ -168,38 +168,3 @@ class DeliveryConfirmationView(APIView):
             order.save(update_fields=["status"])
             return Response({"status": "disputed"})
         return Response({"detail": "Ação inválida (use confirm ou dispute)."}, status=http_status.HTTP_400_BAD_REQUEST)
-
-
-class DropoffPointsView(APIView):
-    """GET /api/vendedora/pontos-coleta/ — pontos de postagem mais próximos do CEP da loja."""
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        from django.conf import settings
-
-        from . import melhor_envio
-
-        store = getattr(request.user, "store", None)
-        if not store:
-            raise PermissionDenied("Usuário não possui loja.")
-        cep = store.origin_cep or settings.CORREIOS_ORIGIN_CEP
-        if not cep:
-            return Response({"detail": "Cadastre o CEP de postagem da sua loja."}, status=http_status.HTTP_400_BAD_REQUEST)
-
-        try:
-            points = melhor_envio.find_dropoff_points(cep=cep)
-        except melhor_envio.MelhorEnvioError:
-            return Response({"detail": "Não foi possível buscar os pontos agora."}, status=http_status.HTTP_502_BAD_GATEWAY)
-
-        return Response([
-            {
-                "name": p.get("name", ""),
-                "company": (p.get("company") or {}).get("name", ""),
-                "address": (p.get("address") or {}).get("address", ""),
-                "number": (p.get("address") or {}).get("number", ""),
-                "city": (p.get("address") or {}).get("city", ""),
-                "state": (p.get("address") or {}).get("state_abbr", ""),
-            }
-            for p in points[:5]
-        ])

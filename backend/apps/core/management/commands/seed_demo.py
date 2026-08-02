@@ -304,7 +304,7 @@ class Command(BaseCommand):
                     "majority_and_image_consent_term_signed_at": timezone.now(),
                 },
             )
-            store, _ = Store.objects.get_or_create(
+            store, _ = Store.objects.update_or_create(
                 owner=seller,
                 defaults={
                     "slug": slug,
@@ -315,6 +315,11 @@ class Command(BaseCommand):
                     "plan_expires_at": None,
                     "pix_key": seller.cpf,
                     "origin_cep": cep,
+                    "origin_street": "Rua de Demonstração",
+                    "origin_number": str(100 + index),
+                    "origin_district": "Centro",
+                    "origin_city": "São Paulo",
+                    "origin_state": "SP",
                     "psp_subaccount_id": f"demo-sub-{username}",
                 },
             )
@@ -434,7 +439,7 @@ class Command(BaseCommand):
                     if product.kind != "digital":
                         Shipment.objects.create(
                             order=order,
-                            service="me-1",
+                            service="sf-1",
                             estimated_delivery_days=4,
                             status="delivered",
                             posted_at=timezone.now() - datetime.timedelta(days=8 - order_index),
