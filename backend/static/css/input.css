@@ -859,18 +859,21 @@
     --orbit-rx: 7rem;
     --orbit-ry: 6.25rem;
   }
-  /* Rótulos sobre o hero escuro: texto claro + placa opaca (os badges
-     translucent padrão somem no fundo do logo). */
+  /* Rótulos sobre o hero: texto claro + placa opaca (os badges
+     translúcidos somem no fundo). Sem @apply text-white — o Tailwind
+     reescreveria regras .storefront-light *.text-white e apagaria o contraste. */
   .orbit-label {
     @apply inline-flex items-center text-xs font-semibold px-3 py-1.5 rounded-full
-      leading-none whitespace-nowrap text-white border border-white/35 shadow-lift;
-    background: rgba(11, 7, 9, 0.94);
+      leading-none whitespace-nowrap border shadow-lift;
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.4);
+    background: #1a1216;
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
   .orbit-label--ok {
-    border-color: rgba(110, 231, 183, 0.55);
-    background: rgba(4, 47, 36, 0.95);
     color: #ecfdf5;
+    border-color: rgba(110, 231, 183, 0.7);
+    background: #064e3b;
   }
 
   .hero-orbit__satellite {
