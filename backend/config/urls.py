@@ -40,6 +40,7 @@ webhook_urlpatterns = [
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("gestao/", include("apps.backoffice.urls")),
     path("entrada/", include("apps.core.urls")),
     path("contas/", include("allauth.urls")),
     path("api/", include(api_urlpatterns)),

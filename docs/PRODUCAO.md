@@ -266,3 +266,39 @@ endereço da vendedora e o **nome/CNPJ da plataforma**.
 - [ ] `STATEMENT_DESCRIPTOR` neutro  
 - [ ] Com CNPJ: `PLATFORM_*` + `SHIPPING_SENDER_NAME/DOCUMENT/PHONE`  
 - [ ] Manual Deploy → `curl` no webhook → `python manage.py check_superfrete`
+
+## 10. Primeiro acesso ao painel de gestão
+
+O painel operacional fica em `https://rendaerenda.com.br/gestao/entrar/`.
+No serviço **web** do Render, preencha as quatro variáveis juntas:
+
+| Variável | Valor |
+|---|---|
+| `ADMIN_EMAIL` | e-mail exclusivo da pessoa administradora |
+| `ADMIN_PASSWORD` | senha aleatória com pelo menos 12 caracteres |
+| `ADMIN_CPF` | CPF da administradora, somente 11 dígitos |
+| `ADMIN_BIRTH_DATE` | nascimento no formato `AAAA-MM-DD` |
+
+Para gerar uma senha forte:
+
+```bash
+openssl rand -base64 32
+```
+
+O build executa `python manage.py create_admin`. Na primeira execução ele
+cria a conta; nos próximos deploys apenas confirma as permissões e **não**
+redefine a senha. Para trocar a senha deliberadamente, abra o Shell do web:
+
+```bash
+python manage.py create_admin --reset-password
+```
+
+Nesse comando, `ADMIN_PASSWORD` deve conter temporariamente a nova senha.
+Depois do acesso, prefira alterar a senha pelo Django Admin e remova
+`ADMIN_PASSWORD`, `ADMIN_CPF` e `ADMIN_BIRTH_DATE` do Render; mantenha somente
+`ADMIN_EMAIL`. Nos deploys seguintes, o comando apenas confirma as permissões
+da conta existente. Qualquer outra combinação parcial falha de propósito.
+
+O painel tem visão geral, pedidos, financeiro, lojas (melhores avaliações
+primeiro), moderação, denúncias, disputas e contas. O `/admin/` permanece para
+KYC e alterações técnicas profundas.

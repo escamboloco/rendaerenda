@@ -44,12 +44,32 @@ class ModerationQueueItem(models.Model):
         indexes = [models.Index(fields=["decision", "target_type"])]
 
     def approve(self, reviewer):
+        from apps.catalog.models import Product
+        from apps.stores.models import Store
+
+        target = self.target
+        if isinstance(target, Store):
+            target.status = Store.Status.ACTIVE
+            target.save(update_fields=["status"])
+        elif isinstance(target, Product):
+            target.status = Product.Status.PUBLISHED
+            target.save(update_fields=["status", "price", "weight_grams"])
         self.decision = self.Decision.APPROVED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
         self.save(update_fields=["decision", "reviewed_by", "reviewed_at"])
 
     def reject(self, reviewer):
+        from apps.catalog.models import Product
+        from apps.stores.models import Store
+
+        target = self.target
+        if isinstance(target, Store):
+            target.status = Store.Status.SUSPENDED
+            target.save(update_fields=["status"])
+        elif isinstance(target, Product):
+            target.status = Product.Status.REJECTED
+            target.save(update_fields=["status", "price", "weight_grams"])
         self.decision = self.Decision.REJECTED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()

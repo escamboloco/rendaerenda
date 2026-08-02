@@ -11,6 +11,7 @@ pip install -r requirements.txt
 python manage.py collectstatic --noinput
 python manage.py migrate
 python manage.py createcachetable || true
+python manage.py create_admin
 
 # Loja + 3 produtos teste (R$ 5) para a primeira venda. Idempotente.
 if [ "${SEED_PAYMENT_TEST:-}" = "True" ] || [ "${SEED_PAYMENT_TEST:-}" = "true" ] || [ "${SEED_PAYMENT_TEST:-}" = "1" ]; then

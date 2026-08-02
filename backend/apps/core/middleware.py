@@ -6,6 +6,7 @@ from django.urls import reverse
 AGE_GATE_EXEMPT_PREFIXES = (
     "/entrada/",
     "/admin/",
+    "/gestao/",
     "/static/",
     "/healthz",
     "/webhooks/",

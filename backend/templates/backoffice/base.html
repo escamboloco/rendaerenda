@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>{% block title %}Gestão{% endblock %}</title>
+  <style>
+    :root{color-scheme:dark;--bg:#090b10;--panel:#121620;--line:#262d3a;--text:#f4f6fa;--muted:#9da7b7;--accent:#d84d79;--ok:#42c98a;--warn:#f2b84b;--danger:#ef6262}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,sans-serif}
+    a{color:inherit;text-decoration:none}button,input,select{font:inherit}.layout{min-height:100vh;display:grid;grid-template-columns:230px 1fr}
+    aside{border-right:1px solid var(--line);padding:24px 16px;position:sticky;top:0;height:100vh;background:#0d1017}.brand{font-weight:800;font-size:18px;margin:0 10px 26px}.brand small{display:block;color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase}
+    nav{display:grid;gap:6px}.nav{padding:11px 12px;border-radius:10px;color:var(--muted);font-weight:650}.nav:hover,.nav.active{background:#1b202b;color:#fff}.logout{margin-top:28px;width:100%;padding:10px;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:10px;cursor:pointer}
+    main{padding:28px;max-width:1500px;width:100%;margin:auto}.top{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:24px}.top h1{font-size:27px;margin:0}.muted{color:var(--muted)}.grid{display:grid;gap:14px}.metrics{grid-template-columns:repeat(5,minmax(130px,1fr))}.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}.metric strong{font-size:25px;display:block}.metric span{color:var(--muted)}.section{margin-top:22px}.section h2{font-size:17px;margin:0 0 12px}
+    table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:14px;overflow:hidden}th,td{text-align:left;padding:12px;border-bottom:1px solid var(--line);vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}tr:last-child td{border-bottom:0}
+    .badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#252b37;font-size:12px}.ok{color:var(--ok)}.warn{color:var(--warn)}.danger{color:var(--danger)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 12px;border:0;border-radius:9px;background:#2b3342;color:#fff;font-weight:700;cursor:pointer}.btn.primary{background:var(--accent)}.btn.danger-bg{background:#8f3038}.btn.ok-bg{background:#176342}.actions{display:flex;flex-wrap:wrap;gap:8px}
+    input,select{min-height:42px;border:1px solid var(--line);border-radius:10px;background:#0d1017;color:#fff;padding:8px 11px}.filters{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:16px}.filters input{min-width:260px;flex:1}.empty{padding:28px;text-align:center;color:var(--muted)}
+    .messages{display:grid;gap:8px;margin-bottom:16px}.message{padding:11px 14px;border-radius:10px;background:#202633;border-left:4px solid var(--accent)}details{margin-top:8px}summary{cursor:pointer;color:var(--muted)}
+    @media(max-width:900px){.layout{grid-template-columns:1fr}aside{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:14px}nav{display:flex;overflow:auto}.brand{margin:0 6px 12px}.logout{margin:12px 0 0}.metrics{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}main{padding:18px}.top{display:block}table{display:block;overflow-x:auto}}
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="brand">Gestão <small>acesso restrito</small></div>
+    <nav aria-label="Painel administrativo">
+      <a class="nav {% if active_tab == 'dashboard' %}active{% endif %}" href="{% url 'backoffice:dashboard' %}">Visão geral</a>
+      <a class="nav {% if active_tab == 'orders' %}active{% endif %}" href="{% url 'backoffice:orders' %}">Pedidos</a>
+      <a class="nav {% if active_tab == 'finance' %}active{% endif %}" href="{% url 'backoffice:finance' %}">Financeiro</a>
+      <a class="nav {% if active_tab == 'stores' %}active{% endif %}" href="{% url 'backoffice:stores' %}">Lojas</a>
+      <a class="nav {% if active_tab == 'moderation' %}active{% endif %}" href="{% url 'backoffice:moderation' %}">Moderação</a>
+      <a class="nav {% if active_tab == 'disputes' %}active{% endif %}" href="{% url 'backoffice:disputes' %}">Disputas</a>
+      <a class="nav {% if active_tab == 'accounts' %}active{% endif %}" href="{% url 'backoffice:accounts' %}">Contas</a>
+      <a class="nav" href="/admin/" rel="noreferrer">Admin técnico</a>
+    </nav>
+    <form method="post" action="{% url 'backoffice:logout' %}">{% csrf_token %}<button class="logout" type="submit">Sair com segurança</button></form>
+  </aside>
+  <main>
+    {% if messages %}<div class="messages">{% for message in messages %}<div class="message">{{ message }}</div>{% endfor %}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

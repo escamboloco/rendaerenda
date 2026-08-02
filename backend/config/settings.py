@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "apps.offers",
     "apps.reviews",
     "apps.core",
+    "apps.backoffice",
 ]
 
 MIDDLEWARE = [
@@ -408,6 +409,7 @@ EMAIL_BACKEND = config(
 LOGIN_URL = "/contas/login/"
 LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+BACKOFFICE_LOGIN_URL = "/gestao/entrar/"
 ACCOUNT_ADAPTER = "apps.accounts.adapter.AgeGatedAccountAdapter"
 ACCOUNT_SIGNUP_FORM_CLASS = "apps.accounts.forms.SignupForm"
 # django-allauth==65.3.0 usa as chaves de configuracao "legadas" (nao a
