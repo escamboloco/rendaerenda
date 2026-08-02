@@ -46,8 +46,8 @@ class Shipment(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name="shipment")
-    # "pac"/"sedex" (Correios direto) ou "me-<id>" (serviço cotado via
-    # Melhor Envio - Jadlog, Loggi, Correios etc.).
+    # "pac"/"sedex" (Correios direto) ou "sf-<id>" (serviço cotado via
+    # SuperFrete - Correios, Jadlog, Loggi etc.).
     service = models.CharField(max_length=20)
     tracking_code = models.CharField(max_length=40, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AWAITING_POSTING)
@@ -57,9 +57,10 @@ class Shipment(models.Model):
     last_tracking_event = models.CharField(max_length=200, blank=True)
     last_tracking_check_at = models.DateTimeField(null=True, blank=True)
 
-    # Etiqueta comprada automaticamente pela plataforma via Melhor Envio
-    # quando o pagamento confirma - a vendedora so imprime e cola.
-    melhor_envio_order_id = models.CharField(max_length=64, blank=True)
+    # Identificador da etiqueta no integrador logístico. O provider separado
+    # impede que registros antigos sejam consultados no integrador errado.
+    shipping_provider = models.CharField(max_length=20, blank=True)
+    provider_order_id = models.CharField(max_length=64, blank=True)
     label_url = models.URLField(blank=True)
 
     # Confirmacao de recebimento pelo comprador (docs/checkout.md): apos a

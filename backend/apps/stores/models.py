@@ -63,6 +63,14 @@ class Store(models.Model):
     # cotacao de frete (o comprador ve preco/prazo reais a partir daqui) e
     # para achar o ponto de coleta mais proximo dela.
     origin_cep = models.CharField(max_length=8, blank=True)
+    # Endereço de postagem privado. É usado como endereço de retorno na
+    # etiqueta; nunca aparece na vitrine pública.
+    origin_street = models.CharField(max_length=120, blank=True)
+    origin_number = models.CharField(max_length=20, blank=True)
+    origin_complement = models.CharField(max_length=60, blank=True)
+    origin_district = models.CharField(max_length=80, blank=True)
+    origin_city = models.CharField(max_length=80, blank=True)
+    origin_state = models.CharField(max_length=2, blank=True)
 
     # Metricas cacheadas (apps.reviews.services.recompute_store_rating /
     # apps.stores.services.increment_sales_count) - evita recalcular
