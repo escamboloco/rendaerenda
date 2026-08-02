@@ -20,16 +20,11 @@
   <meta property="og:url" content="{{ request.build_absolute_uri }}">
   <meta property="og:title" content="{% block og_title %}Renda &amp; Renda{% endblock %}">
   <meta property="og:description" content="{% block og_description %}Classificados +18 entre adultos verificados.{% endblock %}">
-  {# Prévia de link tem que ser bitmap: X/Twitter, WhatsApp e Telegram
-     descartam SVG e o card sai sem imagem. Sempre 1200x630 - a view de
-     og:image do anúncio/loja renderiza exatamente nessa medida. #}
   <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'img/og-brand.png' %}{% endblock %}">
   <meta property="og:image:type" content="{% block og_image_type %}image/png{% endblock %}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="{% block og_image_alt %}Renda &amp; Renda — marketplace +18 com compra protegida{% endblock %}">
-  {# X só monta o card grande com esta tag; título/descrição/imagem ele
-     lê do Open Graph acima. #}
   <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#0b0709">
   <meta name="csrf-token" content="{{ csrf_token }}">
@@ -90,34 +85,34 @@ aninhados (x-data proprio) continuam funcionando normalmente.
         </div>
       </form>
 
-      <nav class="ml-auto flex items-center gap-1 sm:gap-2 text-sm">
-        <a href="{% url 'stores:listing' %}" class="nav-link hidden md:inline">Descobrir</a>
-        <a href="{% url 'stores:categories' %}" class="nav-link hidden lg:inline">Categorias</a>
-        <a href="{% url 'stores:how_it_works' %}" class="nav-link hidden xl:inline">Como funciona</a>
+      <nav class="ml-auto flex items-center gap-1 sm:gap-1.5 text-sm h-11">
+        <a href="{% url 'stores:listing' %}" class="nav-link hidden md:inline-flex">Descobrir</a>
+        <a href="{% url 'stores:categories' %}" class="nav-link hidden lg:inline-flex">Categorias</a>
+        <a href="{% url 'stores:how_it_works' %}" class="nav-link hidden xl:inline-flex">Como funciona</a>
         {% if request.user.is_authenticated %}
-          <a href="{% url 'payments_pages:my_purchases' %}" class="nav-link hidden md:inline">Compras</a>
+          <a href="{% url 'payments_pages:my_purchases' %}" class="nav-link hidden md:inline-flex">Compras</a>
           {% if request.user.role == 'seller' %}
             {% if request.user.has_store %}
-              <a href="{% url 'stores:seller_hub' %}" class="nav-link hidden md:inline text-brand-light">Minha loja</a>
+              <a href="{% url 'stores:seller_hub' %}" class="nav-link hidden md:inline-flex text-brand-light">Minha loja</a>
             {% else %}
-              <a href="{% url 'stores:onboard_page' %}" class="nav-link hidden md:inline">Abrir loja</a>
+              <a href="{% url 'stores:onboard_page' %}" class="nav-link hidden md:inline-flex">Abrir loja</a>
             {% endif %}
           {% endif %}
-          <a href="{% url 'accounts_pages:profile_page' %}" class="nav-link hidden sm:inline">Meu Perfil</a>
-          <form method="post" action="{% url 'account_logout' %}" class="hidden sm:inline">
+          <a href="{% url 'accounts_pages:profile_page' %}" class="nav-link hidden sm:inline-flex">Meu Perfil</a>
+          <form method="post" action="{% url 'account_logout' %}" class="hidden sm:inline-flex items-center h-11">
             {% csrf_token %}
             <button type="submit" class="nav-link text-gray-400 hover:text-gray-200">Sair</button>
           </form>
           {% if request.user.is_staff %}
-          <a href="{% url 'backoffice:dashboard' %}" class="btn-secondary !py-2 !px-3 !min-h-0 hidden sm:inline-flex text-xs">Painel admin</a>
+          <a href="{% url 'backoffice:dashboard' %}" class="btn-secondary !py-0 !px-3 !h-11 !min-h-0 hidden sm:inline-flex items-center text-xs">Painel admin</a>
           {% endif %}
         {% else %}
           <a href="{% url 'account_login' %}" class="nav-link">Entrar</a>
-          <a href="{% url 'backoffice:login' %}" class="nav-link hidden lg:inline text-gray-500 hover:text-gray-300">Admin</a>
-          <a href="{% url 'account_signup' %}" class="btn-primary !py-2 !px-3 !min-h-0 hidden sm:inline-flex text-xs">Criar conta</a>
+          <a href="{% url 'backoffice:login' %}" class="nav-link hidden lg:inline-flex text-gray-500 hover:text-gray-300">Admin</a>
+          <a href="{% url 'account_signup' %}" class="btn-primary !py-0 !px-3 !h-11 !min-h-0 hidden sm:inline-flex items-center text-xs">Criar conta</a>
         {% endif %}
 
-        <button type="button" class="relative ml-1 p-2.5 rounded-xl border border-surface-border bg-surface-alt hover:border-brand/60 transition"
+        <button type="button" class="relative ml-1 inline-flex items-center justify-center h-11 w-11 rounded-xl border border-surface-border bg-surface-alt hover:border-brand/60 transition"
                 @click="$store.cart.openDrawer()" aria-label="Abrir sacola">
           <svg class="w-5 h-5 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12l-1 13H7L6 7zm3 0a3 3 0 016 0"/>
@@ -437,8 +432,6 @@ aninhados (x-data proprio) continuam funcionando normalmente.
     Saída rápida
   </button>
 
-  {# Por ultimo no DOM e z-[100]: cobre header, drawer e o botao de saida
-     rapida enquanto a idade nao for confirmada. #}
   {% if request.age_gate_pending %}{% include "core/_age_gate_overlay.html" %}{% endif %}
 
   <script>
