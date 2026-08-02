@@ -1,56 +1,41 @@
 {% comment %}
-Marca do Renda & Renda.
-
-Monograma "RR" em espelho formando um laço — referência a renda/fita.
-Três camadas SVG com translateZ distinto = paralaxe 3D suave em CSS
-puro (sem WebGL, CSP fechada).
-
-Acessibilidade: animação desligada em prefers-reduced-motion.
-Parâmetros: `with_text`, `compact`.
+Símbolo "Laço R": duas fitas contínuas formam simultaneamente um R,
+um laço de renda e o infinito da relação compra ↔ venda. As três cópias
+do mesmo vetor vivem em planos Z diferentes para profundidade real.
 {% endcomment %}
 <span class="logo3d {% if compact %}logo3d--sm{% endif %}" aria-hidden="true">
   <span class="logo3d__stage">
     <svg class="logo3d__layer logo3d__layer--back" viewBox="0 0 48 48" fill="none">
-      <path d="M14 34V14h9a6 6 0 0 1 0 12h-9m9 0 7 8" stroke="url(#lg-back)" stroke-width="4.8"
-            stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M34 34V14h-9a6 6 0 0 0 0 12h9m-9 0-7 8" stroke="url(#lg-back)" stroke-width="4.8"
-            stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>
-      <defs>
-        <linearGradient id="lg-back" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#8a3fa8"/><stop offset="1" stop-color="#5c0a20"/>
-        </linearGradient>
-      </defs>
+      <path d="M10 35V13c8-4 20-2 20 7 0 8-10 9-20 7m14-1 13 11"
+            stroke="#5c0a20" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M11 34c7 5 18 2 20-6 2-8-4-15-13-14"
+            stroke="#5a2470" stroke-width="4" stroke-linecap="round" opacity=".78"/>
     </svg>
-
     <svg class="logo3d__layer logo3d__layer--mid" viewBox="0 0 48 48" fill="none">
-      <path d="M14 34V14h9a6 6 0 0 1 0 12h-9m9 0 7 8" stroke="url(#lg-mid)" stroke-width="3.8"
-            stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M34 34V14h-9a6 6 0 0 0 0 12h9m-9 0-7 8" stroke="url(#lg-mid)" stroke-width="3.8"
-            stroke-linecap="round" stroke-linejoin="round" opacity=".65"/>
+      <path d="M10 35V13c8-4 20-2 20 7 0 8-10 9-20 7m14-1 13 11"
+            stroke="url(#rr-mid)" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/>
       <defs>
-        <linearGradient id="lg-mid" x1="6" y1="8" x2="42" y2="40" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#e0295c"/><stop offset="1" stop-color="#8a3fa8"/>
+        <linearGradient id="rr-mid" x1="8" y1="9" x2="40" y2="39" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#8a3fa8"/><stop offset=".58" stop-color="#c01844"/><stop offset="1" stop-color="#e0295c"/>
         </linearGradient>
       </defs>
     </svg>
-
     <svg class="logo3d__layer logo3d__layer--front" viewBox="0 0 48 48" fill="none">
-      <path d="M14 34V14h9a6 6 0 0 1 0 12h-9m9 0 7 8" stroke="url(#lg-front)" stroke-width="3.4"
-            stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M34 34V14h-9a6 6 0 0 0 0 12h9m-9 0-7 8" stroke="url(#lg-front)" stroke-width="3.4"
-            stroke-linecap="round" stroke-linejoin="round" opacity=".75"/>
-      <circle cx="24" cy="26" r="2.1" fill="#f4d3dc"/>
+      <path d="M10 35V13c8-4 20-2 20 7 0 8-10 9-20 7m14-1 13 11"
+            stroke="url(#rr-front)" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M11 34c7 5 18 2 20-6 2-8-4-15-13-14"
+            stroke="#f4d3dc" stroke-width="1.5" stroke-linecap="round" opacity=".72"/>
+      <circle cx="10" cy="13" r="2.1" fill="#fff8f5"/>
       <defs>
-        <linearGradient id="lg-front" x1="8" y1="10" x2="40" y2="38" gradientUnits="userSpaceOnUse">
-          <stop stop-color="#f4d3dc"/><stop offset=".5" stop-color="#e0295c"/><stop offset="1" stop-color="#8a3fa8"/>
+        <linearGradient id="rr-front" x1="9" y1="10" x2="39" y2="38" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#fff8f5"/><stop offset=".38" stop-color="#f4d3dc"/><stop offset=".72" stop-color="#e0295c"/><stop offset="1" stop-color="#8a3fa8"/>
         </linearGradient>
       </defs>
     </svg>
   </span>
 </span>
-
 {% if with_text %}
-<span class="logo-word">
+<span class="logo-word" aria-label="Renda e Renda">
   <span class="logo-word__main">Renda</span><span class="logo-word__amp">&amp;</span><span class="logo-word__main">Renda</span>
 </span>
 {% endif %}

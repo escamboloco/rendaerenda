@@ -38,48 +38,67 @@ def send_shipment_posted_email(shipment_id: str):
 @shared_task(bind=True, max_retries=5, default_retry_delay=120)
 def buy_label_for_order(self, order_id: str):
     """
-    Fluxo automatizado da etiqueta (docs/checkout.md): assim que o
-    pagamento confirma, a PLATAFORMA compra a etiqueta no Melhor Envio
-    com o frete que o comprador ja pagou, e a vendedora recebe por
-    e-mail o PDF pronto pra imprimir e colar + o ponto de coleta mais
-    proximo. Ela nao paga nada nem digita codigo de rastreio.
+    Assim que o pagamento confirma, a plataforma compra a etiqueta no
+    Melhor Envio com o frete pago pelo comprador. Remetente = nome neutro
+    da plataforma; CEP de origem = da vendedora.
     """
     from apps.payments.models import Order
 
     from . import melhor_envio
+    from .services import platform_buys_shipping_label
 
-    order = Order.objects.select_related("store__owner", "buyer", "shipment").get(id=order_id)
-    shipment = order.shipment
-    if shipment.label_url:
-        return  # idempotente - webhook do PSP pode repetir
-
-    if not shipment.service.startswith("me-"):
-        # Modo Correios direto: sem compra automatica de etiqueta - a
-        # vendedora posta e registra o rastreio manualmente no painel.
+    if not platform_buys_shipping_label():
         return
 
-    first_item = order.items.select_related("product").first()
-    product = first_item.product
+    order = Order.objects.select_related("store__owner", "buyer", "shipment").get(id=order_id)
+    if not hasattr(order, "shipment"):
+        return
+    shipment = order.shipment
+    if shipment.label_url:
+        return
+
+    if not shipment.service.startswith("me-"):
+        # Cotação flat / Correios direto: sem compra automática.
+        logger.info(
+            "Pedido %s sem serviço Melhor Envio (%s) — etiqueta manual.",
+            order_id,
+            shipment.service,
+        )
+        return
+
+    physical_items = [
+        item
+        for item in order.items.select_related("product").all()
+        if item.product.requires_shipping
+    ]
+    if not physical_items:
+        return
+
+    weight = sum(item.product.weight_grams * item.quantity for item in physical_items)
+    length = max(item.product.length_cm for item in physical_items)
+    width = max(item.product.width_cm for item in physical_items)
+    height = sum(item.product.height_cm * item.quantity for item in physical_items)
 
     try:
         bought = melhor_envio.buy_label(
             service_id=int(shipment.service.removeprefix("me-")),
             origin_cep=order.store.origin_cep or settings.CORREIOS_ORIGIN_CEP,
-            destination_cep=order.shipping_address.get("cep", ""),
-            seller_name=order.store.owner.get_full_name() or order.store.owner.username,
-            seller_document=order.store.owner.cpf,
-            buyer_name=order.buyer.get_full_name() or order.buyer.username,
-            buyer_document=order.buyer.cpf,
-            shipping_address=order.shipping_address,
-            weight_grams=product.weight_grams,
-            length_cm=product.length_cm,
-            width_cm=product.width_cm,
-            height_cm=product.height_cm,
+            destination_cep=(order.shipping_address or {}).get("cep", ""),
+            buyer_name=order.payer_name,
+            buyer_document=order.payer_cpf,
+            shipping_address=order.shipping_address or {},
+            weight_grams=weight,
+            length_cm=length,
+            width_cm=width,
+            height_cm=height,
             declared_value=order.items_total,
             order_reference=str(order.id),
         )
     except melhor_envio.MelhorEnvioError as exc:
         logger.warning("Falha ao comprar etiqueta do pedido %s: %s", order_id, exc)
+        # Sem token / sandbox vazio: não fica em retry infinito (dev/testes).
+        if not (settings.MELHOR_ENVIO_TOKEN or "").strip():
+            return
         raise self.retry(exc=exc)
 
     shipment.melhor_envio_order_id = bought.order_id
@@ -88,7 +107,6 @@ def buy_label_for_order(self, order_id: str):
         shipment.tracking_code = bought.tracking_code
     shipment.save(update_fields=["melhor_envio_order_id", "label_url", "tracking_code"])
 
-    # Ponto de coleta mais proximo da vendedora, incluido no e-mail.
     nearest = None
     try:
         points = melhor_envio.find_dropoff_points(
@@ -98,15 +116,25 @@ def buy_label_for_order(self, order_id: str):
     except melhor_envio.MelhorEnvioError:
         pass
 
-    send_mail(
-        subject=f"Etiqueta pronta — pedido #{str(order.id)[:8]}",
-        message=render_to_string(
-            "emails/label_ready.txt",
-            {"order": order, "shipment": shipment, "nearest": nearest, "site_name": settings.SITE_NAME},
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[order.store.owner.email],
-    )
+    seller_email = order.store.owner.email
+    if seller_email:
+        try:
+            send_mail(
+                subject=f"Etiqueta pronta — pedido #{str(order.id)[:8]}",
+                message=render_to_string(
+                    "emails/label_ready.txt",
+                    {
+                        "order": order,
+                        "shipment": shipment,
+                        "nearest": nearest,
+                        "site_name": settings.SITE_NAME,
+                    },
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[seller_email],
+            )
+        except Exception:
+            logger.exception("Falha ao enviar e-mail de etiqueta do pedido %s", order_id)
 
 
 @shared_task
@@ -155,23 +183,24 @@ def _sync_melhor_envio_status(shipment: Shipment):
 @shared_task
 def release_confirmed_deliveries():
     """
-    Roda de hora em hora (celery beat). Libera o saldo da vendedora
-    quando: o comprador confirmou o recebimento, OU a janela de
-    contestacao (DELIVERY_CONFIRMATION_WINDOW_HOURS, 24h por padrao)
-    passou desde a entrega sem contestacao. docs/checkout.md.
+    Libera o saldo da vendedora quando o comprador confirma ou a janela
+    de contestacao passa sem disputa.
     """
     from apps.wallet.services import release_and_payout
 
     window = timedelta(hours=settings.DELIVERY_CONFIRMATION_WINDOW_HOURS)
     cutoff = timezone.now() - window
 
-    to_release = Shipment.objects.filter(
-        status=Shipment.Status.DELIVERED,
-        buyer_disputed_at__isnull=True,
-        order__wallet_entries__available_at__gt=timezone.now(),
-    ).filter(
-        models_q_confirmed_or_expired(cutoff)
-    ).select_related("order").distinct()
+    to_release = (
+        Shipment.objects.filter(
+            status=Shipment.Status.DELIVERED,
+            buyer_disputed_at__isnull=True,
+            order__wallet_entries__available_at__gt=timezone.now(),
+        )
+        .filter(models_q_confirmed_or_expired(cutoff))
+        .select_related("order")
+        .distinct()
+    )
 
     for shipment in to_release:
         if release_and_payout(shipment.order):

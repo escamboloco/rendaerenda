@@ -24,9 +24,49 @@ TRACKING_API_URL = "https://api.correios.com.br/srorastro/v1/objetos"
 class FreightOption:
     service: str
     label: str
-    price: float
+    price: float  # total que o comprador paga (transportadora + embalagem)
     deadline_days: int
     company: str = "Correios"
+    # Parcela da embalagem neutra (vai para a vendedora). O restante do
+    # `price` fica com a plataforma para comprar a etiqueta pré-paga.
+    packaging_amount: float = 0.0
+
+
+def platform_buys_shipping_label() -> bool:
+    """
+    True = plataforma compra a etiqueta (Melhor Envio) com o frete pago
+    pelo comprador; vendedora só imprime e posta. False = frete inteiro
+    vai pra vendedora e ela posta por conta própria.
+    """
+    return bool(getattr(settings, "PLATFORM_BUYS_SHIPPING_LABEL", True))
+
+
+def shipping_sender() -> dict:
+    """
+    Remetente discreto impresso na etiqueta: razão social / nome neutro
+    da plataforma — não o apelido da loja nem o nome artístico.
+    """
+    name = (
+        (getattr(settings, "SHIPPING_SENDER_NAME", "") or "").strip()
+        or (getattr(settings, "PLATFORM_LEGAL_NAME", "") or "").strip()
+        or settings.SITE_NAME
+    )
+    document = (
+        (getattr(settings, "SHIPPING_SENDER_DOCUMENT", "") or "").strip()
+        or (getattr(settings, "PLATFORM_CNPJ", "") or "").strip()
+    )
+    return {
+        "name": name,
+        "document": document,
+        "email": (getattr(settings, "SHIPPING_SENDER_EMAIL", "") or "").strip()
+        or (getattr(settings, "DEFAULT_FROM_EMAIL", "") or "").strip(),
+        "phone": (getattr(settings, "SHIPPING_SENDER_PHONE", "") or "").strip(),
+        "address": (getattr(settings, "SHIPPING_SENDER_STREET", "") or "").strip(),
+        "number": (getattr(settings, "SHIPPING_SENDER_NUMBER", "") or "").strip(),
+        "district": (getattr(settings, "SHIPPING_SENDER_DISTRICT", "") or "").strip(),
+        "city": (getattr(settings, "SHIPPING_SENDER_CITY", "") or "").strip(),
+        "state_abbr": (getattr(settings, "SHIPPING_SENDER_STATE", "") or "").strip(),
+    }
 
 
 class CorreiosAuthError(Exception):
@@ -135,9 +175,17 @@ def calculate_freight_options(
     return options
 
 
-def save_quote(destination_cep: str, weight_grams: int, option: FreightOption) -> ShippingQuote:
+def save_quote(
+    destination_cep: str,
+    weight_grams: int,
+    option: FreightOption,
+    origin_cep: str = "",
+) -> ShippingQuote | None:
+    # ShippingQuote.service tem max_length=10 (legado Correios); ids ME podem passar.
+    if len(option.service) > 10:
+        return None
     return ShippingQuote.objects.create(
-        origin_cep=settings.CORREIOS_ORIGIN_CEP,
+        origin_cep=origin_cep or settings.CORREIOS_ORIGIN_CEP,
         destination_cep=destination_cep,
         weight_grams=weight_grams,
         service=option.service,

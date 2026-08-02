@@ -2,11 +2,18 @@
 {% block title %}Abrir minha loja — Renda &amp; Renda{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto space-y-6">
+<div class="max-w-2xl mx-auto space-y-7">
   <div class="text-center">
-    <h1 class="text-2xl font-bold">Abrir minha loja</h1>
-    <p class="text-gray-400 text-sm mt-1">Anunciar é grátis. Você define quanto quer receber; o site acrescenta {{ commission_percent }}% no preço. No pagamento, o frete também vai para você.</p>
+    <span class="eyebrow">Leva poucos minutos</span>
+    <h1 class="text-3xl sm:text-4xl font-bold mt-2">Abra sua loja</h1>
+    <p class="text-gray-400 text-sm mt-2 max-w-lg mx-auto">Escolha sua identidade pública e configure como receber. Seus dados reais ficam protegidos e não aparecem na vitrine.</p>
   </div>
+
+  <ol class="grid grid-cols-3 gap-2 text-center text-[11px]">
+    <li class="rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-2 py-3 text-emerald-300">✓ Verificação</li>
+    <li class="rounded-xl border border-brand bg-brand/10 px-2 py-3 text-white">2 · Criar loja</li>
+    <li class="rounded-xl border border-white/10 px-2 py-3 text-gray-500">3 · Anunciar</li>
+  </ol>
 
   {% if already_has_store %}
   <div class="card p-6 text-center space-y-3">
@@ -16,12 +23,6 @@
       <a href="{% url 'stores:detail' store.slug %}" class="btn-secondary">Ver minha loja</a>
       <a href="{% url 'wallet:dashboard' %}" class="btn-primary">Ir para a carteira</a>
     </div>
-  </div>
-
-  {% elif not request.user.is_age_verified %}
-  <div class="card p-6 text-center space-y-3">
-    <p class="text-gray-300">Primeiro, confirme sua verificação de idade.</p>
-    <a href="{% url 'accounts_pages:verification_page' %}" class="btn-primary w-full">Verificar idade</a>
   </div>
 
   {% elif require_seller_kyc and (not seller_kyc or seller_kyc.status != 'approved') %}
@@ -35,46 +36,52 @@
     </a>
   </div>
 
+  {% elif not request.user.is_age_verified %}
+  <div class="card p-6 text-center space-y-3">
+    <p class="text-gray-300">Primeiro, confirme sua idade e identidade.</p>
+    <p class="text-xs text-gray-500">Esta etapa protege você e impede que menores publiquem ou vendam na plataforma.</p>
+    <a href="{% url 'accounts_pages:verification_page' %}" class="btn-primary w-full">Verificar identidade</a>
+  </div>
+
   {% else %}
   <div x-data="storeOnboarding()" class="space-y-6">
-    <form x-show="step === 1" @submit.prevent="createStore()" class="space-y-4">
+    <form x-show="step === 1" @submit.prevent="createStore()" class="purchase-panel space-y-5">
+      <div>
+        <p class="font-semibold">Identidade da sua vitrine</p>
+        <p class="text-xs text-gray-500 mt-1">É isso que compradores verão. Não use seu nome civil se não quiser.</p>
+      </div>
       <div>
         <label class="input-label">Nome da loja</label>
-        <input type="text" x-model="displayName" required maxlength="80" class="input-field">
+        <input type="text" x-model="displayName" required maxlength="80" autocomplete="off" class="input-field" placeholder="Ex.: Segredo de Cetim">
       </div>
       <div>
         <label class="input-label">Endereço da loja (rendaerenda.com.br/loja/…)</label>
         <input type="text" x-model="slug" required pattern="[a-z0-9-]+" maxlength="60" placeholder="minha-loja" class="input-field">
       </div>
       <div>
-        <label class="input-label">Bio (opcional)</label>
-        <textarea x-model="bio" maxlength="500" rows="3" class="input-field"></textarea>
+        <label class="input-label">Apresentação da loja (opcional)</label>
+        <textarea x-model="bio" maxlength="500" rows="3" class="input-field" placeholder="Conte o que torna sua loja especial, seus prazos e estilo."></textarea>
+      </div>
+      <div class="border-t border-white/10 pt-5">
+        <p class="font-semibold">Envio e recebimento</p>
+        <p class="text-xs text-gray-500 mt-1">Esses dados ficam privados e são usados somente para operar suas vendas.</p>
       </div>
       <div>
-        <label class="input-label">CEP de onde você posta (somente números)</label>
+        <label class="input-label">CEP de postagem</label>
         <input type="text" x-model="originCep" required pattern="\d{8}" maxlength="8" inputmode="numeric" placeholder="01001000" class="input-field">
-        <p class="input-help">Usado para calcular o frete que o comprador paga (e que você recebe para postar).</p>
+        <p class="input-help">Usado para calcular o frete e gerar a etiqueta pré-paga. Seu endereço não aparece na loja.</p>
       </div>
       <div>
-        <label class="input-label">Sua chave Pix (para receber automaticamente)</label>
-        <input type="text" x-model="pixKey" required maxlength="140" placeholder="CPF, e-mail, celular ou chave aleatória" class="input-field">
+        <label class="input-label">CPF para receber os repasses</label>
+        <input type="text" x-model="pixKey" required maxlength="14" inputmode="numeric" placeholder="O mesmo CPF verificado no cadastro" class="input-field">
+        <p class="input-help">Por segurança, o Pix só pode ser enviado ao CPF da titular verificada.</p>
       </div>
-      <div>
-        <label class="input-label">Tipo da chave</label>
-        <select x-model="pixKeyType" class="input-field">
-          <option value="CPF">CPF</option>
-          <option value="EMAIL">E-mail</option>
-          <option value="PHONE">Telefone</option>
-          <option value="EVP">Chave aleatória</option>
-          <option value="CNPJ">CNPJ</option>
-        </select>
-      </div>
-      <div class="card px-4 py-3 text-sm text-gray-400">
-        Quando o comprador pagar, o Asaas faz o split: <strong class="text-gray-200">você recebe o valor do item + frete</strong>; a plataforma fica com {{ commission_percent }}%. O Pix cai na chave cadastrada aqui.
+      <div class="rounded-xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-gray-400">
+        Você recebe <strong class="text-gray-200">o valor líquido definido no anúncio + taxa de embalagem</strong>. A plataforma compra a etiqueta usando o frete pago pelo comprador.
       </div>
       <p x-show="error" x-text="error" class="input-error"></p>
       <button type="submit" class="btn-primary w-full" :disabled="loading">
-        <span x-show="!loading">Criar loja</span>
+        <span x-show="!loading">Criar loja e continuar</span>
         <span x-show="loading">Enviando…</span>
       </button>
       <p class="input-help text-center">Sua loja entra em fila de moderação e fica visível após aprovação.</p>

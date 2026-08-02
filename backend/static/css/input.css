@@ -71,6 +71,10 @@
   }
   body {
     @apply bg-surface text-gray-100 antialiased;
+    background-image:
+      radial-gradient(circle at 8% 2%, rgba(138, 63, 168, 0.08), transparent 24rem),
+      radial-gradient(circle at 92% 18%, rgba(192, 24, 68, 0.055), transparent 28rem);
+    background-attachment: fixed;
   }
   ::selection {
     @apply bg-brand/40 text-white;
@@ -95,13 +99,14 @@
 
 @layer components {
   .container-page {
-    @apply max-w-6xl mx-auto w-full px-4 sm:px-6;
+    @apply max-w-[78rem] mx-auto w-full px-4 sm:px-6 lg:px-8;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark
+    @apply inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-light
       text-white font-semibold text-sm rounded-xl px-5 py-3 min-h-[44px]
-      transition shadow-glow disabled:opacity-50 disabled:pointer-events-none;
+      transition duration-200 shadow-glow disabled:opacity-50 disabled:pointer-events-none
+      active:translate-y-px;
   }
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10
@@ -118,10 +123,10 @@
   }
 
   .card {
-    @apply bg-surface-card border border-surface-border rounded-2xl overflow-hidden;
+    @apply bg-surface-card/95 border border-white/[0.08] rounded-2xl overflow-hidden;
   }
   .card-hover {
-    @apply hover:border-brand/60 hover:shadow-glow transition;
+    @apply hover:border-brand/50 hover:shadow-float hover:-translate-y-0.5 transition duration-300;
   }
 
   .input-field {
@@ -165,7 +170,15 @@
   }
 
   .nav-link {
-    @apply text-sm font-medium text-gray-300 hover:text-white transition;
+    @apply relative text-sm font-medium text-gray-300 hover:text-white transition min-h-[44px]
+      inline-flex items-center;
+  }
+  .nav-link::after {
+    content: "";
+    @apply absolute left-0 right-full bottom-1 h-px bg-brand-light transition-all duration-300;
+  }
+  .nav-link:hover::after {
+    @apply right-0;
   }
 
   .lock-overlay {
@@ -267,6 +280,165 @@
       text-center px-3 transition hover:border-brand/60 hover:shadow-glow;
   }
 
+  /* Navegação de intenção: deixa Comprar e Vender inequívocos no mobile. */
+  .intent-switch {
+    @apply inline-flex items-center rounded-full border border-white/10 bg-black/20 p-1;
+  }
+  .intent-switch__item {
+    @apply min-h-[38px] px-4 rounded-full text-xs font-semibold text-gray-400
+      inline-flex items-center justify-center transition;
+  }
+  .intent-switch__item--active {
+    @apply bg-white text-surface shadow-lift;
+  }
+
+  .mobile-dock {
+    @apply fixed inset-x-3 bottom-3 z-40 md:hidden rounded-2xl border border-white/10
+      bg-surface-card/95 backdrop-blur-xl shadow-float px-2 py-1.5 grid grid-cols-5;
+  }
+  .mobile-dock__item {
+    @apply min-h-[50px] flex flex-col items-center justify-center gap-0.5 text-[10px]
+      font-medium text-gray-400 rounded-xl transition;
+  }
+  .mobile-dock__item:hover,
+  .mobile-dock__item:focus-visible {
+    @apply text-white bg-white/5;
+  }
+  .mobile-dock__item--sell {
+    @apply text-white bg-gradient-brand -translate-y-2 shadow-glow;
+  }
+
+  /* Hero editorial + objeto vetorial em profundidade. */
+  .hero-shell {
+    @apply relative overflow-hidden rounded-[1.75rem] sm:rounded-[2.25rem] border border-white/10
+      bg-gradient-hero shadow-float;
+  }
+  .hero-grid {
+    @apply relative z-10 grid lg:grid-cols-[minmax(0,1.12fr)_minmax(19rem,.88fr)]
+      gap-8 items-center px-5 py-9 sm:px-10 sm:py-14 lg:px-14 lg:py-16;
+  }
+  .hero-orbit {
+    @apply relative hidden lg:grid place-items-center min-h-[25rem];
+    perspective: 900px;
+  }
+  .hero-orbit__core {
+    @apply relative w-56 h-56 rounded-full;
+    transform-style: preserve-3d;
+    animation: orbit-core 12s ease-in-out infinite;
+  }
+  .hero-orbit__ring {
+    @apply absolute inset-0 rounded-full border;
+    transform-style: preserve-3d;
+  }
+  .hero-orbit__ring--one {
+    border-color: rgba(244, 211, 220, 0.44);
+    transform: rotateX(68deg) rotateZ(8deg);
+  }
+  .hero-orbit__ring--two {
+    border-color: rgba(138, 63, 168, 0.58);
+    transform: rotateY(64deg) rotateZ(-18deg) scale(1.24);
+  }
+  .hero-orbit__ring--three {
+    border-color: rgba(224, 41, 92, 0.4);
+    transform: rotateX(34deg) rotateY(52deg) scale(0.78);
+  }
+  .hero-orbit__gem {
+    @apply absolute inset-[3.2rem] rounded-[2.8rem] bg-gradient-brand;
+    transform: translateZ(46px) rotate(18deg);
+    box-shadow: inset 14px 16px 30px rgba(255,255,255,.14), 0 35px 65px rgba(192,24,68,.28);
+  }
+  .hero-orbit__gem::after {
+    content: "";
+    @apply absolute inset-5 rounded-[2rem] border border-white/25;
+  }
+  @keyframes orbit-core {
+    0%, 100% { transform: rotateX(7deg) rotateY(-12deg) translateY(0); }
+    50% { transform: rotateX(-8deg) rotateY(15deg) translateY(-10px); }
+  }
+
+  .quick-category {
+    @apply relative min-w-[8.5rem] sm:min-w-0 min-h-[7.5rem] p-4 rounded-2xl border
+      border-white/[0.08] bg-surface-card overflow-hidden transition duration-300
+      hover:border-brand/45 hover:-translate-y-0.5 hover:shadow-glow;
+  }
+  .quick-category__icon {
+    @apply w-10 h-10 rounded-xl grid place-items-center text-accent-blush mb-5;
+    background: linear-gradient(145deg, rgba(138,63,168,.28), rgba(192,24,68,.18));
+    transform: rotate(-5deg);
+    box-shadow: inset 0 1px rgba(255,255,255,.14);
+  }
+
+  .trust-strip {
+    @apply grid sm:grid-cols-3 rounded-2xl border border-emerald-300/10 bg-emerald-400/[0.035]
+      divide-y sm:divide-y-0 sm:divide-x divide-white/[0.07];
+  }
+  .trust-strip__item {
+    @apply flex items-center gap-3 px-4 py-3.5 text-xs text-gray-400;
+  }
+  .trust-strip > li,
+  .trust-strip > span {
+    @apply px-4 py-3.5 items-center text-xs text-gray-400;
+  }
+
+  .product-card {
+    @apply relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08]
+      bg-surface-card transition duration-300 hover:border-brand/45 hover:shadow-float;
+  }
+  .product-card__media {
+    @apply relative aspect-[4/5] overflow-hidden bg-surface-alt;
+  }
+  .product-card__media::after {
+    content: "";
+    @apply absolute inset-x-0 bottom-0 h-20 pointer-events-none;
+    background: linear-gradient(transparent, rgba(11,7,9,.5));
+  }
+  .product-card__quick {
+    @apply absolute inset-x-2 bottom-2 z-10 min-h-[42px] rounded-xl bg-white text-surface
+      text-xs font-bold flex items-center justify-center transition duration-300
+      translate-y-14 opacity-0 group-hover:translate-y-0 group-hover:opacity-100;
+  }
+  @media (hover: none) {
+    .product-card__quick {
+      @apply translate-y-0 opacity-100 bg-surface/90 text-white border border-white/15 backdrop-blur;
+    }
+  }
+  .product-card__body {
+    @apply p-3.5 flex flex-col gap-2 flex-1;
+  }
+  .product-card__store {
+    @apply flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-accent-blush truncate;
+  }
+
+  .filter-bar {
+    @apply sticky top-[7.3rem] sm:top-[4.6rem] z-30 -mx-4 px-4 py-3
+      bg-surface/90 backdrop-blur-xl border-y border-white/[0.06]
+      flex items-center gap-2 overflow-x-auto;
+    scrollbar-width: none;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .filter-pill {
+    @apply shrink-0 min-h-[42px] px-4 rounded-full border border-white/10 bg-surface-card
+      text-xs font-semibold text-gray-300 inline-flex items-center gap-2 transition
+      hover:border-brand/50 hover:text-white;
+  }
+  .filter-pill--active {
+    @apply border-brand bg-brand/15 text-white;
+  }
+
+  .purchase-panel {
+    @apply rounded-3xl border border-white/10 bg-surface-card p-5 sm:p-6 shadow-float;
+  }
+  .mobile-buybar {
+    @apply fixed md:hidden inset-x-0 bottom-0 z-50 border-t border-white/10
+      bg-surface-card/95 backdrop-blur-xl px-4 py-3 flex items-center gap-3;
+  }
+  .seller-step {
+    @apply relative rounded-2xl border border-white/[0.08] bg-surface-card p-5 overflow-hidden;
+  }
+  .seller-step__number {
+    @apply absolute right-3 top-0 font-display text-6xl leading-none text-white/[0.035] font-bold;
+  }
+
   /* Cartao de garantia (custodia, embalagem neutra, etc.). */
   .trust-card {
     @apply card p-5 space-y-2 bg-surface-card/80;
@@ -339,6 +511,17 @@
     }
     .logo3d__layer--front {
       filter: none;
+    }
+    .hero-orbit__core {
+      animation: none;
+    }
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
     }
   }
 

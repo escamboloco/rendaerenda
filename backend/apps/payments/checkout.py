@@ -135,8 +135,8 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
         ]
     chosen = next((o for o in options if o.service == preferred_service), options[0])
 
-    # Embalagem neutra entra no frete: a vendedora recebe esse valor junto
-    # com o envio e consegue comprar a caixa sem tirar do bolso.
+    # Embalagem neutra embutida no frete: com etiqueta pela plataforma,
+    # só essa parcela vai para a vendedora; o restante compra a etiqueta.
     from apps.shipping.packaging import neutral_box_for
 
     box = neutral_box_for(
@@ -145,16 +145,15 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
         width_cm=max(p.width_cm for p in products),
         height_cm=sum(p.height_cm * quantities.get(str(p.id), 1) for p in products),
     )
-    extra = box.price + Decimal(str(getattr(settings, "PACKAGING_FEE", 0) or 0))
-    if extra:
-        chosen = FreightOption(
-            service=chosen.service,
-            label=f"{chosen.label} + {box.label.lower()}",
-            price=float(Decimal(str(chosen.price)) + extra),
-            deadline_days=chosen.deadline_days,
-            company=chosen.company,
-        )
-    return chosen
+    packaging = box.price + Decimal(str(getattr(settings, "PACKAGING_FEE", 0) or 0))
+    return FreightOption(
+        service=chosen.service,
+        label=f"{chosen.label} + {box.label.lower()}" if packaging else chosen.label,
+        price=float(Decimal(str(chosen.price)) + packaging),
+        deadline_days=chosen.deadline_days,
+        company=chosen.company,
+        packaging_amount=float(packaging),
+    )
 
 
 # --------------------------------------------------------------------------
@@ -173,6 +172,7 @@ def reserve_order(
     shipping_address: dict,
     shipping_service: str = "pac",
     shipping_total: Decimal = ZERO,
+    packaging_fee: Decimal = ZERO,
     shipping_deadline_days: int = 7,
 ) -> Order:
     """
@@ -235,6 +235,7 @@ def reserve_order(
         # Pedido só de conteúdo digital: sem endereço, sem frete, sem envio.
         shipping_address = {}
         shipping_total = ZERO
+        packaging_fee = ZERO
 
     order = Order.objects.create(
         buyer=buyer,
@@ -246,7 +247,7 @@ def reserve_order(
         store=store,
         items_total=items_total,
         shipping_total=shipping_total,
-        packaging_fee=ZERO,
+        packaging_fee=packaging_fee,
         shipping_address=shipping_address,
         expires_at=timezone.now() + timedelta(minutes=order_ttl_minutes()),
     )
@@ -453,8 +454,23 @@ def confirm_paid_order(payment: Payment, webhook_payload: dict | None = None) ->
     except Exception:
         logger.exception("Falha ao atualizar contadores de venda do pedido %s", order.id)
 
+    _enqueue_shipping_label(order)
     _dispatch_paid_notifications(order)
     return True
+
+
+def _enqueue_shipping_label(order: Order) -> None:
+    """Compra a etiqueta Melhor Envio quando a plataforma fica com o frete."""
+    from apps.shipping.services import platform_buys_shipping_label
+
+    if not order.requires_shipping or not platform_buys_shipping_label():
+        return
+    try:
+        from apps.shipping.tasks import buy_label_for_order
+
+        buy_label_for_order.delay(str(order.id))
+    except Exception:
+        logger.exception("Falha ao enfileirar etiqueta do pedido %s", order.id)
 
 
 def _dispatch_paid_notifications(order: Order) -> None:

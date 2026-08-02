@@ -1,12 +1,9 @@
 """
 Custo da embalagem neutra, embutido no frete cobrado do comprador.
 
-Por que existe: a vendedora precisa comprar uma caixa/envelope sem
-identificação para postar. Se esse custo não entra no frete, ela paga do
-próprio bolso e a "embalagem discreta" vira prejuízo dela.
-
-O valor entra no frete, é repassado junto com ele assim que o pagamento
-confirma, e por isso ela consegue postar sem tirar dinheiro do bolso.
+A vendedora precisa de caixa/envelope sem identificação. Esse valor entra
+no frete do checkout e é creditado a ela na confirmação do pagamento —
+a parcela da transportadora fica com a plataforma para comprar a etiqueta.
 
 ATENÇÃO AOS PREÇOS: a tabela abaixo é um ponto de partida, NÃO uma
 cotação oficial dos Correios. Preço de caixa/envelope muda por região,

@@ -46,6 +46,12 @@ class FreightQuoteView(APIView):
         origin_cep = products[0].store.origin_cep
         declared_value = sum(p.price for p in products)
 
+        from .packaging import neutral_box_for
+
+        length = max((p.length_cm for p in products), default=16)
+        width = max((p.width_cm for p in products), default=11)
+        height = sum(p.height_cm for p in products)
+
         if products_are_payment_test(products):
             options = [test_free_freight_option()]
             packaging = 0.0
@@ -53,22 +59,28 @@ class FreightQuoteView(APIView):
             options = calculate_freight_options(
                 destination_cep=destination_cep,
                 weight_grams=total_weight,
-                length_cm=max((p.length_cm for p in products), default=16),
-                width_cm=max((p.width_cm for p in products), default=11),
-                height_cm=sum(p.height_cm for p in products),
+                length_cm=length,
+                width_cm=width,
+                height_cm=height,
                 origin_cep=origin_cep,
                 declared_value=declared_value,
             )
-            packaging = float(settings.PACKAGING_FEE)
+            box = neutral_box_for(
+                weight_grams=total_weight,
+                length_cm=length,
+                width_cm=width,
+                height_cm=height,
+            )
+            packaging = float(box.price + settings.PACKAGING_FEE)
         for option in options:
-            save_quote(destination_cep, total_weight, option)
+            save_quote(destination_cep, total_weight, option, origin_cep=origin_cep or "")
 
         return Response(
             FreightOptionSerializer(
                 [
                     {
                         "service": o.service,
-                        "label": o.label,
+                        "label": f"{o.label} + embalagem neutra" if packaging else o.label,
                         "price": round(o.price + packaging, 2),
                         "deadline_days": o.deadline_days,
                         "company": o.company,

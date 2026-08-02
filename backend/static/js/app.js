@@ -115,6 +115,7 @@ document.addEventListener("alpine:init", () => {
     summary: null,
     loading: false,
     error: "",
+    notice: "",
     justAdded: "",
 
     init() {
@@ -243,6 +244,7 @@ document.addEventListener("alpine:init", () => {
       }
       this.loading = true;
       this.error = "";
+      this.notice = "";
       try {
         const { ok, data } = await postJSON("/api/sacola/", { items: this.items });
         if (!ok) {
@@ -255,6 +257,11 @@ document.addEventListener("alpine:init", () => {
           const gone = new Set(data.unavailable.map((item) => item.id));
           this.items = this.items.filter((item) => !gone.has(item.id));
           this.persist();
+          this.notice =
+            data.unavailable.length === 1
+              ? "Um item saiu do ar e foi removido da sacola."
+              : `${data.unavailable.length} itens saíram do ar e foram removidos da sacola.`;
+          if (!this.items.length) this.summary = null;
         }
         // Alinha as quantidades ao estoque real devolvido pelo servidor.
         (data.items || []).forEach((serverItem) => {

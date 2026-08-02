@@ -11,15 +11,15 @@
   <span class="text-gray-400">Anúncios</span>
 </nav>
 
-<div class="flex flex-wrap items-end justify-between gap-3 mb-6">
+<div class="flex flex-wrap items-end justify-between gap-3 mb-2">
   <div>
-    <h1 class="text-2xl font-extrabold tracking-tight">Anúncios do marketplace</h1>
+    <span class="eyebrow">Descobrir</span>
+    <h1 class="text-3xl sm:text-4xl font-bold mt-1">{% if query %}Resultados para “{{ query }}”{% else %}Encontre algo só seu{% endif %}</h1>
     <p class="text-sm text-gray-500 mt-1">
-      {% if query %}<span class="text-gray-300">{{ total_count }}</span> resultado{{ total_count|pluralize }} para “{{ query }}”
-      {% else %}<span class="text-gray-300">{{ total_count }}</span> anúncio{{ total_count|pluralize }} com pagamento protegido{% endif %}
+      <span class="text-gray-300">{{ total_count }}</span> resultado{{ total_count|pluralize }} · compra protegida e discreta
     </p>
   </div>
-  <form method="get" class="flex items-center gap-2">
+  <form method="get" class="hidden lg:flex items-center gap-2">
     {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
     {% if active_category %}<input type="hidden" name="categoria" value="{{ active_category }}">{% endif %}
     {% if active_kind %}<input type="hidden" name="tipo" value="{{ active_kind }}">{% endif %}
@@ -32,10 +32,33 @@
   </form>
 </div>
 
+<div class="filter-bar lg:hidden">
+  <a href="{% url 'stores:listing' %}{% if query %}?q={{ query|urlencode }}{% endif %}"
+     class="filter-pill {% if not active_kind and not active_category %}filter-pill--active{% endif %}">Todos</a>
+  {% for key, kind in kind_filters.items %}
+  <a href="?tipo={{ key }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if active_category %}&categoria={{ active_category }}{% endif %}"
+     class="filter-pill {% if active_kind == key %}filter-pill--active{% endif %}">{{ kind.1 }}</a>
+  {% endfor %}
+  {% for category in categories %}
+  <a href="?categoria={{ category.slug }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if active_kind %}&tipo={{ active_kind }}{% endif %}"
+     class="filter-pill {% if active_category == category.slug %}filter-pill--active{% endif %}">{{ category.name }}</a>
+  {% endfor %}
+  <form method="get" class="shrink-0">
+    {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+    {% if active_category %}<input type="hidden" name="categoria" value="{{ active_category }}">{% endif %}
+    {% if active_kind %}<input type="hidden" name="tipo" value="{{ active_kind }}">{% endif %}
+    <select name="ordem" onchange="this.form.submit()" class="filter-pill appearance-none">
+      {% for key, option in sort_options.items %}
+      <option value="{{ key }}" {% if active_sort == key %}selected{% endif %}>{{ option.1 }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
 <div class="grid lg:grid-cols-[15rem_minmax(0,1fr)] gap-6 items-start">
 
   {# ------------------------------------------------------------- filtros #}
-  <aside class="card p-5 space-y-5 lg:sticky lg:top-24">
+  <aside class="hidden lg:block card p-5 space-y-5 lg:sticky lg:top-24">
     <div>
       <p class="input-label">Tipo de anúncio</p>
       <ul class="space-y-1.5 text-sm">
@@ -79,12 +102,14 @@
 
   {# -------------------------------------------------------------- grade #}
   <div>
-    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mt-5 lg:mt-0">
       {% for product in products %}
         {% include "catalog/_product_card.html" with product=product show_store=True %}
       {% empty %}
       <div class="col-span-full card p-10 text-center space-y-3">
-        <p class="text-gray-400">Nenhum anúncio com esses filtros.</p>
+        <div class="w-14 h-14 mx-auto rounded-2xl bg-white/5 grid place-items-center text-2xl">⌕</div>
+        <p class="text-gray-200 font-semibold">Nada por aqui ainda</p>
+        <p class="text-gray-500 text-sm">Tente outra categoria ou remova um filtro.</p>
         <a href="{% url 'stores:listing' %}" class="btn-secondary text-sm">Limpar filtros</a>
       </div>
       {% endfor %}

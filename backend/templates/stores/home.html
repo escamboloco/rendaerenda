@@ -30,70 +30,101 @@
 {% url 'stores:listing' as listing_url %}
 
 {# ============================================================== hero ==== #}
-<section class="relative -mx-4 sm:-mx-6 px-4 sm:px-6 pt-6 pb-12 mb-10 overflow-hidden">
-  <div class="absolute inset-0 bg-gradient-noir pointer-events-none"></div>
-
-  <div class="relative max-w-3xl mx-auto text-center space-y-5 animate-fade-up">
-    <span class="eyebrow">Marketplace +18 · pagamento em custódia</span>
-
-    <h1 class="text-4xl sm:text-6xl font-bold leading-[1.02]">
-      O íntimo dela,<br class="hidden sm:block">
-      entregue com <em class="text-gradient-brand not-italic">discrição</em>
-    </h1>
-
-    <p class="text-gray-400 max-w-xl mx-auto text-[15px] leading-relaxed">
-      Peças usadas e conteúdo digital direto de quem produz. Você paga por Pix, a plataforma
-      segura o valor e a vendedora só recebe quando você confirma que chegou.
-    </p>
-
-    {# Busca no hero: é o primeiro gesto de quem chega num marketplace. #}
-    <form action="{% url 'stores:listing' %}" method="get" class="max-w-xl mx-auto">
-      <div class="relative">
-        <input type="search" name="q" placeholder="calcinha, meia, pack de fotos, sob encomenda…"
-               class="input-field !py-4 pl-11 pr-28 text-[15px]" aria-label="Buscar anúncios">
-        <svg class="w-4 h-4 text-gray-500 absolute left-4 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M11 19a8 8 0 100-16 8 8 0 000 16z"/>
-        </svg>
-        <button type="submit" class="btn-primary absolute right-1.5 top-1/2 -translate-y-1/2 !py-2 !px-4 !min-h-0 text-xs">
-          Buscar
-        </button>
+<section class="hero-shell mb-8 sm:mb-12 animate-fade-up">
+  <div class="hero-grid">
+    <div class="space-y-6">
+      <span class="eyebrow inline-flex items-center gap-2">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.8)]"></span>
+        Marketplace privado para adultos
+      </span>
+      <div class="space-y-4">
+        <h1 class="text-[2.65rem] sm:text-6xl lg:text-7xl font-bold leading-[.94] max-w-3xl">
+          Desejo com <em class="text-gradient-brand not-italic">privacidade.</em><br>
+          Compra sem medo.
+        </h1>
+        <p class="text-gray-400 max-w-xl text-sm sm:text-base leading-relaxed">
+          Descubra peças únicas e packs de vendedoras verificadas. Pague com proteção,
+          receba em embalagem neutra e acompanhe tudo sem exposição.
+        </p>
       </div>
-    </form>
 
-    <div class="flex flex-wrap justify-center gap-2 text-[11px]">
-      <span class="badge-verified">dinheiro retido até a entrega</span>
-      <span class="badge-neutral">identidade da vendedora conferida</span>
-      <span class="badge-neutral">embalagem sem identificação</span>
-      <span class="badge-neutral">nome discreto no extrato</span>
+      <form action="{% url 'stores:listing' %}" method="get" class="max-w-xl">
+        <div class="relative rounded-2xl bg-white p-1.5 shadow-float">
+          <input type="search" name="q" placeholder="Ex.: renda preta, meia 7/8, pack..."
+                 class="w-full h-12 bg-transparent pl-11 pr-28 text-surface placeholder-gray-500 outline-none text-sm"
+                 aria-label="Buscar anúncios">
+          <svg class="w-5 h-5 text-gray-500 absolute left-4 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+          </svg>
+          <button type="submit" class="btn-primary absolute right-1.5 top-1.5 bottom-1.5 !min-h-0 !py-2 !px-5">Buscar</button>
+        </div>
+      </form>
+
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+        <a href="{% url 'stores:listing' %}" class="btn-primary">Explorar anúncios</a>
+        <a href="{% url 'stores:sell' %}" class="btn-ghost justify-start">Quero vender <span aria-hidden="true">→</span></a>
+      </div>
+    </div>
+
+    <div class="hero-orbit" aria-hidden="true">
+      <div class="hero-orbit__core">
+        <span class="hero-orbit__ring hero-orbit__ring--one"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--two"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--three"></span>
+        <span class="hero-orbit__gem"></span>
+      </div>
+      <span class="absolute left-5 top-16 badge-verified shadow-lift">identidade verificada</span>
+      <span class="absolute right-0 bottom-16 badge-neutral shadow-lift">embalagem neutra</span>
     </div>
   </div>
 </section>
 
-{# ====================================================== destaques ==== #}
-{% if products %}
-{% include "catalog/_carousel.html" with items=products|slice:":10" title="Em destaque agora" subtitle="O que a vitrine está mostrando primeiro" link=listing_url link_label="ver todos" show_store=True %}
-{% endif %}
+<div class="trust-strip mb-10 sm:mb-14">
+  <div class="trust-strip__item">
+    <span class="w-8 h-8 rounded-full bg-emerald-400/10 text-emerald-400 grid place-items-center shrink-0">✓</span>
+    <span><strong class="text-gray-200 block">Compra protegida</strong>dinheiro retido até a confirmação</span>
+  </div>
+  <div class="trust-strip__item">
+    <span class="w-8 h-8 rounded-full bg-accent-orchid/15 text-accent-blush grid place-items-center shrink-0">◎</span>
+    <span><strong class="text-gray-200 block">Privacidade real</strong>extrato e embalagem discretos</span>
+  </div>
+  <div class="trust-strip__item">
+    <span class="w-8 h-8 rounded-full bg-accent-gold/10 text-accent-gold grid place-items-center shrink-0">★</span>
+    <span><strong class="text-gray-200 block">Vendedoras verificadas</strong>documento e moderação prévia</span>
+  </div>
+</div>
 
 {# ====================================================== categorias ==== #}
 {% if home_categories %}
 <section class="section">
   <div class="rail-head">
     <div>
-      <h2 class="section-title">Comprar por categoria</h2>
-      <p class="section-sub">Escolha o tipo de peça e veja o que está disponível agora</p>
+      <span class="eyebrow">Comece por aqui</span>
+      <h2 class="section-title mt-2">O que você procura?</h2>
+      <p class="section-sub">Catálogo organizado por intenção — sem precisar adivinhar filtros.</p>
     </div>
     <a href="{% url 'stores:categories' %}" class="rail-link">todas →</a>
   </div>
-  <div class="flex flex-wrap gap-2">
+  <div class="rail sm:grid sm:grid-cols-4 lg:grid-cols-6 sm:overflow-visible sm:mx-0 sm:px-0">
     {% for cat in home_categories %}
     <a href="{% url 'stores:listing' %}?categoria={{ cat.slug }}"
-       class="px-4 py-2.5 rounded-xl border border-surface-border bg-surface-card hover:border-brand/50 transition text-sm">
-      {{ cat.name }}
-      <span class="text-gray-500 text-xs ml-1">{{ cat.active_count }}</span>
+       class="quick-category group">
+      <span class="quick-category__icon">
+        <svg class="w-6 h-6 transition group-hover:rotate-6 group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 5c2.5 2 7.5 2 10 0l2 4-3 2v8H8v-8L5 9l2-4z"/>
+        </svg>
+      </span>
+      <span class="block text-sm font-semibold text-gray-100">{{ cat.name }}</span>
+      <span class="text-[11px] text-gray-500">{{ cat.active_count }} disponíveis</span>
     </a>
     {% endfor %}
   </div>
 </section>
+{% endif %}
+
+{# ====================================================== destaques ==== #}
+{% if products %}
+{% include "catalog/_carousel.html" with items=products|slice:":10" title="Escolhas para você" subtitle="Disponíveis agora, com compra protegida" link=listing_url link_label="ver todos" show_store=True %}
 {% endif %}
 
 {% if top_sellers %}

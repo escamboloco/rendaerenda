@@ -5,37 +5,49 @@
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 
 {% block content %}
-<section class="hero-glow -mx-4 sm:-mx-6 px-4 sm:px-6 pt-4 pb-10 rounded-b-[2rem] mb-10">
-  <div class="max-w-3xl">
-    <span class="badge-neutral">Para vendedoras</span>
-    <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight leading-[1.1] mt-3">
-      Venda com <span class="text-gradient-brand">nome artístico</span><br class="hidden sm:block">
-      e receba por Pix
-    </h1>
-    <p class="text-gray-400 mt-4 max-w-xl leading-relaxed">
-      Você anuncia, a plataforma cuida do pagamento e da cobrança. Seu nome real nunca aparece para quem
-      compra — só o nome da sua loja. Sem mensalidade e sem taxa para anunciar.
-    </p>
-    <div class="flex flex-wrap gap-3 mt-6">
-      <a href="{% url 'stores:onboard_page' %}" class="btn-primary">Abrir minha loja grátis</a>
-      <a href="#passo-a-passo" class="btn-secondary">Ver como funciona</a>
+<section class="hero-shell mb-10">
+  <div class="hero-grid">
+    <div class="max-w-3xl">
+      <span class="eyebrow">Sua loja, suas regras, sua privacidade</span>
+      <h1 class="text-4xl sm:text-6xl font-bold leading-[.98] mt-3">
+        Transforme seu conteúdo em <span class="text-gradient-brand">renda.</span>
+      </h1>
+      <p class="text-gray-400 mt-5 max-w-xl leading-relaxed">
+        Crie uma vitrine com nome artístico, venda com pagamento protegido e receba por Pix.
+        A plataforma cuida da cobrança, da etiqueta e da privacidade do envio.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-3 mt-7">
+        <a href="{% url 'stores:onboard_page' %}" class="btn-primary">Começar minha loja grátis</a>
+        <a href="#passo-a-passo" class="btn-secondary">Ver o passo a passo</a>
+      </div>
+      <p class="text-[11px] text-gray-500 mt-3">Sem mensalidade · sem taxa para anunciar · verificação obrigatória +18</p>
+    </div>
+    <div class="hero-orbit" aria-hidden="true">
+      <div class="hero-orbit__core">
+        <span class="hero-orbit__ring hero-orbit__ring--one"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--two"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--three"></span>
+        <span class="hero-orbit__gem"></span>
+      </div>
+      <span class="absolute left-5 top-14 badge-verified">loja verificada</span>
+      <span class="absolute right-0 bottom-14 badge-neutral">saque por Pix</span>
     </div>
   </div>
 
-  <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-10 max-w-3xl">
-    <div class="card p-4">
+  <dl class="relative z-10 grid grid-cols-2 sm:grid-cols-4 border-t border-white/10">
+    <div class="p-5 sm:px-8">
       <dt class="text-xs text-gray-500">Custo para abrir</dt>
       <dd class="text-2xl font-extrabold">R$ 0</dd>
     </div>
-    <div class="card p-4">
+    <div class="p-5 sm:px-8 border-l border-white/10">
       <dt class="text-xs text-gray-500">Comissão por venda</dt>
       <dd class="text-2xl font-extrabold">{{ commission_percent|floatformat:"-2" }}%</dd>
     </div>
-    <div class="card p-4">
+    <div class="p-5 sm:px-8 border-t sm:border-t-0 sm:border-l border-white/10">
       <dt class="text-xs text-gray-500">Mensalidade</dt>
       <dd class="text-2xl font-extrabold">Nenhuma</dd>
     </div>
-    <div class="card p-4">
+    <div class="p-5 sm:px-8 border-t border-l sm:border-t-0 border-white/10">
       <dt class="text-xs text-gray-500">Recebimento</dt>
       <dd class="text-2xl font-extrabold">Pix</dd>
     </div>
@@ -55,39 +67,45 @@
       <span class="text-gray-400">Quem compra paga</span>
       <span class="font-bold text-brand">R$ {{ commission_percent|add:100|floatformat:"-2" }}</span>
     </div>
-    <p class="text-[11px] text-gray-500 pt-1">O frete cobrado também vai para você — quem posta é você.</p>
+    <p class="text-[11px] text-gray-500 pt-1">A taxa de embalagem vai para você; a plataforma compra a etiqueta de envio.</p>
   </div>
 </section>
 
 <section id="passo-a-passo" class="mb-14">
   <h2 class="text-xl font-bold mb-5">Do cadastro ao Pix na conta</h2>
   <ol class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-    <li class="card p-5 space-y-2">
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">01</span>
       <span class="badge-neutral">Passo 1</span>
       <p class="font-semibold text-sm">Crie a conta</p>
       <p class="text-xs text-gray-500 leading-relaxed">E-mail, CPF e data de nascimento. Grátis, sem cartão.</p>
     </li>
-    <li class="card p-5 space-y-2">
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">02</span>
       <span class="badge-neutral">Passo 2</span>
       <p class="font-semibold text-sm">Confirme quem você é</p>
       <p class="text-xs text-gray-500 leading-relaxed">Documento com foto e selfie. Exigência legal para vender conteúdo adulto — e é o que dá confiança a quem compra.</p>
     </li>
-    <li class="card p-5 space-y-2">
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">03</span>
       <span class="badge-neutral">Passo 3</span>
       <p class="font-semibold text-sm">Monte a loja</p>
       <p class="text-xs text-gray-500 leading-relaxed">Nome artístico, descrição, chave Pix e o CEP de onde você posta.</p>
     </li>
-    <li class="card p-5 space-y-2">
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">04</span>
       <span class="badge-neutral">Passo 4</span>
       <p class="font-semibold text-sm">Publique os anúncios</p>
       <p class="text-xs text-gray-500 leading-relaxed">Fotos, vídeo opcional, preço e adicionais. Passa pela moderação antes de ficar público.</p>
     </li>
-    <li class="card p-5 space-y-2">
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">05</span>
       <span class="badge-neutral">Passo 5</span>
       <p class="font-semibold text-sm">Envie ou entregue</p>
-      <p class="text-xs text-gray-500 leading-relaxed">Item físico vai pelo correio em embalagem neutra, com rastreio. Conteúdo digital é liberado pelo site.</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Imprima a etiqueta já paga, use embalagem neutra e poste. Conteúdo digital é liberado pelo site.</p>
     </li>
-    <li class="card p-5 space-y-2 border-emerald-900/40">
+    <li class="seller-step space-y-2 border-emerald-900/40">
+      <span class="seller-step__number">06</span>
       <span class="badge-verified">Passo 6</span>
       <p class="font-semibold text-sm">Receba por Pix</p>
       <p class="text-xs text-gray-500 leading-relaxed">Assim que a pessoa confirma o recebimento — ou {{ release_hours }}h depois da entrega, sem contestação — o Pix cai na sua chave.</p>

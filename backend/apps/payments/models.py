@@ -52,8 +52,14 @@ class Order(models.Model):
     items_total = models.DecimalField(max_digits=10, decimal_places=2)
     shipping_total = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
     packaging_fee = models.DecimalField(
-        max_digits=6, decimal_places=2, default=Decimal("0.00"),
-        help_text="Legado — modelo atual nao soma embalagem; frete vai inteiro pra vendedora.",
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=(
+            "Parcela da embalagem neutra embutida no frete. Com etiqueta "
+            "pela plataforma, só este valor é creditado à vendedora; o "
+            "restante do shipping_total compra a etiqueta."
+        ),
     )
 
     # Vazio ({}) em pedido só de conteúdo digital — não existe entrega física.
@@ -136,13 +142,27 @@ class Order(models.Model):
 
     @property
     def seller_amount(self) -> Decimal:
-        # Item (payout) + frete — a vendedora posta e fica com o frete.
+        """
+        O que a vendedora recebe no split/repasse:
+        - etiqueta pela plataforma: payout + embalagem neutra;
+        - modo legado: payout + frete inteiro.
+        """
+        from apps.shipping.services import platform_buys_shipping_label
+
+        if platform_buys_shipping_label():
+            return self.payout_total + (self.packaging_fee or Decimal("0.00"))
         return self.payout_total + self.shipping_total
 
     @property
     def platform_amount(self) -> Decimal:
-        # So a comissao de 30% (items_total ja e payout + markup).
-        return self.items_total - self.payout_total
+        """Comissão do item (+ frete da transportadora se a plataforma compra a etiqueta)."""
+        from apps.shipping.services import platform_buys_shipping_label
+
+        commission = self.items_total - self.payout_total
+        if platform_buys_shipping_label():
+            carrier = self.shipping_total - (self.packaging_fee or Decimal("0.00"))
+            return commission + max(carrier, Decimal("0.00"))
+        return commission
 
 
 class OrderItem(models.Model):

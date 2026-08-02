@@ -294,10 +294,23 @@ SHIPPING_FLAT_RATE = config("SHIPPING_FLAT_RATE", default=Decimal("0.00"), cast=
 ORDER_PAYMENT_TTL_MINUTES = config("ORDER_PAYMENT_TTL_MINUTES", default=60, cast=int)
 # Validade da cobranca no Asaas (dueDate). Com 0 o QR morre a meia-noite.
 PIX_DUE_DAYS = config("PIX_DUE_DAYS", default=3, cast=int)
-# Frete + embalagem neutra sao repassados a vendedora assim que o pagamento
-# confirma — e com esse dinheiro que ela compra a caixa e posta. O valor do
-# ITEM continua em custodia ate a entrega ser confirmada.
+# True (padrao): plataforma compra a etiqueta Melhor Envio com o frete do
+# comprador; vendedora so imprime e posta. False: frete inteiro vai pra ela.
+PLATFORM_BUYS_SHIPPING_LABEL = config("PLATFORM_BUYS_SHIPPING_LABEL", default=True, cast=bool)
+# Pix da EMBALAGEM NEUTRA para a vendedora na confirmacao do pagamento
+# (compra a caixa sem tirar do bolso). Com etiqueta pela plataforma, o
+# valor da transportadora NAO e repassado — fica para comprar a etiqueta.
 AUTO_PAYOUT_SHIPPING_ON_PAYMENT = config("AUTO_PAYOUT_SHIPPING_ON_PAYMENT", default=True, cast=bool)
+# Remetente discreto na etiqueta (nao usa o nome da loja / apelido).
+SHIPPING_SENDER_NAME = config("SHIPPING_SENDER_NAME", default="")
+SHIPPING_SENDER_DOCUMENT = config("SHIPPING_SENDER_DOCUMENT", default="")  # CNPJ da plataforma
+SHIPPING_SENDER_EMAIL = config("SHIPPING_SENDER_EMAIL", default="")
+SHIPPING_SENDER_PHONE = config("SHIPPING_SENDER_PHONE", default="")
+SHIPPING_SENDER_STREET = config("SHIPPING_SENDER_STREET", default="")
+SHIPPING_SENDER_NUMBER = config("SHIPPING_SENDER_NUMBER", default="")
+SHIPPING_SENDER_DISTRICT = config("SHIPPING_SENDER_DISTRICT", default="")
+SHIPPING_SENDER_CITY = config("SHIPPING_SENDER_CITY", default="")
+SHIPPING_SENDER_STATE = config("SHIPPING_SENDER_STATE", default="")
 # Precos da embalagem neutra por faixa de tamanho, em JSON. Os padroes de
 # apps/shipping/packaging.py sao REFERENCIA, nao cotacao oficial dos
 # Correios — confira antes de vender de verdade.

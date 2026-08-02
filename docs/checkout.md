@@ -24,9 +24,9 @@
 | Antes | Agora |
 |---|---|
 | Comprador precisava de conta + telefone | **Compra guest** — nome, e-mail, CPF, nascimento (+18), endereço e pagamento |
-| Plataforma comprava etiqueta e ficava com o frete | **Vendedora posta sozinha**; frete cotado no checkout e **repassado a ela** |
-| Comissão 30% + frete pra plataforma | **Só 20% pra plataforma**; vendedora recebe **item (payout) + frete** |
-| Saque manual / retido | **Pix automático** na chave cadastrada pela vendedora após confirmação do pagamento |
+| Frete repassado à vendedora | **Etiqueta pré-paga** pela plataforma (Melhor Envio); embalagem neutra creditada à vendedora |
+| Comissão 30% | **~20%** por cima do payout; transportadora fica com a plataforma para a etiqueta |
+| Saque manual / retido | **Custódia do item** + Pix da embalagem na confirmação; item libera na entrega |
 
 ### Exemplo de cálculo
 
@@ -34,12 +34,13 @@
 Vendedora quer receber:  R$ 100,00   (payout_amount)
 Comissão da plataforma:  R$  20,00   (20% por cima)
 ─────────────────────────────────
-Preço do anúncio:        R$ 130,00   (price)   ← o que o comprador vê no item
-+ Frete (ex. PAC):       R$  18,50
+Preço do anúncio:        R$ 120,00   (price)
++ Frete transportadora:  R$  18,00   ← compra a etiqueta (plataforma)
++ Embalagem neutra:      R$   4,50   ← creditada à vendedora
 ─────────────────────────────────
-Comprador paga:          R$ 148,50
-Vendedora recebe (Pix):  R$ 118,50   (100 + frete)
-Plataforma fica com:     R$  30,00
+Comprador paga:          R$ 142,50
+Vendedora recebe:        R$ 104,50   (100 + embalagem; item em custódia)
+Etiqueta:                já paga — PDF no e-mail / carteira
 ```
 
 O site **não vende nada** — só conecta comprador e vendedora (Termos de Uso).

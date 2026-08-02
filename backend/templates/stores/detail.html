@@ -61,17 +61,19 @@
 </section>
 {% endif %}
 
-<section class="mb-8">
-  <div class="card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4">
-    <div class="w-20 h-20 rounded-full bg-white/10 avatar-ring shrink-0 flex items-center justify-center text-2xl font-bold text-gray-400">
+<section class="hero-shell mb-8">
+  <div class="relative z-10 p-5 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-5">
+    <div class="relative w-20 h-20 rounded-3xl bg-gradient-brand shrink-0 flex items-center justify-center font-display text-3xl font-bold text-white shadow-glow rotate-[-3deg]">
       {{ store.display_name|slice:":1" }}
+      <span class="absolute -right-1 -bottom-1 w-6 h-6 rounded-full bg-emerald-400 text-surface border-2 border-surface grid place-items-center text-xs">✓</span>
     </div>
     <div class="flex-1 min-w-0">
-      <h1 class="text-2xl font-bold flex items-center gap-2 flex-wrap">
+      <span class="eyebrow">Vitrine verificada</span>
+      <h1 class="text-3xl sm:text-4xl font-bold flex items-center gap-2 flex-wrap mt-1">
         {{ store.display_name }}
         <span class="badge-verified">Verificada</span>
       </h1>
-      {% if store.bio %}<p class="text-gray-400 text-sm mt-1">{{ store.bio }}</p>{% endif %}
+      {% if store.bio %}<p class="text-gray-400 text-sm mt-2 max-w-2xl leading-relaxed">{{ store.bio }}</p>{% endif %}
       <div class="flex items-center gap-2 mt-2 flex-wrap">
         {% if store.review_count %}
         {% include "reviews/_stars.html" with rating=store.avg_rating %}
@@ -106,26 +108,26 @@
     </div>
   </div>
 
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-    <div class="card p-4 text-center">
+  <div class="relative z-10 grid grid-cols-2 sm:grid-cols-4 border-t border-white/10">
+    <div class="p-4 sm:p-5 text-center">
       <p class="font-display text-2xl text-white">{{ store.sales_count }}</p>
       <p class="text-[11px] text-gray-500 mt-0.5">venda{{ store.sales_count|pluralize }} concluída{{ store.sales_count|pluralize }}</p>
     </div>
-    <div class="card p-4 text-center">
+    <div class="p-4 sm:p-5 text-center border-l border-white/10">
       <p class="font-display text-2xl text-white">{% if store.review_count %}{{ store.avg_rating }}{% else %}—{% endif %}</p>
       <p class="text-[11px] text-gray-500 mt-0.5">nota média</p>
     </div>
-    <div class="card p-4 text-center">
+    <div class="p-4 sm:p-5 text-center border-t sm:border-t-0 sm:border-l border-white/10">
       <p class="font-display text-2xl text-white">{{ product_count }}</p>
       <p class="text-[11px] text-gray-500 mt-0.5">peça{{ product_count|pluralize }} à venda</p>
     </div>
-    <div class="card p-4 text-center">
+    <div class="p-4 sm:p-5 text-center border-t border-l sm:border-t-0 border-white/10">
       <p class="font-display text-2xl text-white">{{ store.created_at|date:"m/Y" }}</p>
       <p class="text-[11px] text-gray-500 mt-0.5">na plataforma desde</p>
     </div>
   </div>
 
-  <div class="card p-4 mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-400">
+  <div class="trust-strip relative z-10 !rounded-none !border-x-0 !border-b-0 sm:!grid-cols-4">
     <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> Identidade conferida por documento</span>
     <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> Pagamento retido até você confirmar</span>
     <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> {{ dispute_window_days }} dias para contestar</span>
@@ -133,7 +135,7 @@
   </div>
 
   {% if request.user.is_authenticated and request.user != store.owner %}
-  <div class="mt-4 flex flex-wrap gap-2" x-data="customRequestModal('{{ store.slug }}')">
+  <div class="relative z-10 p-4 sm:px-8 border-t border-white/10 flex flex-wrap gap-2" x-data="customRequestModal('{{ store.slug }}')">
     <button type="button" class="btn-primary w-full sm:w-auto" @click="open = true">
       Pedir uma peça sob medida
     </button>
@@ -179,7 +181,7 @@
     </template>
   </div>
   {% elif not request.user.is_authenticated %}
-  <div class="mt-4 card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+  <div class="relative z-10 p-4 sm:px-8 border-t border-white/10 flex flex-col sm:flex-row sm:items-center gap-3">
     <p class="text-sm text-gray-400 flex-1">Quer peça sob medida ou seguir esta loja? Entre com a conta — a compra avulsa continua sem cadastro.</p>
     <a href="{% url 'account_login' %}?next={{ request.path }}" class="btn-secondary shrink-0">Entrar</a>
   </div>
@@ -188,12 +190,13 @@
 
 <div class="flex items-end justify-between gap-3 mb-4">
   <div>
-    <h2 class="text-lg font-bold">Peças à venda</h2>
+    <span class="eyebrow">Disponíveis agora</span>
+    <h2 class="text-2xl sm:text-3xl font-bold mt-1">Escolha sua peça</h2>
     <p class="text-sm text-gray-500">Junte quantas quiser desta loja — tudo vai num pedido só.</p>
   </div>
 </div>
 
-<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
   {% for product in products %}
     {% include "catalog/_product_card.html" with product=product show_store=False %}
   {% empty %}

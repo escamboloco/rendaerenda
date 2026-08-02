@@ -64,7 +64,8 @@ class StorefrontTests(ApiTestCase):
         response = self.client.get(
             reverse("catalog:detail", args=[self.store.slug, self.product.slug])
         )
-        self.assertContains(response, "Comprar agora com Pix")
+        self.assertContains(response, "Comprar agora")
+        self.assertContains(response, "via Pix ou cartão")
 
     def test_checkout_page_is_reachable(self):
         self.assertEqual(self.client.get(reverse("payments_pages:checkout_page")).status_code, 200)

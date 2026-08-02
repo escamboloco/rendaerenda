@@ -37,6 +37,8 @@ module.exports = {
           // Champanhe — reputação, verificação, destaque pago.
           gold: "#d9b26b",
           blush: "#f4d3dc",
+          pearl: "#fff8f5",
+          mint: "#72e0ba",
         },
       },
       fontFamily: {
@@ -53,14 +55,17 @@ module.exports = {
         "2xl": "1.25rem",
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(192,24,68,0.35), 0 14px 34px -12px rgba(138,63,168,0.55)",
+        glow: "0 0 0 1px rgba(192,24,68,0.28), 0 18px 48px -18px rgba(138,63,168,0.65)",
         "glow-orchid": "0 12px 36px -12px rgba(138,63,168,0.6)",
         lift: "0 18px 40px -20px rgba(0,0,0,0.9)",
+        float: "0 30px 80px -32px rgba(0,0,0,0.95)",
       },
       backgroundImage: {
         "gradient-brand": "linear-gradient(115deg, #8a3fa8 0%, #c01844 65%, #e0295c 100%)",
         "gradient-noir":
           "linear-gradient(180deg, rgba(138,63,168,0.16) 0%, rgba(192,24,68,0.06) 40%, transparent 75%)",
+        "gradient-hero":
+          "radial-gradient(circle at 18% 22%, rgba(138,63,168,.24), transparent 32%), radial-gradient(circle at 82% 10%, rgba(224,41,92,.18), transparent 30%), linear-gradient(145deg,#160d13 0%,#0b0709 68%)",
       },
       keyframes: {
         "fade-up": {

@@ -3,28 +3,36 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto space-y-6" x-data="productCreate({{ commission_percent|floatformat:'-2' }})">
-  <div>
-    <h1 class="text-2xl font-bold">Criar anúncio</h1>
+<div class="max-w-3xl mx-auto space-y-6" x-data="productCreate({{ commission_percent|floatformat:'-2' }})">
+  <div class="text-center">
+    <span class="eyebrow">Nova publicação</span>
+    <h1 class="text-3xl sm:text-4xl font-bold mt-2">Crie um anúncio que vende</h1>
     <p class="text-gray-400 text-sm mt-1">
-      Anunciar é grátis. Você diz quanto quer receber — a comissão entra por cima e quem paga é quem compra.
+      Conte o essencial, mostre bem o item e defina quanto quer receber.
     </p>
   </div>
+
+  <ol class="grid grid-cols-4 gap-2 text-center text-[10px] sm:text-xs">
+    <li class="rounded-xl border border-brand/40 bg-brand/10 px-1 py-3 text-white">1 · Tipo</li>
+    <li class="rounded-xl border border-white/10 px-1 py-3 text-gray-400">2 · Detalhes</li>
+    <li class="rounded-xl border border-white/10 px-1 py-3 text-gray-400">3 · Preço</li>
+    <li class="rounded-xl border border-white/10 px-1 py-3 text-gray-400">4 · Fotos</li>
+  </ol>
 
   <div x-show="done" x-cloak class="card p-6 text-center space-y-3">
     <span class="badge-pending text-sm px-3 py-1">Aguardando moderação</span>
     <p class="text-gray-400 text-sm">Anúncio enviado! Ele passa por revisão antes de aparecer na sua loja.</p>
     <div class="flex gap-3 justify-center">
       <button type="button" class="btn-secondary" @click="resetForm()">Criar outro</button>
-      <a href="{% url 'stores:detail' store.slug %}" class="btn-primary">Ver minha loja</a>
+      <a href="{% url 'catalog:seller_products' %}" class="btn-primary">Acompanhar moderação</a>
     </div>
   </div>
 
   <form x-show="!done" @submit.prevent="submit()" class="space-y-5" enctype="multipart/form-data">
 
     {# ----------------------------------------------------- tipo do anúncio #}
-    <fieldset class="card p-5 space-y-3">
-      <legend class="input-label">O que você está anunciando?</legend>
+    <fieldset class="purchase-panel space-y-3">
+      <legend class="font-semibold px-1">1. O que você está anunciando?</legend>
       <div class="grid sm:grid-cols-3 gap-2">
         <label class="rounded-xl border px-3 py-3 cursor-pointer transition"
                :class="kind === 'physical' ? 'border-brand bg-brand/10' : 'border-surface-border hover:border-brand/50'">
@@ -54,7 +62,11 @@
     </fieldset>
 
     {# --------------------------------------------------------------- básico #}
-    <div class="card p-5 space-y-4">
+    <div class="purchase-panel space-y-4">
+      <div>
+        <p class="font-semibold">2. Apresente seu anúncio</p>
+        <p class="text-xs text-gray-500 mt-1">Título direto e detalhes claros ajudam a pessoa a decidir mais rápido.</p>
+      </div>
       <div>
         <label class="input-label" for="title">Título</label>
         <input id="title" type="text" x-model="title" required maxlength="120"
@@ -80,8 +92,12 @@
     </div>
 
     {# ---------------------------------------------------- preço + comissão #}
-    <div class="card p-5 space-y-3 border-brand/40">
-      <label class="input-label" for="payout">Quanto VOCÊ quer receber (R$)</label>
+    <div class="purchase-panel space-y-3 !border-brand/40">
+      <div>
+        <p class="font-semibold">3. Defina seu ganho</p>
+        <p class="text-xs text-gray-500 mt-1">Você informa o líquido; mostramos o preço final antes de publicar.</p>
+      </div>
+      <label class="input-label" for="payout">Quanto você quer receber (R$)</label>
       <input id="payout" type="number" x-model="payout" required step="0.01" min="1"
              class="input-field text-lg font-bold">
       <div class="grid grid-cols-2 gap-3 text-sm" x-show="payoutNumber > 0" x-cloak>
@@ -102,7 +118,8 @@
     </div>
 
     {# -------------------------------------------------------- entrega física #}
-    <div class="card p-5 space-y-4" x-show="kind !== 'digital'" x-cloak>
+    <div class="purchase-panel space-y-4" x-show="kind !== 'digital'" x-cloak>
+      <p class="font-semibold">Envio e disponibilidade</p>
       <div class="grid sm:grid-cols-3 gap-3">
         <div x-show="kind === 'physical'">
           <label class="input-label" for="weight">Peso (gramas)</label>
@@ -121,7 +138,11 @@
     </div>
 
     {# ---------------------------------------------------------------- mídia #}
-    <div class="card p-5 space-y-4">
+    <div class="purchase-panel space-y-4">
+      <div>
+        <p class="font-semibold">4. Mostre o que está vendendo</p>
+        <p class="text-xs text-gray-500 mt-1">Fotos nítidas e variadas aumentam confiança. A primeira vira capa.</p>
+      </div>
       <div>
         <label class="input-label" for="images">Fotos (até 5 — a primeira é a capa)</label>
         <input id="images" type="file" accept="image/*" multiple required class="input-field"
@@ -146,7 +167,7 @@
     </div>
 
     {# ----------------------------------------------------------- adicionais #}
-    <div class="card p-5 space-y-4">
+    <div class="purchase-panel space-y-4">
       <div class="flex items-start justify-between gap-3">
         <div>
           <p class="input-label mb-0">Adicionais pagos (opcional)</p>
@@ -181,7 +202,7 @@
     </div>
 
     <p x-show="error" x-text="error" class="input-error"></p>
-    <button type="submit" class="btn-primary w-full" :disabled="loading">
+    <button type="submit" class="btn-primary w-full text-base sticky bottom-20 md:bottom-4 z-20 shadow-float" :disabled="loading">
       <span x-show="!loading">Enviar anúncio para moderação</span>
       <span x-show="loading">Enviando…</span>
     </button>

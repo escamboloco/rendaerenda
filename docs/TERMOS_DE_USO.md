@@ -95,10 +95,13 @@ ao Comprador. A Vendedora nunca recebe menos do que pediu.
 4.2. A comissão da Plataforma é de **20%** sobre o valor do item, exibida à
 Vendedora na hora de criar o anúncio, antes de publicar.
 
-4.3. **O frete é pago pelo Comprador e repassado integralmente à Vendedora**,
-junto com o valor da embalagem neutra. A Plataforma não fica com nada do
-frete. O valor é calculado no checkout, do CEP de postagem da Vendedora até o
-CEP de entrega do Comprador, e só aparece depois do endereço informado.
+4.3. **O frete é pago pelo Comprador** e cotado no checkout do CEP de
+postagem da Vendedora até o CEP do Comprador. A **parcela da transportadora**
+é usada pela Plataforma para gerar **etiqueta pré-paga** (remetente com
+identificação neutra da Plataforma, sem o nome artístico da loja). A
+**parcela da embalagem neutra** é repassada à Vendedora para ela adquirir a
+caixa discreta. A Vendedora imprime a etiqueta, embala e posta — sem pagar
+o frete no balcão.
 
 4.4. Anunciar, manter loja e comprar são **gratuitos**. Não há mensalidade.
 Destaques pagos, quando oferecidos, são opcionais e cobrados à parte.
@@ -110,9 +113,10 @@ Destaques pagos, quando oferecidos, são opcionais e cobrados à parte.
 | A Vendedora quer receber | R$ 100,00 |
 | Comissão da Plataforma (20%) | R$ 20,00 |
 | **Preço exibido ao Comprador** | **R$ 120,00** |
-| Frete + embalagem neutra | R$ 22,50 |
+| Frete (transportadora) | R$ 18,00 (vai para a etiqueta pré-paga) |
+| Embalagem neutra | R$ 4,50 (repassada à Vendedora) |
 | **Total pago pelo Comprador** | **R$ 142,50** |
-| **Total recebido pela Vendedora** | **R$ 122,50** |
+| **Total recebido pela Vendedora** | **R$ 104,50** (item + embalagem; o frete vira etiqueta) |
 
 ---
 
@@ -122,10 +126,12 @@ Destaques pagos, quando oferecidos, são opcionais e cobrados à parte.
 Banco Central. A Plataforma não armazena dados de cartão.
 
 5.2. **O valor pago não vai direto para a Vendedora.** Ele fica retido na
-Plataforma ("custódia") e é liberado em duas etapas:
+Plataforma ("custódia") e é liberado em etapas:
 
-- **Frete + embalagem:** liberados assim que o pagamento é confirmado, para
-  que a Vendedora consiga postar sem gastar do próprio bolso;
+- **Embalagem neutra:** creditada assim que o pagamento é confirmado, para
+  a Vendedora comprar a caixa discreta sem gastar do próprio bolso;
+- **Frete da transportadora:** usado pela Plataforma para emitir a etiqueta
+  pré-paga (já paga no ato da postagem);
 - **Valor do item:** liberado quando o Comprador confirma o recebimento ou,
   na ausência de resposta, após **7 dias** da entrega.
 

@@ -317,6 +317,7 @@ class CheckoutView(APIView):
                 shipping_address=address,
                 shipping_service=freight.service,
                 shipping_total=Decimal(str(freight.price)),
+                packaging_fee=Decimal(str(getattr(freight, "packaging_amount", 0) or 0)),
                 shipping_deadline_days=freight.deadline_days,
             )
         except CheckoutError as exc:

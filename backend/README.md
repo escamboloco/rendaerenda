@@ -86,7 +86,7 @@ Marketplace +18 de **itens** e **conteúdo** — nunca de serviço presencial.
 | Mensalidade | Nenhuma. Abrir loja e anunciar é grátis |
 | Tipos de anúncio | `physical` (correio), `digital` (arquivo entregue pelo site), `custom` (sob encomenda) |
 | Adicionais | `ProductAddon` — extras pagos escolhidos no anúncio, cobrados no mesmo pedido, com a mesma regra de comissão |
-| Frete | Pago por quem compra e repassado inteiro à vendedora, que posta. `CHECKOUT_FREE_SHIPPING=True` zera no lançamento |
+| Frete | Cotado CEP loja → CEP comprador. Plataforma compra etiqueta Melhor Envio (remetente neutro); embalagem neutra vai para a vendedora. `CHECKOUT_FREE_SHIPPING=True` zera no soft-launch |
 
 ## Fluxo de uma compra
 

@@ -64,16 +64,17 @@ class DisputeResolutionTests(ApiTestCase):
         """
         Reembolso tira da vendedora o que o comprador recebeu de volta.
 
-        O saldo fica NEGATIVO no valor do frete de propósito: esse Pix já
-        saiu na confirmação do pagamento, então virou dívida dela com a
-        plataforma. É o sinal para a conciliação humana — zerar aqui
-        esconderia dinheiro que saiu de verdade.
+        Com etiqueta pela plataforma, só a embalagem neutra foi Pixada na
+        confirmação — o saldo fica negativo nesse valor (dívida dela).
         """
+        packaging = self.order.packaging_fee or Decimal("0.00")
+        # Embalagem já saiu via Pix na confirmação; o item ainda está creditado.
         self.assertEqual(self.balance(), self.order.payout_total)
 
         refund_order(self.order)
 
-        self.assertEqual(self.balance(), -self.order.shipping_total)
+        # Dívida = embalagem já Pixada (transportadora ficou na plataforma).
+        self.assertEqual(self.balance(), -packaging)
 
     def test_refunding_twice_does_not_double_reverse(self):
         refund_order(self.order)
@@ -133,4 +134,4 @@ class DisputeResolutionTests(ApiTestCase):
                 headers={"asaas-access-token": "tok"},
             )
 
-        self.assertEqual(self.balance(), -self.order.shipping_total)
+        self.assertEqual(self.balance(), -(self.order.packaging_fee or Decimal("0.00")))

@@ -6,6 +6,7 @@ reenvia o mesmo evento até receber 200) e o repasse à vendedora saindo
 uma única vez por pedido.
 """
 import json
+from decimal import Decimal
 from unittest import mock
 
 from django.test import override_settings
@@ -110,9 +111,9 @@ class AsaasWebhookTests(ApiTestCase):
 
     def test_credits_are_split_between_item_and_shipping(self):
         """
-        Duas parcelas: item retido em custódia, frete liberado na hora.
-        Somadas, batem com o que a vendedora tem a receber; a diferença
-        para o total pago é exatamente a comissão da plataforma.
+        Item retido em custódia; embalagem neutra liberada na hora.
+        Com etiqueta pela plataforma, o frete da transportadora fica
+        com a plataforma (não credita na carteira da vendedora).
         """
         self.send("PAYMENT_RECEIVED")
         self.order.refresh_from_db()
@@ -120,11 +121,12 @@ class AsaasWebhookTests(ApiTestCase):
         item = WalletEntry.objects.get(
             order=self.order, kind=WalletEntry.Kind.SALE_CREDIT
         ).amount
-        shipping = WalletEntry.objects.get(
-            order=self.order, kind=WalletEntry.Kind.SHIPPING_CREDIT
-        ).amount
         self.assertEqual(item, self.order.payout_total)
-        self.assertEqual(shipping, self.order.shipping_total)
+        shipping_entry = WalletEntry.objects.filter(
+            order=self.order, kind=WalletEntry.Kind.SHIPPING_CREDIT
+        ).first()
+        shipping = shipping_entry.amount if shipping_entry else Decimal("0.00")
+        self.assertEqual(shipping, self.order.packaging_fee)
         self.assertEqual(self.order.grand_total - item - shipping, self.order.platform_amount)
 
     def test_store_sales_counter_increases_once(self):

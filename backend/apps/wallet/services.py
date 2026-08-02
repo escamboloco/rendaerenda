@@ -70,20 +70,27 @@ def credit_sale(order: Order) -> tuple[WalletEntry, bool]:
 
 def credit_shipping(order: Order) -> tuple[WalletEntry | None, bool]:
     """
-    Credita frete + embalagem neutra, JÁ LIBERADO para saque.
+    Credita a parcela de envio que vai para a vendedora, já liberada.
 
-    É o dinheiro da postagem: reter isso junto com o valor do item seria
-    obrigar a vendedora a financiar o envio até a entrega confirmar.
-    Pedido só digital não tem frete e não gera crédito.
+    Com etiqueta pela plataforma: só a embalagem neutra (ela compra a
+    caixa; a transportadora é paga via Melhor Envio pela plataforma).
+    Modo legado: frete inteiro + embalagem.
+    Pedido só digital não gera crédito.
     """
-    if order.shipping_total <= 0:
+    from apps.shipping.services import platform_buys_shipping_label
+
+    if platform_buys_shipping_label():
+        amount = order.packaging_fee or Decimal("0.00")
+    else:
+        amount = order.shipping_total
+    if amount <= 0:
         return None, False
     entry, created = WalletEntry.objects.get_or_create(
         order=order,
         kind=WalletEntry.Kind.SHIPPING_CREDIT,
         defaults={
             "store": order.store,
-            "amount": order.shipping_total,
+            "amount": amount,
             "available_at": timezone.now(),
         },
     )
@@ -198,14 +205,17 @@ def credit_and_auto_payout(order: Order):
 
 def payout_shipping(order: Order) -> bool:
     """
-    Pix do frete + embalagem para a vendedora, logo apos o pagamento.
+    Pix da parcela de envio creditada à vendedora (embalagem, ou frete
+    inteiro no modo legado), logo após o pagamento.
     Idempotente por Order.shipping_payout_sent_at.
     """
-    if order.shipping_total <= 0:
+    credit = order.wallet_entries.filter(kind=WalletEntry.Kind.SHIPPING_CREDIT).first()
+    amount = credit.amount if credit else Decimal("0.00")
+    if amount <= 0:
         return False
     store = order.store
     if not store.pix_key:
-        logger.warning("Pedido %s: loja sem chave Pix — frete fica na carteira.", order.id)
+        logger.warning("Pedido %s: loja sem chave Pix — embalagem/frete fica na carteira.", order.id)
         return False
 
     with transaction.atomic():
@@ -218,12 +228,12 @@ def payout_shipping(order: Order) -> bool:
 
     try:
         request_withdrawal(
-            store, order.shipping_total, reference=f"frete-{str(order.id)[:8]}"
+            store, amount, reference=f"frete-{str(order.id)[:8]}"
         )
         return True
     except Exception:
         logger.exception(
-            "Falha no Pix do frete do pedido %s — valor segue disponivel para saque manual.",
+            "Falha no Pix do frete/embalagem do pedido %s — valor segue disponivel para saque manual.",
             order.id,
         )
         return False
