@@ -108,7 +108,7 @@
         <p class="text-4xl font-extrabold text-brand-light">R$ {{ product.price }}</p>
         <span class="text-xs text-gray-500 pb-1">via Pix ou cartão</span>
       </div>
-      <p class="text-xs text-gray-500">{% if product.requires_shipping %}Frete calculado pelo seu CEP no checkout · embalagem neutra{% else %}Sem frete · liberação após pagamento{% endif %}</p>
+      <p class="text-xs text-gray-500">{% if product.requires_shipping %}{% if store.origin_city and store.origin_state %}Envio de {{ store.origin_city }}/{{ store.origin_state }} · {% endif %}frete pelo seu CEP no checkout{% else %}Sem frete · liberação após pagamento{% endif %}</p>
     </div>
 
     {% if not product.is_available %}
@@ -210,7 +210,7 @@
             <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.2 7.7 8.9a1 1 0 10-1.4 1.4l2 2a1 1 0 001.4 0l4-4z" clip-rule="evenodd"/></svg>
           </p>
           <p class="text-xs text-gray-500">
-            {% if store.review_count %}★ {{ store.avg_rating }} · {{ store.review_count }} avaliaç{{ store.review_count|pluralize:"ão,ões" }} · {% endif %}{{ store.sales_count }} venda{{ store.sales_count|pluralize }}
+            {% if store.origin_city and store.origin_state %}{{ store.origin_city }}/{{ store.origin_state }} · {% endif %}{% if store.review_count %}★ {{ store.avg_rating }} · {{ store.review_count }} avaliaç{{ store.review_count|pluralize:"ão,ões" }} · {% endif %}{{ store.sales_count }} venda{{ store.sales_count|pluralize }}
           </p>
         </div>
         <span class="text-xs text-brand shrink-0">Ver loja</span>

@@ -609,6 +609,15 @@ function checkoutFunnel(config) {
       return this.freight ? Number(this.freight.price) : 0;
     },
 
+    get freightOriginLabel() {
+      const fromFreight = this.freight || {};
+      const fromStore = (this.summary && this.summary.store) || {};
+      const city = fromFreight.origin_city || fromStore.origin_city || "";
+      const state = fromFreight.origin_state || fromStore.origin_state || "";
+      if (city && state) return `${city}/${state}`;
+      return city || "";
+    },
+
     get orderTotal() {
       const items = this.summary ? Number(this.summary.grand_total) : 0;
       return items + this.freightPrice;
@@ -681,7 +690,7 @@ function checkoutFunnel(config) {
             quantity: item.qty,
             addon_ids: item.addons || [],
           })),
-          shipping_service: "pac",
+          shipping_service: (this.freight && this.freight.service) || "pac",
           shipping_address: this.needsShipping
             ? {
                 cep: onlyDigits(this.address.cep),

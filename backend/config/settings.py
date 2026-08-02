@@ -381,9 +381,9 @@ PLATFORM_MUNICIPAL_SERVICE_CODE = config("PLATFORM_MUNICIPAL_SERVICE_CODE", defa
 SHIPPING_PROVIDER = config("SHIPPING_PROVIDER", default="superfrete")
 SUPERFRETE_TOKEN = config("SUPERFRETE_TOKEN", default="")
 SUPERFRETE_SANDBOX = config("SUPERFRETE_SANDBOX", default=True, cast=bool)
-# Serviços: PAC, SEDEX, Mini Envios e Jadlog. Loggi é controlada nas
-# configurações do token SuperFrete; J&T exige telefone do destinatário.
-SUPERFRETE_SERVICES = config("SUPERFRETE_SERVICES", default="1,2,17,3")
+# Serviços: Mini Envios primeiro (pacote pequeno/barato), depois PAC/SEDEX/Jadlog.
+# Loggi é controlada nas configurações do token SuperFrete; J&T exige telefone.
+SUPERFRETE_SERVICES = config("SUPERFRETE_SERVICES", default="17,1,2,3")
 SUPERFRETE_USER_AGENT = config(
     "SUPERFRETE_USER_AGENT",
     default=f"{SITE_NAME}/1.0 (suporte@{SITE_DOMAIN})",

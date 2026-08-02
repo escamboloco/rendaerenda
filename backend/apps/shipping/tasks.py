@@ -74,10 +74,11 @@ def buy_label_for_order(self, order_id: str):
     if not physical_items:
         return
 
-    weight = sum(item.product.weight_grams * item.quantity for item in physical_items)
-    length = max(item.product.length_cm for item in physical_items)
-    width = max(item.product.width_cm for item in physical_items)
-    height = sum(item.product.height_cm * item.quantity for item in physical_items)
+    from .package_defaults import quote_package
+
+    products = [item.product for item in physical_items]
+    quantities = {str(item.product_id): item.quantity for item in physical_items}
+    weight, length, width, height = quote_package(products, quantities)
 
     try:
         if shipment.provider_order_id:

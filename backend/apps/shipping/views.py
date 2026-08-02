@@ -23,17 +23,16 @@ from .tasks import send_shipment_posted_email
 class FreightQuoteView(APIView):
     """
     POST usado na página de produto e no checkout: preço, prazo e
-    transportadora, cotados a partir do CEP da REMETENTE (loja). A taxa
-    de embalagem (PACKAGING_FEE) é somada em cada opção — o valor
-    exibido é exatamente o que o comprador vai pagar de envio.
+    transportadora, cotados a partir do CEP da REMETENTE (loja).
+
+    Embalagem neutra é custo da vendedora — não entra no frete do comprador.
+    Peças leves cotam como envelope pequeno (peso de calcinha média).
     """
 
     permission_classes = [AllowAny]
     throttle_scope = "freight"
 
     def post(self, request):
-        from django.conf import settings
-
         serializer = FreightQuoteRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -41,20 +40,17 @@ class FreightQuoteView(APIView):
         products = list(Product.objects.select_related("store").filter(id__in=data["product_ids"]))
         if not products:
             return Response({"detail": "Produtos não encontrados."}, status=http_status.HTTP_404_NOT_FOUND)
-        total_weight = sum(p.weight_grams for p in products)
+
+        from .package_defaults import quote_package
+
+        total_weight, length, width, height = quote_package(products)
         destination_cep = data["destination_cep"]
-        origin_cep = products[0].store.origin_cep
+        store = products[0].store
+        origin_cep = store.origin_cep
         declared_value = sum(p.price for p in products)
-
-        from .packaging import neutral_box_for
-
-        length = max((p.length_cm for p in products), default=16)
-        width = max((p.width_cm for p in products), default=11)
-        height = sum(p.height_cm for p in products)
 
         if products_are_payment_test(products):
             options = [test_free_freight_option()]
-            packaging = 0.0
         else:
             options = calculate_freight_options(
                 destination_cep=destination_cep,
@@ -65,25 +61,23 @@ class FreightQuoteView(APIView):
                 origin_cep=origin_cep,
                 declared_value=declared_value,
             )
-            box = neutral_box_for(
-                weight_grams=total_weight,
-                length_cm=length,
-                width_cm=width,
-                height_cm=height,
-            )
-            packaging = float(box.price + settings.PACKAGING_FEE)
+        options = sorted(options, key=lambda o: (float(o.price), int(o.deadline_days or 99)))
         for option in options:
             save_quote(destination_cep, total_weight, option, origin_cep=origin_cep or "")
 
+        origin_city = (store.origin_city or "").strip()
+        origin_state = (store.origin_state or "").strip().upper()
         return Response(
             FreightOptionSerializer(
                 [
                     {
                         "service": o.service,
-                        "label": f"{o.label} + embalagem neutra" if packaging else o.label,
-                        "price": round(o.price + packaging, 2),
+                        "label": o.label,
+                        "price": round(float(o.price), 2),
                         "deadline_days": o.deadline_days,
                         "company": o.company,
+                        "origin_city": origin_city,
+                        "origin_state": origin_state,
                     }
                     for o in options
                 ],

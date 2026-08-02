@@ -79,7 +79,8 @@ HOME_FAQ = [
     (
         "Como a embalagem chega?",
         "Sem logotipo, sem indicação do conteúdo e sem remetente que entregue o "
-        "assunto. O custo dessa embalagem neutra já está incluído no frete.",
+        "assunto. A embalagem neutra fica a cargo da vendedora — o frete cobre "
+        "só o envio rastreado até você.",
     ),
     (
         "E se eu comprar conteúdo digital?",

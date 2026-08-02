@@ -90,7 +90,7 @@
       <div>
         <label class="input-label">CEP de postagem</label>
         <input type="text" x-model="originCep" @blur="lookupCep()" required pattern="\d{8}" maxlength="8" inputmode="numeric" placeholder="01001000" class="input-field">
-        <p class="input-help">Usado para calcular o frete e gerar a etiqueta SuperFrete. Seu endereço não aparece na loja.</p>
+        <p class="input-help">Usado para calcular o frete e gerar a etiqueta. Na loja aparece só a cidade/UF — rua e número ficam privados.</p>
       </div>
       <div class="grid sm:grid-cols-6 gap-3">
         <div class="sm:col-span-4">
@@ -125,7 +125,7 @@
         <p class="input-help">Por segurança, o Pix só pode ser enviado ao CPF da titular verificada.</p>
       </div>
       <div class="rounded-xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-gray-400">
-        Você recebe <strong class="text-gray-200">o valor líquido definido no anúncio + taxa de embalagem</strong>. A plataforma compra a etiqueta usando o frete pago pelo comprador.
+        Você recebe <strong class="text-gray-200">o valor líquido definido no anúncio</strong>. A plataforma compra a etiqueta com o frete pago pelo comprador; a embalagem neutra fica por sua conta.
       </div>
       <p x-show="error" x-text="error" class="input-error"></p>
       <button type="submit" class="btn-primary w-full" :disabled="loading">

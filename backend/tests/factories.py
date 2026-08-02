@@ -77,7 +77,7 @@ def make_product(store=None, *, payout=Decimal("100.00"), stock=1, slug="calcinh
         slug=slug,
         description="Item de teste.",
         payout_amount=payout,
-        weight_grams=150,
+        weight_grams=80,
         stock=stock,
         status=Product.Status.PUBLISHED,
         **extra,

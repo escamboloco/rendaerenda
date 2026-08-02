@@ -96,7 +96,9 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
         return test_free_freight_option()
 
     quantities = {str(line.product_id): line.quantity for line in lines}
-    weight = sum(p.weight_grams * quantities.get(str(p.id), 1) for p in products)
+    from apps.shipping.package_defaults import cheapest_option, quote_package
+
+    weight, length_cm, width_cm, height_cm = quote_package(products, quantities)
     origin_cep = products[0].store.origin_cep
 
     if not origin_cep:
@@ -108,9 +110,9 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
         options = calculate_freight_options(
             destination_cep=destination_cep,
             weight_grams=weight,
-            length_cm=max(p.length_cm for p in products),
-            width_cm=max(p.width_cm for p in products),
-            height_cm=sum(p.height_cm * quantities.get(str(p.id), 1) for p in products),
+            length_cm=length_cm,
+            width_cm=width_cm,
+            height_cm=height_cm,
             origin_cep=origin_cep,
             declared_value=sum(p.price for p in products),
         )
@@ -133,26 +135,18 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
                 company="Correios",
             )
         ]
-    chosen = next((o for o in options if o.service == preferred_service), options[0])
-
-    # Embalagem neutra embutida no frete: com etiqueta pela plataforma,
-    # só essa parcela vai para a vendedora; o restante compra a etiqueta.
-    from apps.shipping.packaging import neutral_box_for
-
-    box = neutral_box_for(
-        weight_grams=weight,
-        length_cm=max(p.length_cm for p in products),
-        width_cm=max(p.width_cm for p in products),
-        height_cm=sum(p.height_cm * quantities.get(str(p.id), 1) for p in products),
-    )
-    packaging = box.price + Decimal(str(getattr(settings, "PACKAGING_FEE", 0) or 0))
+    # Preferência do cliente, senão a mais barata (Mini Envios / envelope).
+    chosen = next((o for o in options if o.service == preferred_service), None)
+    if chosen is None:
+        chosen = cheapest_option(options)
+    # Embalagem neutra fica a cargo da vendedora — não soma no frete.
     return FreightOption(
         service=chosen.service,
-        label=f"{chosen.label} + {box.label.lower()}" if packaging else chosen.label,
-        price=float(Decimal(str(chosen.price)) + packaging),
+        label=chosen.label,
+        price=float(chosen.price),
         deadline_days=chosen.deadline_days,
         company=chosen.company,
-        packaging_amount=float(packaging),
+        packaging_amount=0.0,
     )
 
 

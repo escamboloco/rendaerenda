@@ -255,7 +255,13 @@ class CartSummaryView(APIView):
                 "grand_total": str(items_total),
                 "requires_shipping": needs_shipping,
                 "store": (
-                    {"slug": store.slug, "name": store.display_name, "url": f"/loja/{store.slug}/"}
+                    {
+                        "slug": store.slug,
+                        "name": store.display_name,
+                        "url": f"/loja/{store.slug}/",
+                        "origin_city": store.origin_city or "",
+                        "origin_state": (store.origin_state or "").upper(),
+                    }
                     if store
                     else None
                 ),

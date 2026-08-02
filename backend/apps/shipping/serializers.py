@@ -12,6 +12,8 @@ class FreightOptionSerializer(serializers.Serializer):
     price = serializers.FloatField()
     deadline_days = serializers.IntegerField()
     company = serializers.CharField(required=False, default="Correios")
+    origin_city = serializers.CharField(required=False, allow_blank=True, default="")
+    origin_state = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class MarkPostedSerializer(serializers.Serializer):

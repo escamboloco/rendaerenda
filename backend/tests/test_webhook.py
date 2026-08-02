@@ -119,11 +119,10 @@ class AsaasWebhookTests(ApiTestCase):
             WalletEntry.objects.filter(order=self.order, kind=WalletEntry.Kind.SALE_CREDIT).count(), 1
         )
 
-    def test_credits_are_split_between_item_and_shipping(self):
+    def test_credits_item_only_when_platform_buys_label(self):
         """
-        Item retido em custódia; embalagem neutra liberada na hora.
-        Com etiqueta pela plataforma, o frete da transportadora fica
-        com a plataforma (não credita na carteira da vendedora).
+        Item retido em custódia. Embalagem é custo da vendedora (sem crédito).
+        Frete da transportadora fica com a plataforma para a etiqueta.
         """
         self.send("PAYMENT_RECEIVED")
         self.order.refresh_from_db()
@@ -132,12 +131,13 @@ class AsaasWebhookTests(ApiTestCase):
             order=self.order, kind=WalletEntry.Kind.SALE_CREDIT
         ).amount
         self.assertEqual(item, self.order.payout_total)
-        shipping_entry = WalletEntry.objects.filter(
-            order=self.order, kind=WalletEntry.Kind.SHIPPING_CREDIT
-        ).first()
-        shipping = shipping_entry.amount if shipping_entry else Decimal("0.00")
-        self.assertEqual(shipping, self.order.packaging_fee)
-        self.assertEqual(self.order.grand_total - item - shipping, self.order.platform_amount)
+        self.assertFalse(
+            WalletEntry.objects.filter(
+                order=self.order, kind=WalletEntry.Kind.SHIPPING_CREDIT
+            ).exists()
+        )
+        self.assertEqual(self.order.packaging_fee, Decimal("0.00"))
+        self.assertEqual(self.order.grand_total - item, self.order.platform_amount)
 
     def test_store_sales_counter_increases_once(self):
         self.send("PAYMENT_RECEIVED")

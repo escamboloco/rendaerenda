@@ -98,7 +98,7 @@ envVarGroups:
       - key: SUPERFRETE_SANDBOX
         value: "False"
       - key: SUPERFRETE_SERVICES
-        value: "1,2,17,3"
+        value: "17,1,2,3"
       - key: SUPERFRETE_USER_AGENT
         value: "Renda & Renda/1.0 (suporte@rendaerenda.com.br)"
       # Plataforma compra a etiqueta com o frete pago pelo comprador.

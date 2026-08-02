@@ -1,9 +1,9 @@
 """
-Custo da embalagem neutra, embutido no frete cobrado do comprador.
+Referência de custo da embalagem neutra (custo da vendedora).
 
-A vendedora precisa de caixa/envelope sem identificação. Esse valor entra
-no frete do checkout e é creditado a ela na confirmação do pagamento —
-a parcela da transportadora fica com a plataforma para comprar a etiqueta.
+A embalagem sem identificação fica por conta da vendedora — não é somada
+ao frete do comprador. Este módulo permanece para estimativas internas /
+relatórios; a cotação de frete usa só a transportadora.
 
 ATENÇÃO AOS PREÇOS: a tabela abaixo é um ponto de partida, NÃO uma
 cotação oficial dos Correios. Preço de caixa/envelope muda por região,

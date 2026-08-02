@@ -62,7 +62,7 @@ class ProductCreateSerializer(serializers.Serializer):
     weight_grams = serializers.IntegerField(min_value=0, max_value=30000, required=False, default=0)
     length_cm = serializers.IntegerField(min_value=1, max_value=100, default=16)
     width_cm = serializers.IntegerField(min_value=1, max_value=100, default=11)
-    height_cm = serializers.IntegerField(min_value=1, max_value=100, default=5)
+    height_cm = serializers.IntegerField(min_value=1, max_value=100, default=2)
     production_days = serializers.IntegerField(min_value=0, max_value=90, required=False, default=0)
     stock = serializers.IntegerField(min_value=1, max_value=1000, default=1)
     images = serializers.ListField(

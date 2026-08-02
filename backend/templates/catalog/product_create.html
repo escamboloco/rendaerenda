@@ -123,8 +123,8 @@
       <div class="grid sm:grid-cols-3 gap-3">
         <div x-show="kind === 'physical'">
           <label class="input-label" for="weight">Peso (gramas)</label>
-          <input id="weight" type="number" x-model="weight" min="10" max="30000" placeholder="200" class="input-field">
-          <p class="input-help">É o que calcula o frete.</p>
+          <input id="weight" type="number" x-model="weight" min="10" max="30000" placeholder="80" class="input-field">
+          <p class="input-help">Peso da peça (calcinha ~80g). Pacote pequeno no frete.</p>
         </div>
         <div>
           <label class="input-label" for="stock">Quantidade</label>
@@ -220,7 +220,7 @@ function productCreate(commissionPercent) {
     description: "",
     categoryId: "",
     payout: "",
-    weight: "",
+    weight: "80",
     stock: 1,
     productionDays: 0,
     addons: [],
@@ -254,7 +254,7 @@ function productCreate(commissionPercent) {
       this.description = "";
       this.categoryId = "";
       this.payout = "";
-      this.weight = "";
+      this.weight = "80";
       this.stock = 1;
       this.productionDays = 0;
       this.addons = [];

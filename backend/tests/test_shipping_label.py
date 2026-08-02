@@ -92,24 +92,23 @@ class PlatformLabelFlowTests(ApiTestCase):
         self.addCleanup(patcher.stop)
         self.product = make_product(payout=Decimal("100.00"), stock=1)
 
-    def test_checkout_stores_packaging_fee_separately(self):
+    def test_checkout_does_not_charge_packaging_to_buyer(self):
         self.client.post(
             reverse("payments:checkout"),
             checkout_payload(self.product),
             content_type="application/json",
         )
         order = Order.objects.get()
-        self.assertGreater(order.shipping_total, order.packaging_fee)
-        self.assertEqual(order.packaging_fee, Decimal("3.90") + Decimal("2.50"))  # fee + envelope
-        # Split: vendedora = payout + embalagem; plataforma = comissão + transportadora
-        self.assertEqual(order.seller_amount, order.payout_total + order.packaging_fee)
+        # Embalagem neutra é custo da vendedora — frete = só transportadora.
+        self.assertEqual(order.packaging_fee, Decimal("0.00"))
+        self.assertEqual(order.shipping_total, Decimal("18.00"))
+        self.assertEqual(order.seller_amount, order.payout_total)
         self.assertEqual(
             order.platform_amount,
-            (order.items_total - order.payout_total)
-            + (order.shipping_total - order.packaging_fee),
+            (order.items_total - order.payout_total) + order.shipping_total,
         )
 
-    def test_payment_credits_only_packaging_to_seller(self):
+    def test_payment_does_not_credit_packaging_to_seller(self):
         self.client.post(
             reverse("payments:checkout"),
             checkout_payload(self.product),
@@ -120,10 +119,11 @@ class PlatformLabelFlowTests(ApiTestCase):
         self.client.get(reverse("payments:order_status", args=[order.access_token]))
         order.refresh_from_db()
 
-        shipping = WalletEntry.objects.get(
-            order=order, kind=WalletEntry.Kind.SHIPPING_CREDIT
+        self.assertFalse(
+            WalletEntry.objects.filter(
+                order=order, kind=WalletEntry.Kind.SHIPPING_CREDIT
+            ).exists()
         )
-        self.assertEqual(shipping.amount, order.packaging_fee)
 
     @override_settings(PLATFORM_BUYS_SHIPPING_LABEL=True)
     def test_buy_label_uses_neutral_sender(self):

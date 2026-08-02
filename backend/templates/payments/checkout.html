@@ -342,7 +342,12 @@
           <span x-cloak x-show="!freightLoading && !freight" class="text-gray-600">informe o CEP</span>
         </div>
         <p x-cloak x-show="freight" class="text-[11px] text-gray-600 -mt-0.5">
-          Inclui a embalagem neutra. Calculado do CEP da vendedora até o seu.
+          <template x-if="freightOriginLabel">
+            <span>Envio de <span class="text-gray-400" x-text="freightOriginLabel"></span> até o seu CEP.</span>
+          </template>
+          <template x-if="!freightOriginLabel">
+            <span>Calculado do CEP da vendedora até o seu.</span>
+          </template>
         </p>
 
         <div class="flex justify-between items-center pt-2">
