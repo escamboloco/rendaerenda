@@ -44,9 +44,19 @@ def start_or_renew_subscription(user, plan: SubscriptionPlan, method: str) -> Ch
 
 def activate_subscription(psp_subscription_id: str) -> BuyerSubscription | None:
     try:
-        subscription = BuyerSubscription.objects.select_related("plan").get(psp_subscription_id=psp_subscription_id)
+        subscription = BuyerSubscription.objects.select_related("plan").get(
+            psp_subscription_id=psp_subscription_id
+        )
     except BuyerSubscription.DoesNotExist:
         return None
+
+    # Idempotente: webhook duplicado (RECEIVED + CONFIRMED) não estende o prazo.
+    if (
+        subscription.status == BuyerSubscription.Status.ACTIVE
+        and subscription.current_period_end
+        and subscription.current_period_end > timezone.now()
+    ):
+        return subscription
 
     days = PERIOD_DAYS[subscription.plan.period]
     subscription.status = BuyerSubscription.Status.ACTIVE

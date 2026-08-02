@@ -109,8 +109,9 @@ class FakeProvider:
     repasse não sai duas vezes para o mesmo pedido.
     """
 
-    def __init__(self, *, paid=False, payer_document=None, fail_charge=False):
+    def __init__(self, *, paid=False, payer_document=None, fail_charge=False, refunded=False):
         self.paid = paid
+        self.refunded = refunded
         self.payer_document = payer_document
         self.fail_charge = fail_charge
         self.charges = []
@@ -130,19 +131,32 @@ class FakeProvider:
             pix_copy_paste="00020126BR.GOV.BCB.PIX",
             status="RECEIVED" if self.paid else "PENDING",
             is_paid=self.paid,
+            value=kwargs.get("total_amount"),
         )
 
     def create_charge(self, **kwargs):
         return self.create_split_charge(**kwargs)
 
     def get_charge(self, provider_charge_id):
+        value = None
+        for charge in self.charges:
+            if charge.get("total_amount") is not None:
+                value = charge["total_amount"]
+                break
+        if self.refunded:
+            status, is_paid = "REFUNDED", False
+        elif self.paid:
+            status, is_paid = "RECEIVED", True
+        else:
+            status, is_paid = "PENDING", False
         return ChargeResult(
             provider_charge_id=provider_charge_id,
             payment_url="https://asaas.test/i/pay_1",
             pix_qr_code="data:image/png;base64,AAAA",
             pix_copy_paste="00020126BR.GOV.BCB.PIX",
-            status="RECEIVED" if self.paid else "PENDING",
-            is_paid=self.paid,
+            status=status,
+            is_paid=is_paid,
+            value=value,
         )
 
     def get_payer_document(self, *, provider_charge_id, webhook_payload=None):
@@ -150,6 +164,9 @@ class FakeProvider:
 
     def refund_charge(self, *, provider_charge_id):
         self.refunds.append(provider_charge_id)
+
+    def cancel_unpaid_charge(self, *, provider_charge_id):
+        self.refunds.append(f"cancel:{provider_charge_id}")
 
     def request_seller_withdrawal(self, **kwargs):
         self.withdrawals.append(kwargs)

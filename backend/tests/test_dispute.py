@@ -103,7 +103,7 @@ class DisputeResolutionTests(ApiTestCase):
 
         self.client.post(
             reverse("payments:order_confirm", args=[self.order.access_token]),
-            {"action": "dispute"},
+            {"action": "dispute", "guest_email": self.order.guest_email},
             content_type="application/json",
         )
         self.order.refresh_from_db()
@@ -126,6 +126,8 @@ class DisputeResolutionTests(ApiTestCase):
         """Estorno que chega pelo webhook segue o mesmo caminho."""
         import json
 
+        self.provider.refunded = True
+        self.provider.paid = False
         with override_settings(ASAAS_WEBHOOK_TOKEN="tok"):
             self.client.post(
                 reverse("payments_webhooks:asaas_webhook"),

@@ -13,7 +13,9 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django_ratelimit.decorators import ratelimit
 
+from apps.core.media_security import sanitize_image
 from apps.moderation.models import ModerationQueueItem
 from apps.moderation.services import run_automated_filters
 from apps.stores.models import Store
@@ -332,10 +334,12 @@ class ProductAnswerView(APIView):
         return Response({"id": str(question.id), "answer": question.answer})
 
 
+@ratelimit(key="ip", rate="10/m", method="GET", block=True)
+@ratelimit(key="get:token", rate="20/h", method="GET", block=True)
 def download_asset(request, token, asset_id):
     """
-    Entrega do conteúdo digital. O link só funciona para quem tem o token
-    do pedido, com o pedido pago e o arquivo pertencendo a um item dele.
+    Entrega do conteúdo digital. Só com pedido pago e identidade do
+    comprador (conta logada ou e-mail guest confirmado na query).
     """
     from django.http import FileResponse, Http404
 
@@ -346,10 +350,26 @@ def download_asset(request, token, asset_id):
     )
     if order.status not in (Order.Status.PAID, Order.Status.SHIPPED, Order.Status.DELIVERED):
         raise Http404
+    if order.buyer_id:
+        if not request.user.is_authenticated or request.user.id != order.buyer_id:
+            raise Http404
+    else:
+        claimed = (request.GET.get("email") or "").strip().lower()
+        if not claimed or claimed != (order.guest_email or "").lower():
+            raise Http404
     asset = get_object_or_404(ProductAsset, id=asset_id)
     if asset.product_id not in {item.product_id for item in order.items.all()}:
         raise Http404
-    return FileResponse(asset.file.open("rb"), as_attachment=True, filename=asset.file.name.split("/")[-1])
+    response = FileResponse(
+        asset.file.open("rb"),
+        as_attachment=True,
+        filename=asset.file.name.split("/")[-1],
+    )
+    response["Cache-Control"] = "no-store, private"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    response["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    return response
 
 
 @login_required
@@ -434,12 +454,29 @@ class ProductCreateView(APIView):
             status=Product.Status.PENDING_MODERATION,
         )
         for index, image in enumerate(payload["images"]):
-            ProductImage.objects.create(product=product, file=image, is_cover=(index == 0), order=index)
+            ProductImage.objects.create(
+                product=product,
+                file=sanitize_image(
+                    image,
+                    max_bytes=8 * 1024 * 1024,
+                    watermark=f"Renda & Renda • {store.slug}",
+                ),
+                is_cover=(index == 0),
+                order=index,
+            )
         for index, video in enumerate(payload.get("videos", [])):
             ProductVideo.objects.create(product=product, file=video, order=index)
         for index, asset in enumerate(payload.get("assets", [])):
+            upload = asset
+            name = (asset.name or "").lower()
+            if name.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif")):
+                upload = sanitize_image(
+                    asset,
+                    max_bytes=8 * 1024 * 1024,
+                    watermark=f"Pedido protegido • {store.slug}",
+                )
             ProductAsset.objects.create(
-                product=product, file=asset, label=asset.name[:80], order=index
+                product=product, file=upload, label=asset.name[:80], order=index
             )
         for index, addon in enumerate(payload.get("addons", [])):
             ProductAddon.objects.create(

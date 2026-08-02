@@ -231,6 +231,10 @@ class AsaasClient:
         body = {"value": float(value)} if value is not None else {}
         return self._request("POST", f"/payments/{payment_id}/refund", json=body)
 
+    def delete_payment(self, payment_id: str) -> dict:
+        """Cancela cobrança ainda não paga (evita Pix tardio após expirar o pedido)."""
+        return self._request("DELETE", f"/payments/{payment_id}")
+
     def get_payer_document(self, payment_id: str) -> str:
         """
         CPF/CNPJ de quem efetivamente pagou.

@@ -106,14 +106,23 @@ def age_verification_webhook(request):
     if not hmac.compare_digest(token, expected):
         return HttpResponseForbidden("Token inválido.")
 
-    payload = json.loads(request.body)
-    apply_verification_result(
-        reference_id=payload["reference_id"],
-        approved=payload["approved"],
-        liveness_score=payload.get("liveness_score"),
-        document_validated=payload.get("document_validated", False),
-        validated_birth_date=payload.get("birth_date"),
-    )
+    if len(request.body) > 64 * 1024:
+        return JsonResponse({"detail": "payload muito grande"}, status=413)
+    try:
+        payload = json.loads(request.body or b"{}")
+        reference_id = str(payload["reference_id"]).strip()
+        approved = payload["approved"]
+        if not reference_id or not isinstance(approved, bool):
+            raise ValueError
+        apply_verification_result(
+            reference_id=reference_id,
+            approved=approved,
+            liveness_score=payload.get("liveness_score"),
+            document_validated=bool(payload.get("document_validated", False)),
+            validated_birth_date=payload.get("birth_date"),
+        )
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return JsonResponse({"detail": "payload inválido"}, status=400)
     return JsonResponse({"received": True})
 
 

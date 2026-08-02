@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.core.media_security import validate_digital_asset, validate_safe_image
+
 from .models import Category, Product, price_from_payout
 
 MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
@@ -26,24 +28,11 @@ def validate_video_file(file):
 
 
 def validate_image_file(file):
-    """Magic bytes de JPEG/PNG/WebP/GIF + limite de tamanho (não confiar no MIME do browser)."""
-    head = file.read(12)
-    file.seek(0)
-    is_jpeg = head[:3] == b"\xff\xd8\xff"
-    is_png = head[:8] == b"\x89PNG\r\n\x1a\n"
-    is_webp = head[:4] == b"RIFF" and head[8:12] == b"WEBP"
-    is_gif = head[:6] in (b"GIF87a", b"GIF89a")
-    if not (is_jpeg or is_png or is_webp or is_gif):
-        raise serializers.ValidationError(
-            "Arquivo não parece ser uma imagem válida (use JPEG, PNG, WebP ou GIF)."
-        )
-    if file.size > MAX_IMAGE_SIZE_BYTES:
-        raise serializers.ValidationError("Imagem muito grande (máximo 8MB).")
+    validate_safe_image(file, max_bytes=MAX_IMAGE_SIZE_BYTES)
 
 
 def validate_asset_file(file):
-    if file.size > MAX_ASSET_SIZE_BYTES:
-        raise serializers.ValidationError("Arquivo muito grande (máximo 200MB).")
+    validate_digital_asset(file, max_bytes=MAX_ASSET_SIZE_BYTES)
 
 
 class AddonInputSerializer(serializers.Serializer):

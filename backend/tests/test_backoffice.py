@@ -227,6 +227,8 @@ class CreateAdminCommandTests(TestCase):
             password="Senha-Original-123!",
             cpf="98765432100",
             birth_date=date(1990, 1, 1),
+            is_staff=True,
+            is_superuser=True,
         )
         env = {
             "ADMIN_EMAIL": admin.email,

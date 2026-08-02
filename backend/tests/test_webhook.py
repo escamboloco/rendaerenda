@@ -42,9 +42,19 @@ class AsaasWebhookTests(ApiTestCase):
         self.url = reverse("payments_webhooks:asaas_webhook")
 
     def send(self, event="PAYMENT_RECEIVED", *, token=WEBHOOK_TOKEN, charge_id=None):
+        if event in {"PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"}:
+            self.provider.paid = True
+            self.provider.refunded = False
+        if event.startswith("PAYMENT_REFUND") or "CHARGEBACK" in event or event == "PAYMENT_REVERSED":
+            self.provider.refunded = True
+            self.provider.paid = False
         body = {
             "event": event,
-            "payment": {"id": charge_id or self.payment.provider_charge_id, "status": "RECEIVED"},
+            "payment": {
+                "id": charge_id or self.payment.provider_charge_id,
+                "status": "REFUNDED" if self.provider.refunded else "RECEIVED",
+                "value": float(self.order.grand_total),
+            },
         }
         return self.client.post(
             self.url,
@@ -67,8 +77,8 @@ class AsaasWebhookTests(ApiTestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.AWAITING_PAYMENT)
 
-    def test_get_returns_ok_for_browser(self):
-        self.assertEqual(self.client.get(self.url).status_code, 200)
+    def test_get_does_not_disclose_webhook_endpoint(self):
+        self.assertEqual(self.client.get(self.url).status_code, 404)
 
     def test_unknown_charge_is_acknowledged_without_side_effects(self):
         response = self.send(charge_id="pay_inexistente")

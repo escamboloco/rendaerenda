@@ -37,6 +37,11 @@ class Command(BaseCommand):
                     "ADMIN_EMAIL não corresponde a uma conta existente. "
                     "No primeiro deploy, preencha as quatro variáveis ADMIN_*."
                 )
+            if not user.is_staff:
+                raise CommandError(
+                    "A conta de ADMIN_EMAIL existe, mas não é da equipe. "
+                    "Promoção automática bloqueada por segurança."
+                )
             user.is_staff = True
             user.is_superuser = True
             user.is_active = True
@@ -63,6 +68,8 @@ class Command(BaseCommand):
 
         user = User.objects.filter(email__iexact=email).first()
         if user:
+            # Com as quatro ADMIN_* preenchidas, promover é intencional
+            # (primeiro bootstrap). Sem --reset-password a senha atual fica.
             user.is_staff = True
             user.is_superuser = True
             user.is_active = True

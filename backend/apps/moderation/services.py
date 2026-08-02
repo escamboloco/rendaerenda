@@ -18,9 +18,17 @@ SEXUAL_SERVICE_PATTERNS = [
 
 CONTACT_LEAK_PATTERNS = [
     re.compile(r"\b\d{2}\s?9?\d{4}[-\s]?\d{4}\b"),  # telefone BR
+    re.compile(r"\b(?:\+?55\s?)?\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}\b"),
     re.compile(r"\bwhats\s?app\b", re.IGNORECASE),
+    re.compile(r"\b(?:zap|zapp|wpp|whts|whasapp)\b", re.IGNORECASE),
     re.compile(r"@[a-zA-Z0-9_.]{3,}"),  # @handle de rede social
     re.compile(r"\btelegram\b", re.IGNORECASE),
+    re.compile(r"\bt\.me/\S+", re.IGNORECASE),
+    re.compile(r"\b(?:discord|signal|onlyfans|privacy\.com\.br)\b", re.IGNORECASE),
+    re.compile(r"\b(?:instagram|insta|ig|tiktok|kwai)\b", re.IGNORECASE),
+    re.compile(r"(?:instagram|tiktok|facebook|t\.me|wa\.me|api\.whatsapp)\.com/\S+", re.IGNORECASE),
+    re.compile(r"\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b", re.IGNORECASE),  # e-mail
+    re.compile(r"\b(?:pix|chave\s*pix)\b.{0,40}\b\d{11,14}\b", re.IGNORECASE),
 ]
 
 

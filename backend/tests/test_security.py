@@ -14,6 +14,13 @@ from .factories import make_product, make_user
 
 
 class AgeGateTests(ApiTestCase):
+    def setUp(self):
+        super().setUp()
+        # Estes testes exercitam o gate — começam sem confirmação.
+        session = self.client.session
+        session.pop("age_gate_confirmed", None)
+        session.save()
+
     def test_public_page_redirects_to_age_gate(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 302)

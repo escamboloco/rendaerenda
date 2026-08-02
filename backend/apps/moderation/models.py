@@ -97,6 +97,14 @@ class Report(models.Model):
     # + reporte as autoridades (Lei 15.211/2025 art. sobre exploracao infantil).
     requires_immediate_action = models.BooleanField(default=False)
     resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reports_resolved",
+    )
+    resolution_notes = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):

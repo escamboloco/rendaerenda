@@ -92,8 +92,13 @@ class CorreiosAuthError(Exception):
 def products_are_payment_test(products) -> bool:
     """Itens do seed_payment_test (slug começa com teste-pagamento)."""
     products = list(products)
+    allowed_store = getattr(
+        settings, "PAYMENT_TEST_STORE_SLUG", "loja-teste-pagamento"
+    )
     return bool(products) and all(
-        getattr(p, "slug", "").startswith("teste-pagamento") for p in products
+        getattr(getattr(p, "store", None), "slug", "") == allowed_store
+        and getattr(p, "slug", "").startswith("teste-pagamento")
+        for p in products
     )
 
 

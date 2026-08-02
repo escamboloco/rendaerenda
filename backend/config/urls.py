@@ -1,9 +1,7 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
-from django.urls import include, path, re_path
-from django.views.static import serve
+from django.urls import include, path
 
 import apps.accounts.urls as accounts_urls
 import apps.catalog.urls as catalog_urls
@@ -56,12 +54,6 @@ urlpatterns = [
     path("", include("apps.stores.urls")),
 ]
 
-# Midia em disco (Render disk ou pasta local). Com S3, as URLs ja apontam pro bucket.
-if not settings.USE_S3_MEDIA:
-    if settings.DEBUG:
-        urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    else:
-        # Producao no Render sem nginx: serve /media/ pelo Django (disco persistente).
-        urlpatterns += [
-            re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
-        ]
+# Fotos/vídeos de produto: somente via /media/protegido/ com assinatura.
+# KYC e arquivos digitais: exclusivamente por views autorizadas.
+# Nunca servir MEDIA_ROOT inteiro.

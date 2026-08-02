@@ -241,10 +241,11 @@ def payout_shipping(order: Order) -> bool:
 
 def release_matured_escrow() -> int:
     """
-    Repassa o que já saiu da custódia mas ainda não foi pago — cobre o
-    conteúdo digital (que não tem entrega para confirmar) e qualquer
-    liberação que tenha ficado sem o Pix por falha momentânea.
-    Pedido em disputa nunca entra aqui.
+    Repassa o que já saiu da custódia mas ainda não foi pago.
+
+    Conteúdo digital: pode liberar em PAID após o prazo (não há entrega).
+    Físico: NUNCA libera em PAID puro — exige SHIPPED/DELIVERED, senão a
+    vendedora receberia sem postar. Pedido em disputa nunca entra aqui.
     """
     matured = (
         WalletEntry.objects.filter(
@@ -258,9 +259,16 @@ def release_matured_escrow() -> int:
     )
     paid = 0
     for entry in matured:
-        _payout(entry.order)
-        entry.order.refresh_from_db(fields=["payout_sent_at"])
-        if entry.order.payout_sent_at:
+        order = entry.order
+        if order.requires_shipping and order.status == Order.Status.PAID:
+            logger.warning(
+                "Escrow maduro do pedido físico %s ignorado — ainda sem postagem.",
+                order.id,
+            )
+            continue
+        _payout(order)
+        order.refresh_from_db(fields=["payout_sent_at"])
+        if order.payout_sent_at:
             paid += 1
     return paid
 

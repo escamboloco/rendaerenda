@@ -64,6 +64,12 @@ envVarGroups:
       # estiver ligada.
       - key: REFUND_ON_PAYER_CPF_MISMATCH
         value: "True"
+      # Pagamento sem CPF retornado pelo PSP fica pendente, nunca libera produto.
+      - key: REQUIRE_PAYER_DOCUMENT
+        value: "True"
+      # Compra exige conta com idade validada por documento/bureau.
+      - key: REQUIRE_VERIFIED_BUYER_AGE
+        value: "True"
       # --- Custodia: o dinheiro fica com a plataforma ate a entrega ---
       - key: ESCROW_ENABLED
         value: "True"
@@ -82,7 +88,7 @@ envVarGroups:
       - key: ESCROW_MAX_HOLD_DAYS
         value: "30"
       - key: REQUIRE_SELLER_KYC
-        value: "False"
+        value: "True"
       - key: WALLET_RELEASE_DAYS_AFTER_SHIPPING
         value: "0"
       - key: DELIVERY_CONFIRMATION_WINDOW_HOURS
@@ -130,7 +136,7 @@ envVarGroups:
         value: "/var/data/media"
       # Cria loja teste com 3 itens a R$ 5 em todo deploy (idempotente).
       - key: SEED_PAYMENT_TEST
-        value: "True"
+        value: "False"
 
 services:
   - type: web

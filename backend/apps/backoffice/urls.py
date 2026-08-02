@@ -17,4 +17,5 @@ urlpatterns = [
     path("disputas/", views.disputes, name="disputes"),
     path("disputas/<uuid:order_id>/<str:decision>/", views.resolve_dispute, name="resolve_dispute"),
     path("contas/", views.accounts, name="accounts"),
+    path("kyc/<uuid:kyc_id>/<str:field>/", views.kyc_file, name="kyc_file"),
 ]

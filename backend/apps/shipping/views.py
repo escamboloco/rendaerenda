@@ -29,7 +29,7 @@ class FreightQuoteView(APIView):
     """
 
     permission_classes = [AllowAny]
-    throttle_scope = None
+    throttle_scope = "freight"
 
     def post(self, request):
         from django.conf import settings

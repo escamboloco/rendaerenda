@@ -35,6 +35,10 @@ class OrderChatTests(ApiTestCase):
             content_type="application/json",
         )
         self.order = Order.objects.get()
+        # Chat só existe após pagamento confirmado (anti-fraude / anti-contato).
+        self.provider.paid = True
+        self.client.get(reverse("payments:order_status", args=[self.order.access_token]))
+        self.order.refresh_from_db()
         self.url = reverse("payments:order_messages", args=[self.order.access_token])
 
     def send(self, body):
@@ -132,7 +136,7 @@ class DisputeAlertTests(ApiTestCase):
     def test_dispute_notifies_seller_and_moderation(self):
         self.client.post(
             reverse("payments:order_confirm", args=[self.order.access_token]),
-            {"action": "dispute"},
+            {"action": "dispute", "guest_email": self.order.guest_email},
             content_type="application/json",
         )
 
@@ -146,7 +150,7 @@ class DisputeAlertTests(ApiTestCase):
 
         self.client.post(
             reverse("payments:order_confirm", args=[self.order.access_token]),
-            {"action": "dispute"},
+            {"action": "dispute", "guest_email": self.order.guest_email},
             content_type="application/json",
         )
 

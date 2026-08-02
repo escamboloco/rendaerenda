@@ -829,15 +829,20 @@ function orderTracker(token, awaitingPayment) {
 }
 
 /* Liberacao da custodia na pagina do pedido. */
-function orderRelease(token) {
+function orderRelease(token, guestEmail) {
   return {
     loading: false,
     error: "",
+    guestEmail: guestEmail || "",
     async send(action) {
       this.loading = true;
       this.error = "";
       try {
-        const { ok, data } = await postJSON(`/api/pedido/${token}/confirmar/`, { action });
+        const body = { action };
+        if (action === "dispute" && this.guestEmail) {
+          body.guest_email = this.guestEmail;
+        }
+        const { ok, data } = await postJSON(`/api/pedido/${token}/confirmar/`, body);
         if (!ok) {
           this.error = errorMessage(data, "Não foi possível registrar sua resposta.");
           return;
@@ -1005,3 +1010,39 @@ function customRequestModal(storeSlug) {
     },
   };
 }
+
+/* Proteção de mídia: bloqueia caminho fácil de salvar/arrastar fotos.
+   Não impede screenshot — isso é impossível no navegador — mas remove
+   "Salvar imagem como", drag-and-drop e abertura em nova aba via botão. */
+(function protectProductMedia() {
+  function isProtected(target) {
+    if (!target || !target.closest) return false;
+    return Boolean(
+      target.closest("img[src*='/media/protegido/'], img[src*='/media/products/'], .js-protect-media, .product-media, .store-photo-card__image")
+    );
+  }
+  document.addEventListener(
+    "contextmenu",
+    (event) => {
+      if (isProtected(event.target)) event.preventDefault();
+    },
+    { capture: true }
+  );
+  document.addEventListener(
+    "dragstart",
+    (event) => {
+      if (isProtected(event.target)) event.preventDefault();
+    },
+    { capture: true }
+  );
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+      document.querySelectorAll("img[src*='/media/protegido/'], img[src*='/media/products/']").forEach((img) => {
+        img.setAttribute("draggable", "false");
+        img.classList.add("js-protect-media");
+      });
+    },
+    { once: true }
+  );
+})();

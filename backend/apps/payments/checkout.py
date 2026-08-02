@@ -400,6 +400,9 @@ def confirm_paid_order(payment: Payment, webhook_payload: dict | None = None) ->
     Idempotente: chamado varias vezes (webhook do Asaas repete entrega,
     e o polling da pagina roda em paralelo) so tem efeito na primeira.
     Retorna True se ESTA chamada foi a que confirmou o pedido.
+
+    Pedido já expirado/cancelado NUNCA libera produto: estorna no PSP
+    para evitar double-sell (Pix tardio depois do estoque voltar).
     """
     from apps.stores.services import increment_sales_count
     from apps.wallet.services import credit_and_auto_payout
@@ -420,7 +423,41 @@ def confirm_paid_order(payment: Payment, webhook_payload: dict | None = None) ->
         if webhook_payload:
             locked.raw_webhook_payload = webhook_payload
 
-        if not services.verify_payer_cpf(locked, webhook_payload):
+        # Double-sell: estoque já pode ter voltado após expire/cancel.
+        if order.status not in (Order.Status.AWAITING_PAYMENT, Order.Status.PAID):
+            locked.provider_status = "late_payment_rejected"
+            locked.save(update_fields=["provider_status", "raw_webhook_payload"] if webhook_payload else ["provider_status"])
+            logger.error(
+                "Pagamento tardio no pedido %s (status=%s) — estorno automático, produto não liberado.",
+                order.id,
+                order.status,
+            )
+            _refund_stale_charge(locked)
+            return False
+
+        if order.stock_restored:
+            locked.provider_status = "stock_already_restored"
+            locked.save(update_fields=["provider_status", "raw_webhook_payload"] if webhook_payload else ["provider_status"])
+            logger.error(
+                "Pedido %s com estoque já restaurado — estorno automático, produto não liberado.",
+                order.id,
+            )
+            _refund_stale_charge(locked)
+            return False
+
+        try:
+            payer_ok = services.verify_payer_cpf(locked, webhook_payload)
+        except AsaasError:
+            # Documento do pagador ainda indisponível: não libera produto.
+            locked.last_synced_at = timezone.now()
+            locked.save(update_fields=["last_synced_at", "payer_document", "payer_cpf_matched"])
+            logger.warning(
+                "Pedido %s pago sem identificação segura do pagador — produto retido.",
+                order.id,
+            )
+            return False
+
+        if not payer_ok:
             locked.status = Payment.Status.REFUNDED
             locked.save()
             order.status = Order.Status.REFUNDED
@@ -457,6 +494,23 @@ def confirm_paid_order(payment: Payment, webhook_payload: dict | None = None) ->
     _enqueue_shipping_label(order)
     _dispatch_paid_notifications(order)
     return True
+
+
+def _refund_stale_charge(payment: Payment) -> None:
+    if not payment.provider_charge_id:
+        return
+    try:
+        services.get_payment_provider().refund_charge(
+            provider_charge_id=payment.provider_charge_id
+        )
+        payment.status = Payment.Status.REFUNDED
+        payment.save(update_fields=["status"])
+    except Exception:
+        logger.exception(
+            "Falha ao estornar cobrança tardia %s do pedido %s",
+            payment.provider_charge_id,
+            payment.order_id,
+        )
 
 
 def _enqueue_shipping_label(order: Order) -> None:
@@ -552,6 +606,7 @@ def cancel_order(order: Order, *, reason: str = "cancelado") -> None:
     order.canceled_reason = reason[:80]
     order.expires_at = None
     order.save(update_fields=["status", "canceled_reason", "expires_at"])
+    _cancel_provider_charge(order)
     restore_stock(order)
 
 
@@ -560,7 +615,29 @@ def expire_order(order: Order) -> None:
     order.canceled_reason = "pix_nao_pago"
     order.expires_at = None
     order.save(update_fields=["status", "canceled_reason", "expires_at"])
+    _cancel_provider_charge(order)
     restore_stock(order)
+
+
+def _cancel_provider_charge(order: Order) -> None:
+    """Invalida o QR/Pix no PSP para impedir pagamento depois do estoque voltar."""
+    payment = getattr(order, "payment", None)
+    if not payment or not payment.provider_charge_id:
+        return
+    if payment.status in (Payment.Status.CONFIRMED, Payment.Status.REFUNDED):
+        return
+    try:
+        services.get_payment_provider().cancel_unpaid_charge(
+            provider_charge_id=payment.provider_charge_id
+        )
+        payment.provider_status = "DELETED"
+        payment.save(update_fields=["provider_status"])
+    except Exception:
+        logger.exception(
+            "Falha ao cancelar cobrança %s do pedido %s",
+            payment.provider_charge_id,
+            order.id,
+        )
 
 
 def expire_stale_orders(*, now=None) -> int:

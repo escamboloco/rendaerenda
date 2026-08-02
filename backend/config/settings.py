@@ -153,6 +153,8 @@ STORAGES = {
 SESSION_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = 60 * 60 * 12
+SESSION_SAVE_EVERY_REQUEST = True
 CSRF_COOKIE_SECURE = not DEBUG
 # False: o JS do checkout precisa ler o cookie csrftoken pro header X-CSRFToken.
 # O cookie CSRF nao e segredo de sessao; SameSite=Lax + Secure em producao.
@@ -251,6 +253,7 @@ REST_FRAMEWORK = {
         "report": "10/min",
         "phone": "5/min",
         "offers": "10/min",
+        "freight": "20/min",
         # A tela de pagamento consulta o status a cada 4s enquanto o Pix
         # nao cai; precisa de folga bem maior que o resto.
         "order_status": "60/min",
@@ -320,6 +323,11 @@ NEUTRAL_BOX_PRICES = config("NEUTRAL_BOX_PRICES", default="")
 # Pix pago por CPF diferente do titular do pedido: estornar automaticamente.
 # E uma trava de idade (so adulto identificado compra), nao antifraude.
 REFUND_ON_PAYER_CPF_MISMATCH = config("REFUND_ON_PAYER_CPF_MISMATCH", default=True, cast=bool)
+REQUIRE_PAYER_DOCUMENT = config("REQUIRE_PAYER_DOCUMENT", default=False, cast=bool)
+REQUIRE_VERIFIED_BUYER_AGE = config(
+    "REQUIRE_VERIFIED_BUYER_AGE", default=False, cast=bool
+)
+ENABLE_STORE_PLAN_SALES = config("ENABLE_STORE_PLAN_SALES", default=False, cast=bool)
 PAYMENT_PROVIDER = config("PAYMENT_PROVIDER", default="asaas")
 ASAAS_API_KEY = config("ASAAS_API_KEY", default="")
 ASAAS_API_URL = config("ASAAS_API_URL", default="https://api.asaas.com/v3")

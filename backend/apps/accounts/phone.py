@@ -76,7 +76,11 @@ def send_sms(phone_number: str, message: str) -> None:
     api_key = settings.SMS_PROVIDER_API_KEY
     if not api_url or not api_key:
         if settings.DEBUG:
-            logger.warning("SMS_PROVIDER_* não configurado - SMS para ...%s: %s", phone_number[-4:], message)
+            logger.warning(
+                "SMS_PROVIDER_* não configurado; envio de OTP simulado para ...%s "
+                "(código deliberadamente omitido do log).",
+                phone_number[-4:],
+            )
             return
         raise PhoneVerificationError("Serviço de SMS indisponível.")
 

@@ -223,6 +223,17 @@ class ProductQuestion(models.Model):
         return self.question[:60]
 
 
+def _product_media_storage():
+    from django.conf import settings
+    from django.core.files.storage import default_storage
+
+    if settings.USE_S3_MEDIA:
+        return default_storage
+    from apps.core.media_signing import SignedProductStorage
+
+    return SignedProductStorage(location=str(settings.MEDIA_ROOT))
+
+
 class ProductImage(models.Model):
     """
     Midia armazenada em bucket privado (S3-compativel), servida via URL
@@ -230,7 +241,7 @@ class ProductImage(models.Model):
     """
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
-    file = models.ImageField(upload_to="products/%Y/%m/")
+    file = models.ImageField(upload_to="products/%Y/%m/", storage=_product_media_storage)
     is_cover = models.BooleanField(default=False)
     order = models.PositiveSmallIntegerField(default=0)
 
@@ -249,7 +260,7 @@ class ProductVideo(models.Model):
     """
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="videos")
-    file = models.FileField(upload_to="products/videos/%Y/%m/")
+    file = models.FileField(upload_to="products/videos/%Y/%m/", storage=_product_media_storage)
     order = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

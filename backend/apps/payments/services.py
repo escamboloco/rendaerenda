@@ -63,6 +63,7 @@ class ChargeResult:
     status: str = "PENDING"
     is_paid: bool = False
     pix_expires_at: str | None = None
+    value: Decimal | None = None
 
 
 def detect_pix_key_type(pix_key: str) -> str:
@@ -152,6 +153,10 @@ class PaymentProvider(ABC):
 
     @abstractmethod
     def refund_charge(self, *, provider_charge_id: str) -> None: ...
+
+    def cancel_unpaid_charge(self, *, provider_charge_id: str) -> None:
+        """Cancela cobrança pendente. Default: noop (provider específico pode sobrescrever)."""
+        return None
 
 
 class AsaasProvider(PaymentProvider):
@@ -249,6 +254,17 @@ class AsaasProvider(PaymentProvider):
     def refund_charge(self, *, provider_charge_id: str) -> None:
         self.client.refund_payment(provider_charge_id)
 
+    def cancel_unpaid_charge(self, *, provider_charge_id: str) -> None:
+        try:
+            self.client.delete_payment(provider_charge_id)
+        except AsaasError as exc:
+            # Já paga/estornada: a confirmação/refund trata o restante.
+            logger.info(
+                "Não foi possível cancelar a cobrança %s: %s",
+                provider_charge_id,
+                exc.user_message,
+            )
+
     # ------------------------------------------------------------- repasses
 
     def request_seller_withdrawal(
@@ -288,6 +304,7 @@ def _charge_result(payment) -> ChargeResult:
         status=payment.status,
         is_paid=payment.is_paid,
         pix_expires_at=payment.pix_expires_at,
+        value=getattr(payment, "value", None),
     )
 
 
@@ -321,6 +338,10 @@ def verify_payer_cpf(payment, webhook_payload: dict | None = None) -> bool:
     if not payer_doc:
         payment.payer_document = ""
         payment.payer_cpf_matched = None
+        if getattr(settings, "REQUIRE_PAYER_DOCUMENT", False):
+            raise AsaasError(
+                "Pagamento recebido, aguardando identificação segura do pagador."
+            )
         return True
 
     expected = digits(payment.order.payer_cpf)

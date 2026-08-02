@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
-from django.http import HttpResponseNotAllowed
+from django.http import FileResponse, Http404, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -23,7 +23,7 @@ from apps.shipping.models import Shipment
 from apps.stores.models import Store
 from apps.wallet.models import WalletEntry, WithdrawalRequest
 
-from .decorators import staff_required
+from .decorators import staff_required, superuser_required
 from .forms import StaffLoginForm
 
 logger = logging.getLogger(__name__)
@@ -207,7 +207,7 @@ def orders(request):
     )
 
 
-@staff_required
+@superuser_required
 def finance(request):
     now = timezone.now()
     ledger = WalletEntry.objects.select_related("store", "order").order_by("-created_at")
@@ -280,8 +280,33 @@ def moderate(request, item_id, decision):
 @staff_required
 def resolve_report(request, report_id):
     report = get_object_or_404(Report, id=report_id, resolved_at__isnull=True)
+    action = (request.POST.get("action") or "").strip()
+    notes = (request.POST.get("notes") or "").strip()[:500]
+    if report.requires_immediate_action and action != "remove":
+        messages.error(
+            request,
+            "Denúncia urgente só pode ser encerrada após remover/suspender o alvo.",
+        )
+        return redirect("backoffice:moderation")
+
+    if action == "remove":
+        target = report.target
+        if isinstance(target, Product):
+            target.status = Product.Status.REJECTED
+            target.save(update_fields=["status"])
+        elif isinstance(target, Store):
+            target.status = Store.Status.SUSPENDED
+            target.save(update_fields=["status"])
+        else:
+            messages.error(request, "O alvo não existe mais; encaminhe para revisão jurídica.")
+            return redirect("backoffice:moderation")
+
     report.resolved_at = timezone.now()
-    report.save(update_fields=["resolved_at"])
+    report.resolved_by = request.user
+    report.resolution_notes = notes or (
+        "Alvo removido/suspenso." if action == "remove" else "Revisão concluída."
+    )
+    report.save(update_fields=["resolved_at", "resolved_by", "resolution_notes"])
     messages.success(request, "Denúncia marcada como tratada.")
     return redirect("backoffice:moderation")
 
@@ -301,7 +326,7 @@ def disputes(request):
 
 
 @require_POST
-@staff_required
+@superuser_required
 def resolve_dispute(request, order_id, decision):
     order = get_object_or_404(
         Order.objects.select_related("payment", "store"),
@@ -323,10 +348,10 @@ def resolve_dispute(request, order_id, decision):
         elif decision == "release":
             from apps.wallet.services import release_and_payout
 
-            order.status = Order.Status.DELIVERED
-            order.save(update_fields=["status"])
             if not release_and_payout(order):
                 raise RuntimeError("O repasse não foi confirmado.")
+            order.status = Order.Status.DELIVERED
+            order.save(update_fields=["status"])
             messages.success(request, f"Pedido {order.short_id} liberado à vendedora.")
         else:
             return HttpResponseNotAllowed(["POST"])
@@ -363,3 +388,28 @@ def accounts(request):
             "ordering": "",
         },
     )
+
+
+@staff_required
+def kyc_file(request, kyc_id, field):
+    """Serve documento KYC somente à equipe, sem URL pública permanente."""
+    allowed_fields = {"document_front", "document_back", "selfie_with_document"}
+    if field not in allowed_fields:
+        raise Http404
+    kyc = get_object_or_404(SellerKYC, id=kyc_id)
+    stored_file = getattr(kyc, field, None)
+    if not stored_file or not stored_file.name:
+        raise Http404
+    try:
+        response = FileResponse(
+            stored_file.open("rb"),
+            content_type="image/jpeg",
+            as_attachment=False,
+            filename=f"kyc-{kyc.id}-{field}.jpg",
+        )
+    except (FileNotFoundError, OSError):
+        raise Http404 from None
+    response["Cache-Control"] = "no-store, private"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Content-Security-Policy"] = "default-src 'none'; img-src 'self'"
+    return response

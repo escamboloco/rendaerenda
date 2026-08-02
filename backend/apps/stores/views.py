@@ -524,7 +524,6 @@ class StoreOnboardView(APIView):
         serializer = StoreOnboardSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
-        plan = payload.get("plan_id")
         from apps.payments.services import detect_pix_key_type
 
         pix_key = payload["pix_key"]
@@ -543,8 +542,6 @@ class StoreOnboardView(APIView):
             slug=payload["slug"],
             display_name=payload["display_name"],
             bio=payload.get("bio", ""),
-            plan=plan,
-            plan_expires_at=(timezone.now() + timedelta(days=plan.duration_days)) if plan else None,
             psp_subaccount_id=subaccount.provider_subaccount_id or "",
             psp_api_key=subaccount.api_key or "",
             pix_key=pix_key,
@@ -586,6 +583,16 @@ class StorePlanCheckoutView(APIView):
     throttle_scope = "checkout"
 
     def post(self, request):
+        if not getattr(settings, "ENABLE_STORE_PLAN_SALES", False):
+            return Response(
+                {
+                    "detail": (
+                        "Planos pagos estão temporariamente indisponíveis até a "
+                        "ativação automática por webhook estar validada."
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         seller_kyc = getattr(request.user, "seller_kyc", None)
         if not seller_kyc or seller_kyc.status != seller_kyc.Status.APPROVED:
             raise PermissionDenied("KYC de vendedora precisa estar aprovado antes de pagar o plano.")
