@@ -1,0 +1,70 @@
+{% extends "backoffice/base.html" %}
+{% block title %}KYC / segurança — Gestão{% endblock %}
+{% block content %}
+<div class="top">
+  <div>
+    <h1>KYC e fotos de segurança</h1>
+    <div class="muted">RG frente/verso + selfie. Após aprovar, a loja é liberada no banco.</div>
+  </div>
+  <div class="muted"><strong class="warn">{{ pending_count }}</strong> aguardando análise</div>
+</div>
+<form class="filters" method="get">
+  <input type="search" name="q" value="{{ query }}" placeholder="E-mail, CPF, loja ou código">
+  <select name="status">
+    {% for value,label in kyc_statuses %}
+    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn primary" type="submit">Filtrar</button>
+</form>
+<table>
+  <thead>
+    <tr>
+      <th>Vendedora</th>
+      <th>Loja</th>
+      <th>Status KYC</th>
+      <th>Código</th>
+      <th>Enviado</th>
+      <th>Ações</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for kyc in items %}
+    <tr>
+      <td>
+        <strong>{{ kyc.user.get_full_name|default:kyc.user.email }}</strong>
+        <div class="muted">{{ kyc.user.email }}</div>
+        <div class="muted">CPF {{ kyc.user.cpf|default:"—" }}</div>
+      </td>
+      <td>
+        {% if kyc.user.store %}
+        <strong>{{ kyc.user.store.display_name }}</strong>
+        <div class="muted">{{ kyc.user.store.get_status_display }}</div>
+        {% else %}
+        <span class="muted">Sem loja ainda</span>
+        {% endif %}
+      </td>
+      <td>
+        <span class="badge {% if kyc.status == 'approved' %}ok{% elif kyc.status == 'rejected' %}danger{% elif kyc.status == 'pending' %}warn{% endif %}">
+          {{ kyc.get_status_display }}
+        </span>
+      </td>
+      <td><code>{{ kyc.verification_code }}</code></td>
+      <td>{% if kyc.submitted_at %}{{ kyc.submitted_at|date:"d/m/Y H:i" }}{% else %}—{% endif %}</td>
+      <td class="actions">
+        {% if kyc.user.store %}
+        <a class="btn primary" href="{% url 'backoffice:seller_detail' kyc.user.store.id %}">Abrir dossiê</a>
+        {% else %}
+        <a class="btn" href="{% url 'backoffice:kyc_file' kyc.id 'document_front' %}" target="_blank" rel="noreferrer">Frente</a>
+        <a class="btn" href="{% url 'backoffice:kyc_file' kyc.id 'document_back' %}" target="_blank" rel="noreferrer">Verso</a>
+        <a class="btn" href="{% url 'backoffice:kyc_file' kyc.id 'selfie_with_document' %}" target="_blank" rel="noreferrer">Selfie</a>
+        {% endif %}
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="6" class="empty">Nenhum KYC neste filtro.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% include "backoffice/pagination.html" with page=items %}
+{% endblock %}

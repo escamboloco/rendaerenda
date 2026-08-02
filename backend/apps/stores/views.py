@@ -413,11 +413,16 @@ def seller_hub(request):
     if not store:
         return render(request, "wallet/no_store.html")
 
+    from django.db.models import Sum
+
     from apps.catalog.models import ProductQuestion
     from apps.offers.models import CustomOrderRequest
     from apps.payments.models import Order
+    from apps.wallet.models import WalletEntry
 
+    seller_kyc = getattr(request.user, "seller_kyc", None)
     published = store.products.filter(status=Product.Status.PUBLISHED, stock__gt=0).count()
+    draft_count = store.products.filter(status=Product.Status.DRAFT).count()
     pending = store.products.filter(status=Product.Status.PENDING_MODERATION).count()
     open_questions = ProductQuestion.objects.filter(
         product__store=store, answer="", answered_at__isnull=True
@@ -433,26 +438,85 @@ def seller_hub(request):
         store=store,
         status__in=[Order.Status.PAID, Order.Status.SHIPPED],
     ).count()
+    delivered_orders = Order.objects.filter(store=store, status=Order.Status.DELIVERED).count()
+    disputed_orders = Order.objects.filter(store=store, status=Order.Status.DISPUTED).count()
+    paid_statuses = [Order.Status.PAID, Order.Status.SHIPPED, Order.Status.DELIVERED]
+    gross_sales = (
+        Order.objects.filter(store=store, status__in=paid_statuses).aggregate(
+            total=Sum("items_total")
+        )["total"]
+        or 0
+    )
     recent_orders = (
         Order.objects.filter(store=store)
         .exclude(status=Order.Status.AWAITING_PAYMENT)
         .select_related("buyer")
-        .order_by("-created_at")[:8]
+        .order_by("-created_at")[:10]
     )
+    origin_complete = bool(
+        store.origin_cep and store.origin_street and store.origin_city and store.origin_state
+    )
+    checklist = [
+        {
+            "label": "KYC enviado (RG frente/verso + selfie)",
+            "done": bool(
+                seller_kyc
+                and seller_kyc.status
+                in {seller_kyc.Status.PENDING, seller_kyc.Status.APPROVED}
+            ),
+            "url": "accounts_pages:seller_kyc_page",
+        },
+        {
+            "label": "KYC aprovado pelo admin",
+            "done": bool(seller_kyc and seller_kyc.status == seller_kyc.Status.APPROVED),
+            "url": "accounts_pages:seller_kyc_page",
+        },
+        {
+            "label": "Loja liberada na vitrine",
+            "done": store.status == Store.Status.ACTIVE,
+            "url": "stores:detail",
+            "url_args": [store.slug],
+        },
+        {
+            "label": "Endereço de postagem completo",
+            "done": origin_complete,
+            "url": "wallet:dashboard",
+        },
+        {
+            "label": "Chave Pix cadastrada",
+            "done": bool(store.pix_key),
+            "url": "wallet:dashboard",
+        },
+        {
+            "label": "Pelo menos 1 anúncio publicado",
+            "done": published > 0,
+            "url": "catalog:create",
+        },
+    ]
 
     return render(
         request,
         "stores/seller_hub.html",
         {
             "store": store,
+            "seller_kyc": seller_kyc,
             "published": published,
+            "draft_count": draft_count,
             "pending": pending,
             "open_questions": open_questions,
             "open_customs": open_customs,
             "active_orders": active_orders,
+            "delivered_orders": delivered_orders,
+            "disputed_orders": disputed_orders,
+            "gross_sales": gross_sales,
+            "available_balance": WalletEntry.objects.available_balance(store),
+            "pending_balance": WalletEntry.objects.pending_balance(store),
             "recent_orders": recent_orders,
             "follower_count": store.followers.count(),
             "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
+            "origin_complete": origin_complete,
+            "checklist": checklist,
+            "require_seller_kyc": settings.REQUIRE_SELLER_KYC,
         },
     )
 
@@ -512,10 +576,18 @@ class StoreOnboardView(APIView):
 
     def post(self, request):
         user = request.user
+        # Loja pode nascer antes do KYC — fica pendente até o admin
+        # conferir RG frente/verso + selfie e liberar a vitrine.
         if settings.REQUIRE_SELLER_KYC:
             seller_kyc = getattr(user, "seller_kyc", None)
-            if not seller_kyc or seller_kyc.status != seller_kyc.Status.APPROVED:
-                raise PermissionDenied("KYC de vendedora precisa estar aprovado antes de abrir loja.")
+            if not seller_kyc or seller_kyc.status not in {
+                seller_kyc.Status.PENDING,
+                seller_kyc.Status.APPROVED,
+            }:
+                raise PermissionDenied(
+                    "Envie o KYC (RG frente/verso + selfie) antes de abrir a loja. "
+                    "Após a análise, a vitrine é liberada."
+                )
         if not user.cpf:
             raise PermissionDenied("Complete o cadastro com CPF antes de abrir loja.")
         if hasattr(user, "store"):

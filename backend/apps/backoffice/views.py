@@ -266,7 +266,11 @@ def moderate(request, item_id, decision):
         messages.warning(request, "Este item já foi revisado.")
         return redirect("backoffice:moderation")
     if decision == "approve":
-        item.approve(request.user)
+        try:
+            item.approve(request.user)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect("backoffice:moderation")
         messages.success(request, "Conteúdo aprovado e publicado.")
     elif decision == "reject":
         item.reject(request.user)
@@ -388,6 +392,146 @@ def accounts(request):
             "ordering": "",
         },
     )
+
+
+@staff_required
+def kyc_queue(request):
+    """Fila de verificação: RG frente/verso + selfie para liberar loja."""
+    status_filter = request.GET.get("status", SellerKYC.Status.PENDING).strip()
+    query = request.GET.get("q", "").strip()
+    queryset = SellerKYC.objects.select_related("user", "user__store", "reviewed_by").order_by(
+        "-submitted_at", "-created_at"
+    )
+    if status_filter in SellerKYC.Status.values:
+        queryset = queryset.filter(status=status_filter)
+    if query:
+        queryset = queryset.filter(
+            Q(user__email__icontains=query)
+            | Q(user__cpf__icontains="".join(c for c in query if c.isdigit()))
+            | Q(user__store__display_name__icontains=query)
+            | Q(user__store__slug__icontains=query)
+            | Q(verification_code__icontains=query)
+        )
+    return render(
+        request,
+        "backoffice/kyc_queue.html",
+        {
+            "active_tab": "kyc",
+            "items": Paginator(queryset, 40).get_page(request.GET.get("page")),
+            "query": query,
+            "status_filter": status_filter,
+            "kyc_statuses": SellerKYC.Status.choices,
+            "pending_count": SellerKYC.objects.filter(status=SellerKYC.Status.PENDING).count(),
+        },
+    )
+
+
+@staff_required
+def seller_detail(request, store_id):
+    """Dossiê da vendedora: loja, métricas e fotos de segurança do KYC."""
+    store = get_object_or_404(
+        Store.objects.select_related("owner", "owner__seller_kyc", "plan"),
+        id=store_id,
+    )
+    owner = store.owner
+    kyc = getattr(owner, "seller_kyc", None)
+    paid_statuses = [
+        Order.Status.PAID,
+        Order.Status.SHIPPED,
+        Order.Status.DELIVERED,
+    ]
+    orders = (
+        Order.objects.filter(store=store)
+        .select_related("buyer", "payment")
+        .order_by("-created_at")[:20]
+    )
+    products = (
+        Product.objects.filter(store=store)
+        .order_by("-created_at")[:12]
+    )
+    gross = (
+        Order.objects.filter(store=store, status__in=paid_statuses).aggregate(
+            total=Sum("items_total")
+        )["total"]
+        or 0
+    )
+    from apps.wallet.models import WalletEntry
+
+    context = {
+        "active_tab": "sellers",
+        "store": store,
+        "owner": owner,
+        "kyc": kyc,
+        "orders": orders,
+        "products": products,
+        "metrics": {
+            "products": store.products.count(),
+            "published": store.products.filter(status=Product.Status.PUBLISHED).count(),
+            "orders": Order.objects.filter(store=store).count(),
+            "gross_sales": gross,
+            "available_balance": WalletEntry.objects.available_balance(store),
+            "pending_balance": WalletEntry.objects.pending_balance(store),
+        },
+        "origin_complete": bool(
+            store.origin_cep and store.origin_street and store.origin_city and store.origin_state
+        ),
+    }
+    return render(request, "backoffice/seller_detail.html", context)
+
+
+@require_POST
+@staff_required
+def kyc_decide(request, kyc_id, decision):
+    kyc = get_object_or_404(SellerKYC.objects.select_related("user", "user__store"), id=kyc_id)
+    store = getattr(kyc.user, "store", None)
+    redirect_to = (
+        reverse("backoffice:seller_detail", args=[store.id])
+        if store
+        else reverse("backoffice:kyc_queue")
+    )
+
+    if kyc.status != SellerKYC.Status.PENDING:
+        if decision == "approve" and kyc.status == SellerKYC.Status.APPROVED:
+            messages.info(request, "Este KYC já está aprovado.")
+        else:
+            messages.warning(
+                request,
+                "Só é possível decidir KYCs em análise. Peça reenvio se estiver recusado.",
+            )
+        return redirect(redirect_to)
+
+    if decision == "approve":
+        birth_raw = (request.POST.get("document_birth_date") or "").strip()
+        if not birth_raw:
+            messages.error(request, "Informe a data de nascimento lida no documento.")
+            return redirect(redirect_to)
+        try:
+            from datetime import date as date_cls
+
+            year, month, day = (int(part) for part in birth_raw.split("-"))
+            birth = date_cls(year, month, day)
+        except (TypeError, ValueError):
+            messages.error(request, "Data de nascimento inválida.")
+            return redirect(redirect_to)
+        try:
+            kyc.approve(reviewer=request.user, document_birth_date=birth, activate_store=True)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(redirect_to)
+        messages.success(
+            request,
+            "KYC aprovado. Idade verificada e loja liberada (quando existir e não estiver suspensa).",
+        )
+    elif decision == "reject":
+        reason = (request.POST.get("reason") or "").strip()
+        if len(reason) < 10:
+            messages.error(request, "Descreva o motivo da recusa (mín. 10 caracteres).")
+            return redirect(redirect_to)
+        kyc.reject(reviewer=request.user, reason=reason)
+        messages.success(request, "KYC recusado. A vendedora pode reenviar as fotos.")
+    else:
+        return HttpResponseNotAllowed(["POST"])
+    return redirect(redirect_to)
 
 
 @staff_required

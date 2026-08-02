@@ -1,0 +1,181 @@
+{% extends "backoffice/base.html" %}
+{% block title %}{{ store.display_name }} — Dossiê{% endblock %}
+{% block content %}
+<div class="top">
+  <div>
+    <h1>{{ store.display_name }}</h1>
+    <div class="muted">/{{ store.slug }} · {{ store.get_status_display }} · responsável {{ owner.email }}</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="{% url 'backoffice:stores' %}">← Todas as lojas</a>
+    <a class="btn" href="{% url 'backoffice:kyc_queue' %}">Fila KYC</a>
+    {% if store.status == 'active' %}
+    <a class="btn" href="{% url 'stores:detail' store.slug %}" target="_blank" rel="noreferrer">Vitrine pública</a>
+    {% endif %}
+  </div>
+</div>
+
+<section class="grid metrics">
+  <div class="card metric"><strong>{{ metrics.published }}</strong><span>Anúncios publicados / {{ metrics.products }}</span></div>
+  <div class="card metric"><strong>{{ metrics.orders }}</strong><span>Pedidos</span></div>
+  <div class="card metric"><strong>R$ {{ metrics.gross_sales|floatformat:2 }}</strong><span>Vendas (itens)</span></div>
+  <div class="card metric"><strong>R$ {{ metrics.available_balance|floatformat:2 }}</strong><span>Saldo disponível</span></div>
+  <div class="card metric"><strong>{{ store.avg_rating|floatformat:1 }}</strong><span>{{ store.review_count }} avaliações · {{ store.sales_count }} vendas</span></div>
+</section>
+
+<section class="section grid two">
+  <div class="card stack">
+    <h2>Dados da loja</h2>
+    <dl class="dl">
+      <dt>Status</dt><dd><span class="badge">{{ store.get_status_display }}</span></dd>
+      <dt>Bio</dt><dd>{{ store.bio|default:"—" }}</dd>
+      <dt>Chave Pix</dt><dd>{% if store.pix_key %}{{ store.pix_key_type }} · {{ store.pix_key }}{% else %}<span class="danger">Não cadastrada</span>{% endif %}</dd>
+      <dt>Subconta PSP</dt><dd>{{ store.psp_subaccount_id|default:"—" }}</dd>
+      <dt>Origem postagem</dt>
+      <dd>
+        {% if origin_complete %}
+        <span class="ok">Completa</span> — {{ store.origin_street }}, {{ store.origin_number }}
+        {% if store.origin_complement %} · {{ store.origin_complement }}{% endif %}
+        · {{ store.origin_district }} · {{ store.origin_city }}/{{ store.origin_state }} · CEP {{ store.origin_cep }}
+        {% else %}
+        <span class="danger">Incompleta</span>
+        {% endif %}
+      </dd>
+      <dt>Criada em</dt><dd>{{ store.created_at|date:"d/m/Y H:i" }}</dd>
+      <dt>Saldo em custódia</dt><dd>R$ {{ metrics.pending_balance|floatformat:2 }}</dd>
+    </dl>
+  </div>
+
+  <div class="card stack">
+    <h2>Conta da vendedora</h2>
+    <dl class="dl">
+      <dt>Nome</dt><dd>{{ owner.get_full_name|default:"—" }}</dd>
+      <dt>E-mail</dt><dd>{{ owner.email }}</dd>
+      <dt>CPF</dt><dd>{{ owner.cpf|default:"—" }}</dd>
+      <dt>Nascimento cadastro</dt><dd>{{ owner.birth_date|date:"d/m/Y"|default:"—" }}</dd>
+      <dt>Idade verificada</dt>
+      <dd>{% if owner.is_age_verified %}<span class="ok">Sim</span>{% else %}<span class="warn">Não</span>{% endif %}</dd>
+      <dt>Telefone</dt><dd>{{ owner.phone_number|default:"—" }}{% if owner.is_phone_verified %} <span class="ok">(confirmado)</span>{% endif %}</dd>
+      <dt>Cadastro</dt><dd>{{ owner.date_joined|date:"d/m/Y H:i" }}</dd>
+      <dt>Banida</dt><dd>{% if owner.is_banned %}<span class="danger">Sim</span>{% else %}Não{% endif %}</dd>
+    </dl>
+  </div>
+</section>
+
+<section class="section card stack">
+  <h2>Fotos de segurança (KYC)</h2>
+  {% if kyc %}
+  <dl class="dl">
+    <dt>Status</dt>
+    <dd>
+      <span class="badge {% if kyc.status == 'approved' %}ok{% elif kyc.status == 'rejected' %}danger{% elif kyc.status == 'pending' %}warn{% endif %}">
+        {{ kyc.get_status_display }}
+      </span>
+    </dd>
+    <dt>Código na selfie</dt><dd><code>{{ kyc.verification_code }}</code></dd>
+    <dt>Enviado em</dt><dd>{% if kyc.submitted_at %}{{ kyc.submitted_at|date:"d/m/Y H:i" }}{% else %}—{% endif %}</dd>
+    <dt>Nasc. no documento</dt><dd>{% if kyc.document_birth_date %}{{ kyc.document_birth_date|date:"d/m/Y" }}{% else %}—{% endif %}</dd>
+    <dt>Revisor</dt>
+    <dd>
+      {% if kyc.reviewed_by %}{{ kyc.reviewed_by.email }} em {{ kyc.reviewed_at|date:"d/m/Y H:i" }}{% else %}—{% endif %}
+    </dd>
+    {% if kyc.rejection_reason %}
+    <dt>Motivo recusa</dt><dd class="danger">{{ kyc.rejection_reason }}</dd>
+    {% endif %}
+  </dl>
+
+  <div class="kyc-grid">
+    <figure class="kyc-shot">
+      {% if kyc.document_front %}
+      <a href="{% url 'backoffice:kyc_file' kyc.id 'document_front' %}" target="_blank" rel="noreferrer">
+        <img src="{% url 'backoffice:kyc_file' kyc.id 'document_front' %}" alt="RG frente">
+      </a>
+      {% else %}
+      <div class="empty">Frente não enviada</div>
+      {% endif %}
+      <figcaption>Documento — frente</figcaption>
+    </figure>
+    <figure class="kyc-shot">
+      {% if kyc.document_back %}
+      <a href="{% url 'backoffice:kyc_file' kyc.id 'document_back' %}" target="_blank" rel="noreferrer">
+        <img src="{% url 'backoffice:kyc_file' kyc.id 'document_back' %}" alt="RG verso">
+      </a>
+      {% else %}
+      <div class="empty">Verso não enviado</div>
+      {% endif %}
+      <figcaption>Documento — verso</figcaption>
+    </figure>
+    <figure class="kyc-shot">
+      {% if kyc.selfie_with_document %}
+      <a href="{% url 'backoffice:kyc_file' kyc.id 'selfie_with_document' %}" target="_blank" rel="noreferrer">
+        <img src="{% url 'backoffice:kyc_file' kyc.id 'selfie_with_document' %}" alt="Selfie com documento">
+      </a>
+      {% else %}
+      <div class="empty">Selfie não enviada</div>
+      {% endif %}
+      <figcaption>Selfie + documento + código</figcaption>
+    </figure>
+  </div>
+
+  {% if kyc.status == 'pending' or kyc.status == 'rejected' %}
+  <div class="grid two" style="margin-top:8px">
+    <form method="post" action="{% url 'backoffice:kyc_decide' kyc.id 'approve' %}" class="stack">
+      {% csrf_token %}
+      <label class="muted" for="document_birth_date">Data de nascimento lida no documento</label>
+      <input id="document_birth_date" type="date" name="document_birth_date" required>
+      <button class="btn ok-bg" type="submit">Aprovar KYC e liberar loja</button>
+      <p class="muted">Confira se o rosto bate, se o código {{ kyc.verification_code }} aparece na selfie e se a data no documento é legível.</p>
+    </form>
+    <form method="post" action="{% url 'backoffice:kyc_decide' kyc.id 'reject' %}" class="stack">
+      {% csrf_token %}
+      <label class="muted" for="reason">Motivo da recusa (visível para a vendedora)</label>
+      <textarea id="reason" name="reason" required minlength="10" placeholder="Ex.: selfie ilegível / código não confere / documento sem data de nascimento"></textarea>
+      <button class="btn danger-bg" type="submit">Recusar e pedir reenvio</button>
+    </form>
+  </div>
+  {% elif kyc.status == 'approved' and store.status != 'active' and store.status != 'banned' and store.status != 'suspended' %}
+  <p class="warn">KYC aprovado, mas a loja ainda não está ativa. Verifique a fila de moderação.</p>
+  {% endif %}
+  {% else %}
+  <p class="empty">Esta vendedora ainda não enviou o KYC.</p>
+  {% endif %}
+</section>
+
+<section class="section grid two">
+  <div>
+    <h2>Pedidos recentes</h2>
+    <table>
+      <thead><tr><th>Pedido</th><th>Status</th><th>Total</th><th>Data</th></tr></thead>
+      <tbody>
+      {% for order in orders %}
+        <tr>
+          <td>{{ order.short_id }}</td>
+          <td><span class="badge">{{ order.get_status_display }}</span></td>
+          <td>R$ {{ order.grand_total|floatformat:2 }}</td>
+          <td>{{ order.created_at|date:"d/m/Y H:i" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="empty">Nenhum pedido.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <h2>Anúncios recentes</h2>
+    <table>
+      <thead><tr><th>Título</th><th>Status</th><th>Preço</th></tr></thead>
+      <tbody>
+      {% for product in products %}
+        <tr>
+          <td>{{ product.title }}</td>
+          <td><span class="badge">{{ product.get_status_display }}</span></td>
+          <td>R$ {{ product.price|floatformat:2 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="3" class="empty">Nenhum anúncio.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

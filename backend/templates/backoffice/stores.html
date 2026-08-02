@@ -17,7 +17,10 @@
     <td><strong>{{ store.avg_rating|floatformat:1 }}</strong> ({{ store.review_count }})<div class="muted">ajustada: {{ store.bayesian_rating|floatformat:2 }}</div></td>
     <td>{{ store.sales_count }}</td>
     <td>{% if store.origin_cep and store.origin_street %}<span class="ok">Completa</span>{% else %}<span class="danger">Incompleta</span>{% endif %}</td>
-    <td class="actions"><a class="btn" href="{% url 'stores:detail' store.slug %}" target="_blank" rel="noreferrer">Ver</a><a class="btn" href="/admin/stores/store/{{ store.id }}/change/">Editar</a></td>
+    <td class="actions">
+      <a class="btn primary" href="{% url 'backoffice:seller_detail' store.id %}">Dossiê</a>
+      <a class="btn" href="{% url 'stores:detail' store.slug %}" target="_blank" rel="noreferrer">Vitrine</a>
+    </td>
   </tr>
 {% empty %}<tr><td colspan="7" class="empty">Nenhuma loja encontrada.</td></tr>{% endfor %}
 </tbody></table>

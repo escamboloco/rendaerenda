@@ -1,17 +1,26 @@
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
 from unittest.mock import patch
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from PIL import Image
 
-from apps.accounts.models import User
+from apps.accounts.models import SellerKYC, User
 from apps.catalog.models import Category, Product
 from apps.moderation.models import ModerationQueueItem
 from apps.stores.models import Store
+
+
+def _jpeg(name: str = "doc.jpg") -> SimpleUploadedFile:
+    buffer = BytesIO()
+    Image.new("RGB", (40, 40), color=(200, 120, 80)).save(buffer, format="JPEG")
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/jpeg")
 
 
 @override_settings(
@@ -163,6 +172,87 @@ class BackofficeTests(TestCase):
         store.refresh_from_db()
         self.assertEqual(product.status, Product.Status.PUBLISHED)
         self.assertEqual(store.status, Store.Status.SUSPENDED)
+
+    @override_settings(REQUIRE_SELLER_KYC=True)
+    def test_cannot_activate_store_without_approved_kyc(self):
+        store = Store.objects.create(
+            owner=self.regular,
+            slug="sem-kyc",
+            display_name="Sem KYC",
+            status=Store.Status.PENDING_MODERATION,
+        )
+        store_item = ModerationQueueItem.objects.create(
+            target_type=ModerationQueueItem.TargetType.STORE,
+            content_type=ContentType.objects.get_for_model(Store),
+            object_id=str(store.id),
+        )
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse("backoffice:moderate", args=[store_item.id, "approve"]),
+            follow=True,
+        )
+        store.refresh_from_db()
+        store_item.refresh_from_db()
+        self.assertEqual(store.status, Store.Status.PENDING_MODERATION)
+        self.assertEqual(store_item.decision, ModerationQueueItem.Decision.PENDING)
+        self.assertContains(response, "Aprove o KYC")
+
+    @override_settings(REQUIRE_SELLER_KYC=True)
+    def test_kyc_approve_activates_store_and_serves_security_photos(self):
+        store = Store.objects.create(
+            owner=self.regular,
+            slug="com-kyc",
+            display_name="Com KYC",
+            status=Store.Status.PENDING_MODERATION,
+        )
+        ModerationQueueItem.objects.create(
+            target_type=ModerationQueueItem.TargetType.STORE,
+            content_type=ContentType.objects.get_for_model(Store),
+            object_id=str(store.id),
+        )
+        kyc = SellerKYC.objects.create(
+            user=self.regular,
+            status=SellerKYC.Status.PENDING,
+            document_front=_jpeg("front.jpg"),
+            document_back=_jpeg("back.jpg"),
+            selfie_with_document=_jpeg("selfie.jpg"),
+        )
+        self.client.force_login(self.staff)
+        detail = self.client.get(reverse("backoffice:seller_detail", args=[store.id]))
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, "Fotos de segurança")
+        self.assertContains(detail, kyc.verification_code)
+
+        photo = self.client.get(
+            reverse("backoffice:kyc_file", args=[kyc.id, "document_front"])
+        )
+        self.assertEqual(photo.status_code, 200)
+        self.assertEqual(photo["Cache-Control"], "no-store, private")
+
+        response = self.client.post(
+            reverse("backoffice:kyc_decide", args=[kyc.id, "approve"]),
+            {"document_birth_date": "1991-05-20"},
+        )
+        self.assertRedirects(response, reverse("backoffice:seller_detail", args=[store.id]))
+        kyc.refresh_from_db()
+        store.refresh_from_db()
+        self.regular.refresh_from_db()
+        self.assertEqual(kyc.status, SellerKYC.Status.APPROVED)
+        self.assertEqual(store.status, Store.Status.ACTIVE)
+        self.assertTrue(self.regular.is_age_verified)
+
+    def test_kyc_queue_lists_pending(self):
+        SellerKYC.objects.create(
+            user=self.regular,
+            status=SellerKYC.Status.PENDING,
+            document_front=_jpeg("front.jpg"),
+            document_back=_jpeg("back.jpg"),
+            selfie_with_document=_jpeg("selfie.jpg"),
+        )
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("backoffice:kyc_queue"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.regular.email)
 
 
 class CreateAdminCommandTests(TestCase):

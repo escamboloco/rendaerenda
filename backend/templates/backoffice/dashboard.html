@@ -13,7 +13,7 @@
   <div class="grid two">
     <a class="card" href="{% url 'backoffice:moderation' %}"><strong>{{ alerts.moderation }}</strong> itens na moderação · <span class="danger">{{ alerts.urgent_reports }} denúncias urgentes</span></a>
     <a class="card" href="{% url 'backoffice:disputes' %}"><strong>{{ alerts.disputes }}</strong> disputas abertas</a>
-    <a class="card" href="/admin/accounts/sellerkyc/"><strong>{{ alerts.kyc }}</strong> KYCs aguardando revisão</a>
+    <a class="card" href="{% url 'backoffice:kyc_queue' %}"><strong>{{ alerts.kyc }}</strong> KYCs aguardando revisão (RG + selfie)</a>
     <div class="card"><strong>{{ alerts.labels }}</strong> pedidos pagos sem etiqueta · <strong>{{ alerts.unpaid_expired }}</strong> Pix vencidos ainda abertos</div>
   </div>
 </section>

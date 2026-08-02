@@ -172,7 +172,7 @@ class SellerKYC(models.Model):
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def approve(self, reviewer: User, *, document_birth_date=None):
+    def approve(self, reviewer: User, *, document_birth_date=None, activate_store: bool = True):
         """
         Aprova o KYC e, com a data de nascimento lida no documento,
         promove a conta a "idade verificada".
@@ -180,23 +180,29 @@ class SellerKYC(models.Model):
         Sem data do documento a conta continua NÃO verificada: a idade é
         exigência legal (Lei 15.211/2025) e não pode sair de um aceite
         administrativo às cegas.
+
+        Com `activate_store=True` (padrão), a loja da vendedora passa a
+        ACTIVE e a fila de moderação da loja é encerrada — é o passo que
+        libera a vitrine após a conferência das fotos de segurança.
         """
         from apps.payments.services import is_adult
+
+        if document_birth_date:
+            self.document_birth_date = document_birth_date
+        if not self.document_birth_date:
+            raise ValueError(
+                "Informe a data de nascimento lida no documento antes de aprovar."
+            )
 
         self.status = self.Status.APPROVED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
         self.rejection_reason = ""
-        if document_birth_date:
-            self.document_birth_date = document_birth_date
         self.save(
             update_fields=[
                 "status", "reviewed_by", "reviewed_at", "rejection_reason", "document_birth_date"
             ]
         )
-
-        if not self.document_birth_date:
-            return
 
         if not is_adult(self.document_birth_date):
             self.user.ban("Menor de idade confirmado na conferência do documento.")
@@ -218,6 +224,41 @@ class SellerKYC(models.Model):
         )
         self.user.is_age_verified = True
         self.user.save(update_fields=["is_age_verified"])
+
+        if activate_store:
+            self._activate_store_after_kyc(reviewer)
+
+    def _activate_store_after_kyc(self, reviewer: User) -> None:
+        """Libera a loja pendente após KYC aprovado (não reativa banida/suspensa)."""
+        from django.contrib.contenttypes.models import ContentType
+
+        from apps.moderation.models import ModerationQueueItem
+        from apps.stores.models import Store
+
+        store = getattr(self.user, "store", None)
+        if not store:
+            return
+        if store.status in {Store.Status.BANNED, Store.Status.SUSPENDED}:
+            return
+        if store.status != Store.Status.ACTIVE:
+            store.status = Store.Status.ACTIVE
+            store.save(update_fields=["status"])
+
+        ct = ContentType.objects.get_for_model(Store)
+        pending = ModerationQueueItem.objects.filter(
+            content_type=ct,
+            object_id=str(store.id),
+            decision__in=[
+                ModerationQueueItem.Decision.PENDING,
+                ModerationQueueItem.Decision.AUTO_FLAGGED,
+            ],
+        )
+        now = timezone.now()
+        pending.update(
+            decision=ModerationQueueItem.Decision.APPROVED,
+            reviewed_by=reviewer,
+            reviewed_at=now,
+        )
 
     def reject(self, reviewer: User, reason: str):
         self.status = self.Status.REJECTED

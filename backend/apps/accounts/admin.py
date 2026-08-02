@@ -73,13 +73,17 @@ class SellerKYCAdmin(admin.ModelAdmin):
     def approve_selected(self, request, queryset):
         approved, missing = 0, 0
         for kyc in queryset:
-            if not kyc.document_birth_date:
+            try:
+                kyc.approve(reviewer=request.user)
+            except ValueError:
                 missing += 1
                 continue
-            kyc.approve(reviewer=request.user)
             approved += 1
         if approved:
-            self.message_user(request, f"{approved} KYC aprovado(s) e idade verificada.")
+            self.message_user(
+                request,
+                f"{approved} KYC aprovado(s), idade verificada e loja liberada quando aplicável.",
+            )
         if missing:
             self.message_user(
                 request,

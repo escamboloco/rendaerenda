@@ -323,8 +323,9 @@ def verify_payer_cpf(payment, webhook_payload: dict | None = None) -> bool:
     CPF divergente -> estorno automatico, se
     settings.REFUND_ON_PAYER_CPF_MISMATCH estiver ligado.
 
-    Retorna False apenas quando o pagamento foi (ou deveria ter sido)
-    estornado. PSP que nao informa o pagador nao bloqueia o pedido.
+    Retorna False quando o pagamento foi (ou deveria ter sido) estornado
+    por CPF divergente. Sem documento do pagador, com REQUIRE_PAYER_DOCUMENT
+    ativo, o produto fica retido (não libera).
     """
     provider = get_payment_provider()
     try:
@@ -338,7 +339,7 @@ def verify_payer_cpf(payment, webhook_payload: dict | None = None) -> bool:
     if not payer_doc:
         payment.payer_document = ""
         payment.payer_cpf_matched = None
-        if getattr(settings, "REQUIRE_PAYER_DOCUMENT", False):
+        if getattr(settings, "REQUIRE_PAYER_DOCUMENT", True):
             raise AsaasError(
                 "Pagamento recebido, aguardando identificação segura do pagador."
             )
@@ -346,7 +347,7 @@ def verify_payer_cpf(payment, webhook_payload: dict | None = None) -> bool:
 
     expected = digits(payment.order.payer_cpf)
     payment.payer_document = payer_doc[:14]
-    payment.payer_cpf_matched = payer_doc == expected
+    payment.payer_cpf_matched = bool(expected) and payer_doc == expected
     if payment.payer_cpf_matched:
         return True
 

@@ -25,18 +25,24 @@
     </div>
   </div>
 
-  {% elif require_seller_kyc and (not seller_kyc or seller_kyc.status != 'approved') %}
+  {% elif require_seller_kyc and (not seller_kyc or seller_kyc.status == 'not_sent' or seller_kyc.status == 'rejected') %}
   <div class="card p-6 text-center space-y-3">
     <p class="text-gray-300">
-      {% if seller_kyc and seller_kyc.status == 'pending' %}Seu KYC de vendedora está em análise.
-      {% else %}Envie seus documentos de verificação de vendedora para continuar.{% endif %}
+      {% if seller_kyc and seller_kyc.status == 'rejected' %}
+      Seu envio anterior não foi aprovado. Reenvie RG frente/verso e selfie para continuar.
+      {% else %}
+      Envie RG frente/verso e selfie com o código da conta. Depois disso você cria a loja; o admin libera a vitrine após a análise.
+      {% endif %}
     </p>
+    {% if seller_kyc and seller_kyc.rejection_reason %}
+    <p class="text-xs text-brand-light">{{ seller_kyc.rejection_reason }}</p>
+    {% endif %}
     <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="btn-primary w-full">
-      {% if seller_kyc and seller_kyc.status == 'pending' %}Ver status{% else %}Enviar documentos{% endif %}
+      {% if seller_kyc and seller_kyc.status == 'rejected' %}Reenviar documentos{% else %}Enviar documentos de segurança{% endif %}
     </a>
   </div>
 
-  {% elif not request.user.is_age_verified %}
+  {% elif not require_seller_kyc and not request.user.is_age_verified %}
   <div class="card p-6 text-center space-y-3">
     <p class="text-gray-300">Primeiro, confirme sua idade e identidade.</p>
     <p class="text-xs text-gray-500">Esta etapa protege você e impede que menores publiquem ou vendam na plataforma.</p>
@@ -44,6 +50,11 @@
   </div>
 
   {% else %}
+  {% if require_seller_kyc and seller_kyc and seller_kyc.status == 'pending' %}
+  <div class="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-100">
+    Documentos em análise. Você já pode criar a loja — a vitrine só fica pública depois que o admin aprovar o KYC.
+  </div>
+  {% endif %}
   <div x-data="storeOnboarding()" class="space-y-6">
     <form x-show="step === 1" @submit.prevent="createStore()" class="purchase-panel space-y-5">
       <div>

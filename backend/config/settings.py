@@ -323,7 +323,7 @@ NEUTRAL_BOX_PRICES = config("NEUTRAL_BOX_PRICES", default="")
 # Pix pago por CPF diferente do titular do pedido: estornar automaticamente.
 # E uma trava de idade (so adulto identificado compra), nao antifraude.
 REFUND_ON_PAYER_CPF_MISMATCH = config("REFUND_ON_PAYER_CPF_MISMATCH", default=True, cast=bool)
-REQUIRE_PAYER_DOCUMENT = config("REQUIRE_PAYER_DOCUMENT", default=False, cast=bool)
+REQUIRE_PAYER_DOCUMENT = config("REQUIRE_PAYER_DOCUMENT", default=True, cast=bool)
 REQUIRE_VERIFIED_BUYER_AGE = config(
     "REQUIRE_VERIFIED_BUYER_AGE", default=False, cast=bool
 )
@@ -339,7 +339,7 @@ ASAAS_ACCOUNT_TYPE = config("ASAAS_ACCOUNT_TYPE", default="pf").lower()
 # com custodia ligada, o repasse acontece na liberacao (AUTO_PAYOUT_ON_RELEASE).
 AUTO_PAYOUT_ON_PAYMENT = config("AUTO_PAYOUT_ON_PAYMENT", default=False, cast=bool)
 # Soft-launch: abrir loja sem KYC aprovado (ainda exige idade +18 no site).
-REQUIRE_SELLER_KYC = config("REQUIRE_SELLER_KYC", default=False, cast=bool)
+REQUIRE_SELLER_KYC = config("REQUIRE_SELLER_KYC", default=True, cast=bool)
 
 # --- Verificacao de idade por biometria (Lei 15.211/2025) ---
 # Cada bureau tem endpoint proprio, entao a URL e explicita — nunca

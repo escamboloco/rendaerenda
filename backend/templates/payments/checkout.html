@@ -64,9 +64,15 @@
         </div>
 
         {% if request.user.is_authenticated %}
-        <div class="rounded-xl bg-white/5 border border-surface-border px-4 py-3 text-sm">
+        <div class="rounded-xl bg-white/5 border border-surface-border px-4 py-3 text-sm space-y-1">
           <p class="text-gray-300">{{ request.user.get_full_name|default:request.user.email }}</p>
           <p class="text-xs text-gray-500">{{ request.user.email }}</p>
+          {% if request.user.cpf %}
+          <p class="text-xs text-gray-400">CPF da compra: <span class="text-gray-200 font-medium">{{ request.user.cpf|slice:":3" }}.XXX.XXX-{{ request.user.cpf|slice:"9:" }}</span></p>
+          {% else %}
+          <p class="text-xs text-amber-300">Complete o CPF no perfil antes de pagar.</p>
+          {% endif %}
+          <p class="text-[11px] text-gray-500 pt-1">O Pix precisa sair desta mesma conta/CPF. Pix de outro CPF é estornado automaticamente e o pedido não é liberado.</p>
         </div>
         {% else %}
         <div class="grid sm:grid-cols-2 gap-3">
@@ -81,8 +87,9 @@
             <p x-cloak x-show="fieldErrors.email" x-text="fieldErrors.email" class="input-error"></p>
           </div>
           <div>
-            <label class="input-label" for="guest-cpf">CPF</label>
-            <input id="guest-cpf" type="text" x-model="guest.cpf" @input="formatCPF()" inputmode="numeric" maxlength="14" class="input-field" placeholder="000.000.000-00">
+            <label class="input-label" for="guest-cpf">CPF (obrigatório para o Pix)</label>
+            <input id="guest-cpf" type="text" x-model="guest.cpf" @input="formatCPF()" inputmode="numeric" maxlength="14" class="input-field" placeholder="000.000.000-00" required>
+            <p class="input-help">Pague com o Pix desta mesma titularidade. Pix de outro CPF é estornado.</p>
             <p x-cloak x-show="fieldErrors.cpf" x-text="fieldErrors.cpf" class="input-error"></p>
           </div>
           <div>
@@ -215,6 +222,7 @@
               <p class="text-sm text-gray-400" x-show="paymentMethod === 'pix'">
                 Abra o app do banco, escaneie o QR ou cole o código.
                 Use o <strong class="text-white">mesmo CPF</strong> informado na compra.
+                Se o Pix vier de outro CPF, o valor é estornado e o pedido não libera.
               </p>
               <p class="text-sm text-gray-400" x-cloak x-show="paymentMethod === 'credit_card'">
                 A página segura do Asaas abriu em outra aba. Se não abriu, use o botão abaixo —

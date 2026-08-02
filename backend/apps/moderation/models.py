@@ -44,11 +44,19 @@ class ModerationQueueItem(models.Model):
         indexes = [models.Index(fields=["decision", "target_type"])]
 
     def approve(self, reviewer):
+        from django.conf import settings as django_settings
+
         from apps.catalog.models import Product
         from apps.stores.models import Store
 
         target = self.target
         if isinstance(target, Store):
+            if getattr(django_settings, "REQUIRE_SELLER_KYC", True):
+                kyc = getattr(target.owner, "seller_kyc", None)
+                if not kyc or kyc.status != kyc.Status.APPROVED:
+                    raise ValueError(
+                        "Aprove o KYC (RG frente/verso + selfie) antes de liberar a loja."
+                    )
             target.status = Store.Status.ACTIVE
             target.save(update_fields=["status"])
         elif isinstance(target, Product):
