@@ -1,0 +1,71 @@
+{% extends "backoffice/_base.html" %}
+{% block title %}Contas{% endblock %}
+
+{% block content %}
+<h1 class="text-lg font-bold mb-1">Contas</h1>
+<p class="text-xs text-gray-500 mb-4">
+  Busque por e-mail ou CPF para atender quem escreveu pedindo ajuda.
+</p>
+
+<div class="grid grid-cols-3 gap-3 mb-5">
+  <div class="bo-kpi"><p class="bo-kpi__v">{{ total_contas }}</p><p class="bo-kpi__l">contas</p></div>
+  <div class="bo-kpi"><p class="bo-kpi__v">{{ vendedoras }}</p><p class="bo-kpi__l">vendedoras</p></div>
+  <div class="bo-kpi">
+    <p class="bo-kpi__v {% if banidas %}text-red-300{% endif %}">{{ banidas }}</p>
+    <p class="bo-kpi__l">banidas</p>
+  </div>
+</div>
+
+<form method="get" class="flex gap-2 mb-4">
+  <input type="search" name="q" value="{{ busca }}" placeholder="e-mail, CPF ou usuário"
+         class="input-field max-w-md" aria-label="Buscar conta">
+  <button type="submit" class="btn-primary !py-2 !min-h-0">Buscar</button>
+</form>
+
+{% if busca %}
+<div class="card overflow-x-auto">
+  <table class="w-full text-sm">
+    <thead class="text-xs text-gray-500 border-b border-surface-border">
+      <tr>
+        <th class="text-left px-4 py-2.5 font-medium">E-mail</th>
+        <th class="text-left px-4 py-2.5 font-medium">CPF</th>
+        <th class="text-left px-4 py-2.5 font-medium">Papel</th>
+        <th class="text-left px-4 py-2.5 font-medium">Idade verif.</th>
+        <th class="text-left px-4 py-2.5 font-medium">Loja</th>
+        <th class="text-left px-4 py-2.5 font-medium">Situação</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in usuarios %}
+      <tr class="border-b border-surface-border/50 last:border-0 {% if u.is_banned %}bg-red-950/20{% endif %}">
+        <td class="px-4 py-2.5 truncate max-w-[16rem]">{{ u.email }}</td>
+        <td class="px-4 py-2.5 font-mono text-xs text-gray-500">{{ u.cpf }}</td>
+        <td class="px-4 py-2.5 text-xs">{{ u.get_role_display }}</td>
+        <td class="px-4 py-2.5 text-xs">
+          {% if u.is_age_verified %}<span class="text-emerald-400">sim</span>
+          {% else %}<span class="text-gray-600">não</span>{% endif %}
+        </td>
+        <td class="px-4 py-2.5 text-xs truncate max-w-[12rem]">
+          {% if u.has_store %}
+          <a href="/loja/{{ u.store.slug }}/" target="_blank" rel="noopener" class="hover:text-brand-light">
+            {{ u.store.display_name }}
+          </a>
+          {% else %}—{% endif %}
+        </td>
+        <td class="px-4 py-2.5">
+          {% if u.is_banned %}<span class="bo-status bo-status--disputed">banida</span>
+          {% elif u.is_active %}<span class="bo-status bo-status--delivered">ativa</span>
+          {% else %}<span class="bo-status bo-status--canceled">inativa</span>{% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="px-4 py-10 text-center text-gray-500">Nada encontrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-[11px] text-gray-600 mt-2">
+  CPF aparece aqui por necessidade de atendimento e fica registrado no log de acesso ao painel.
+</p>
+{% endif %}
+{% endblock %}

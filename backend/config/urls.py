@@ -13,9 +13,14 @@ import apps.reviews.urls as reviews_urls
 import apps.stores.urls as stores_urls
 import apps.subscriptions.urls as subscriptions_urls
 import apps.wallet.urls as wallet_urls
-from apps.core.sitemaps import ProductSitemap, StaticViewSitemap, StoreSitemap
+from apps.core.sitemaps import CategorySitemap, ProductSitemap, StaticViewSitemap, StoreSitemap
 
-sitemaps = {"products": ProductSitemap, "stores": StoreSitemap, "static": StaticViewSitemap}
+sitemaps = {
+    "products": ProductSitemap,
+    "stores": StoreSitemap,
+    "categories": CategorySitemap,
+    "static": StaticViewSitemap,
+}
 
 api_urlpatterns = [
     path("", include((accounts_urls.urlpatterns, "accounts"))),
@@ -38,6 +43,10 @@ webhook_urlpatterns = [
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+<<<<<<< HEAD
+    # Painel de operacao (staff). Fica fora do sitemap e do age gate.
+=======
+>>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
     path("gestao/", include("apps.backoffice.urls")),
     path("entrada/", include("apps.core.urls")),
     path("contas/", include("allauth.urls")),

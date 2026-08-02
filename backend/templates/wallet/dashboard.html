@@ -24,11 +24,57 @@
     <div class="card p-5">
       <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Em custódia</p>
       <p class="text-3xl font-extrabold text-amber-400">R$ {{ pending_balance }}</p>
+      {% if next_release_at %}
+      <p class="text-[11px] text-gray-400 mt-1">
+        Próxima liberação em <strong class="text-amber-300">{{ next_release_at|date:"d/m/Y" }}</strong>
+      </p>
+      {% endif %}
       <p class="text-[11px] text-gray-500 mt-1">
         Vendas pagas aguardando o comprador confirmar o recebimento. Sem resposta, libera sozinho no prazo.
       </p>
     </div>
   </div>
+
+  {% if held_entries %}
+  {% comment %}
+  "Quanto está retido" sozinho não responde a pergunta que ela faz de
+  verdade, que é "quando esse dinheiro cai". Cada linha traz a data.
+  {% endcomment %}
+  <div class="card p-5 space-y-3">
+    <div>
+      <h2 class="font-semibold">O que está retido e até quando</h2>
+      <p class="text-xs text-gray-500 mt-1">
+        O valor libera quando o comprador confirma o recebimento — ou sozinho, na data abaixo,
+        se ele não responder em {{ dispute_window_days }} dias.
+      </p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="text-xs text-gray-500 border-b border-surface-border">
+          <tr>
+            <th class="text-left py-2 font-medium">Pedido</th>
+            <th class="text-right py-2 font-medium">Valor</th>
+            <th class="text-right py-2 font-medium">Libera em</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in held_entries %}
+          <tr class="border-b border-surface-border/50 last:border-0">
+            <td class="py-2 font-mono text-xs">
+              {% if entry.order %}{{ entry.order.short_id }}{% else %}—{% endif %}
+            </td>
+            <td class="py-2 text-right">R$ {{ entry.amount }}</td>
+            <td class="py-2 text-right text-amber-300 text-xs">{{ entry.available_at|date:"d/m/Y" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="text-[11px] text-gray-600">
+      Quer antecipar? Peça ao comprador para confirmar o recebimento na página do pedido dele.
+    </p>
+  </div>
+  {% endif %}
 
   <div class="card p-5 space-y-4">
     <h2 class="font-semibold">Sacar via Pix</h2>

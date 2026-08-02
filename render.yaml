@@ -39,7 +39,7 @@ envVarGroups:
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT
-        value: "15"
+        value: "20"
       - key: PACKAGING_FEE
         value: "0"
       # False = cotação SuperFrete real. True zera frete (só soft-launch).
@@ -187,6 +187,16 @@ services:
         sync: false
       # Pix da loja teste (CPF/e-mail/telefone/EVP). Sem isso o checkout bloqueia.
       - key: PIX_TEST_KEY
+        sync: false
+      # --- Painel de gestao (/gestao/entrar/) ---
+      # create_admin roda no build e cria/promove esta conta.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_CPF
+        sync: false
+      - key: ADMIN_BIRTH_DATE
         sync: false
 
   - type: cron

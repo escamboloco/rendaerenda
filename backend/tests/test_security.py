@@ -14,6 +14,14 @@ from .factories import make_product, make_user
 
 
 class AgeGateTests(ApiTestCase):
+<<<<<<< HEAD
+    def test_public_page_is_covered_by_the_gate(self):
+        """
+        O portão cobre a página em vez de redirecionar. Redirect deixava o
+        site inteiro fora do índice: crawler não tem sessão e levava 302
+        para /entrada/, que é noindex.
+        """
+=======
     def setUp(self):
         super().setUp()
         # Estes testes exercitam o gate — começam sem confirmação.
@@ -22,13 +30,37 @@ class AgeGateTests(ApiTestCase):
         session.save()
 
     def test_public_page_redirects_to_age_gate(self):
+>>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
         response = self.client.get("/")
-        self.assertEqual(response.status_code, 302)
-        self.assertIn("/entrada/", response["Location"])
 
-    def test_confirming_adult_unlocks_the_site(self):
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'role="dialog"')
+        self.assertContains(response, "Conteúdo restrito a maiores de 18 anos")
+        self.assertContains(response, "age-gate-locked")
+
+    def test_gated_page_still_declares_itself_indexable(self):
+        """É o ponto da mudança: a vitrine precisa ser lida por quem não tem sessão."""
+        response = self.client.get("/")
+
+        self.assertContains(response, 'name="robots" content="index, follow"')
+        self.assertContains(response, 'name="rating" content="adult"')
+        self.assertContains(response, 'property="og:image"')
+
+    def test_confirming_adult_removes_the_gate(self):
         self.client.post(reverse("core:age_gate"), {"confirm_adult": "yes", "next": "/"})
-        self.assertEqual(self.client.get("/").status_code, 200)
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "age-gate-locked")
+        self.assertNotContains(response, "Conteúdo restrito a maiores de 18 anos")
+
+    def test_gate_returns_to_the_page_the_visitor_asked_for(self):
+        response = self.client.post(
+            reverse("core:age_gate"), {"confirm_adult": "yes", "next": "/anuncios/"}
+        )
+
+        self.assertEqual(response["Location"], "/anuncios/")
 
     def test_minor_is_sent_away(self):
         response = self.client.post(reverse("core:age_gate"), {"confirm_adult": "no", "next": "/"})

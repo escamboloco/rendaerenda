@@ -4,7 +4,7 @@
 > A seção 1 abaixo descreve o modelo anterior (repasse Pix imediato na
 > confirmação do pagamento). Hoje o valor fica retido com a plataforma e
 > só é repassado quando o comprador confirma o recebimento — ou quando o
-> prazo vence sem contestação. A comissão padrão passou de 20% para 15%,
+> prazo vence sem contestação. A comissão padrão é de 20%,
 > e o catálogo aceita conteúdo digital e adicionais pagos.
 > A referência atual do fluxo é `backend/README.md`
 > (seções "Modelo de negócio" e "Fluxo de uma compra") e o checklist

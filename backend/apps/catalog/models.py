@@ -30,12 +30,25 @@ def payout_from_price(total_price: Decimal) -> Decimal:
 class Category(models.Model):
     name = models.CharField(max_length=60, unique=True)
     slug = models.SlugField(unique=True)
+    # Texto proprio da pagina /categorias/<slug>/. E o que faz a pagina de
+    # categoria ranquear: sem texto unico, ela e so uma grade de produtos
+    # igual a de todas as outras e o Google trata como duplicada.
+    description = models.TextField(
+        max_length=600,
+        blank=True,
+        help_text="Texto de abertura da página da categoria (SEO). Sem promessa sanitária nem menção a serviço.",
+    )
 
     class Meta:
         verbose_name_plural = "categories"
 
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+
+        return reverse("stores:category_detail", args=[self.slug])
 
 
 class Product(models.Model):

@@ -1,10 +1,14 @@
 {% extends "core/base.html" %}
+{% load seo %}
 {% block title %}{{ store.display_name }} — Renda &amp; Renda{% endblock %}
-{% block description %}{{ store.bio|default:"Loja verificada no Renda & Renda."|truncatechars:150 }}{% endblock %}
+{% block description %}{{ store.bio|default:"Loja verificada no Renda & Renda."|meta_text:155 }}{% endblock %}
 {% block robots %}index, follow{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 {% block og_title %}{{ store.display_name }} — loja +18{% endblock %}
-{% block og_description %}{{ store.bio|default:"Loja verificada com pagamento em custódia."|truncatechars:150 }}{% endblock %}
+{% block og_description %}{{ store.bio|default:"Loja verificada com pagamento em custódia."|meta_text:155 }}{% endblock %}
+{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% url 'core_pages:og_store' store.slug %}{% endblock %}
+{% block og_image_type %}image/jpeg{% endblock %}
+{% block og_image_alt %}Vitrine de {{ store.display_name }}{% endblock %}
 {% block body_class %}storefront-light{% endblock %}
 
 {% block extra_head %}
