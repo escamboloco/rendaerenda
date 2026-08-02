@@ -88,6 +88,19 @@
       linear-gradient(135deg, #fff 0%, #fbf7f9 100%);
     box-shadow: 0 28px 70px -48px rgba(74, 44, 59, 0.55);
   }
+  /* Rótulos da órbita: no hero claro o badge translúcido some. Placa
+     escura + texto branco (e verde bem claro no "ok"). */
+  .storefront-light .orbit-label {
+    color: #ffffff;
+    background: #1a1216;
+    border-color: rgba(255, 255, 255, 0.45);
+    box-shadow: 0 10px 24px rgba(48, 28, 38, 0.35);
+  }
+  .storefront-light .orbit-label--ok {
+    color: #ecfdf5;
+    background: #064e3b;
+    border-color: rgba(110, 231, 183, 0.7);
+  }
   .storefront-light .hero-grid h1,
   .storefront-light .section-title,
   .storefront-light .community-board h2 {
@@ -846,8 +859,22 @@
     --orbit-rx: 7rem;
     --orbit-ry: 6.25rem;
   }
+  /* Rótulos sobre o hero escuro: texto claro + placa opaca (os badges
+     translucent padrão somem no fundo do logo). */
+  .orbit-label {
+    @apply inline-flex items-center text-xs font-semibold px-3 py-1.5 rounded-full
+      leading-none whitespace-nowrap text-white border border-white/35 shadow-lift;
+    background: rgba(11, 7, 9, 0.94);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+  .orbit-label--ok {
+    border-color: rgba(110, 231, 183, 0.55);
+    background: rgba(4, 47, 36, 0.95);
+    color: #ecfdf5;
+  }
+
   .hero-orbit__satellite {
-    @apply absolute left-1/2 top-1/2 whitespace-nowrap;
+    @apply absolute left-1/2 top-1/2;
     animation: orbit-satellite 40s linear infinite;
   }
   .hero-orbit__satellite:nth-child(2) { animation-delay: -10s; }
