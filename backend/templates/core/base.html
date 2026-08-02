@@ -41,7 +41,7 @@ x-data no body: o header e o drawer da sacola usam $store.cart, e o Alpine
 so processa diretivas dentro de uma arvore com x-data. Componentes
 aninhados (x-data proprio) continuam funcionando normalmente.
 {% endcomment %}
-<body x-data="{ navOpen: false }" class="bg-surface text-gray-100 font-sans min-h-screen flex flex-col">
+<body x-data="{ navOpen: false }" class="bg-surface text-gray-100 font-sans min-h-screen flex flex-col {% block body_class %}{% endblock %}">
 
   <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 bg-brand text-white px-3 py-2 rounded-lg text-sm">Pular para o conteúdo</a>
 
@@ -91,9 +91,17 @@ aninhados (x-data proprio) continuam funcionando normalmente.
               <a href="{% url 'stores:onboard_page' %}" class="nav-link hidden md:inline">Abrir loja</a>
             {% endif %}
           {% endif %}
-          <a href="{% url 'accounts_pages:profile_page' %}" class="nav-link hidden sm:inline">Conta</a>
+          <a href="{% url 'accounts_pages:profile_page' %}" class="nav-link hidden sm:inline">Meu Perfil</a>
+          <form method="post" action="{% url 'account_logout' %}" class="hidden sm:inline">
+            {% csrf_token %}
+            <button type="submit" class="nav-link text-gray-400 hover:text-gray-200">Sair</button>
+          </form>
+          {% if request.user.is_staff %}
+          <a href="{% url 'backoffice:dashboard' %}" class="btn-secondary !py-2 !px-3 !min-h-0 hidden sm:inline-flex text-xs">Painel admin</a>
+          {% endif %}
         {% else %}
           <a href="{% url 'account_login' %}" class="nav-link">Entrar</a>
+          <a href="{% url 'backoffice:login' %}" class="nav-link hidden lg:inline text-gray-500 hover:text-gray-300">Admin</a>
           <a href="{% url 'account_signup' %}" class="btn-primary !py-2 !px-3 !min-h-0 hidden sm:inline-flex text-xs">Criar conta</a>
         {% endif %}
 
@@ -137,10 +145,17 @@ aninhados (x-data proprio) continuam funcionando normalmente.
           {% elif request.user.role == 'seller' %}
             <a href="{% url 'stores:onboard_page' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 text-brand-light">Abrir minha loja</a>
           {% endif %}
-          <a href="{% url 'accounts_pages:profile_page' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Minha conta</a>
-          <a href="{% url 'account_logout' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 text-gray-400">Sair</a>
+          <a href="{% url 'accounts_pages:profile_page' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Meu Perfil</a>
+          {% if request.user.is_staff %}
+          <a href="{% url 'backoffice:dashboard' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 font-semibold text-brand-light">Painel administrador</a>
+          {% endif %}
+          <form method="post" action="{% url 'account_logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="w-full text-left px-3 py-3 rounded-xl hover:bg-white/5 text-gray-400">Sair</button>
+          </form>
         {% else %}
           <a href="{% url 'account_login' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Entrar</a>
+          <a href="{% url 'backoffice:login' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Entrar como administrador</a>
           <a href="{% url 'account_signup' %}" class="btn-primary mt-1">Criar conta grátis</a>
         {% endif %}
       </nav>
@@ -245,6 +260,49 @@ aninhados (x-data proprio) continuam funcionando normalmente.
         </template>
 
         <p x-cloak x-show="$store.cart.error" x-text="$store.cart.error" class="input-error"></p>
+
+        <template x-if="!$store.cart.isEmpty && $store.cart.needsShipping">
+          <div class="rounded-xl border border-surface-border bg-surface-alt/60 p-3 space-y-2">
+            <p class="text-xs font-medium text-gray-300">Calcular frete antes do pagamento</p>
+            <template x-if="$store.cart.freightOriginLabel">
+              <p class="text-[11px] text-gray-500">Envio de <span x-text="$store.cart.freightOriginLabel"></span></p>
+            </template>
+            <div class="flex gap-2">
+              <input type="text" inputmode="numeric" maxlength="8" placeholder="Seu CEP"
+                     class="input-field flex-1 !py-2 !min-h-0 text-sm"
+                     x-model="$store.cart.freightCep"
+                     @keydown.enter.prevent="$store.cart.quoteFreight()">
+              <button type="button" class="btn-secondary !py-2 !min-h-0 text-xs shrink-0"
+                      :disabled="$store.cart.freightLoading"
+                      @click="$store.cart.quoteFreight()">
+                <span x-show="!$store.cart.freightLoading">Calcular</span>
+                <span x-show="$store.cart.freightLoading">…</span>
+              </button>
+            </div>
+            <p x-cloak x-show="$store.cart.freightError" x-text="$store.cart.freightError" class="input-error"></p>
+            <template x-if="$store.cart.freight">
+              <div class="space-y-1.5 pt-1">
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-400" x-text="$store.cart.freight.label"></span>
+                  <span class="font-semibold text-brand" x-text="money($store.cart.freightPrice)"></span>
+                </div>
+                <p class="text-[11px] text-gray-500"
+                   x-text="($store.cart.freight.deadline_days || '—') + ' dias úteis · valor cobrado no checkout'"></p>
+                <template x-if="$store.cart.freightItems && $store.cart.freightItems.length > 1">
+                  <div class="border-t border-surface-border pt-1.5 space-y-1">
+                    <p class="text-[10px] uppercase tracking-wide text-gray-600">Por peça</p>
+                    <template x-for="row in $store.cart.freightItems" :key="row.product_id">
+                      <div class="flex justify-between gap-2 text-[11px] text-gray-500">
+                        <span class="truncate" x-text="row.title"></span>
+                        <span class="shrink-0" x-text="money(row.price)"></span>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
 
       <div x-cloak x-show="!$store.cart.isEmpty" class="border-t border-surface-border px-5 py-4 space-y-3">
@@ -253,9 +311,21 @@ aninhados (x-data proprio) continuam funcionando normalmente.
             Pedido de uma única loja: <strong class="text-gray-300" x-text="$store.cart.summary.store.name"></strong>
           </p>
         </template>
-        <div class="flex items-center justify-between text-sm">
-          <span class="text-gray-400">Total</span>
-          <span class="text-xl font-extrabold text-brand" x-text="money($store.cart.total)"></span>
+        <div class="space-y-1 text-sm">
+          <div class="flex items-center justify-between text-gray-400">
+            <span>Itens</span>
+            <span x-text="money($store.cart.itemsTotal)"></span>
+          </div>
+          <div class="flex items-center justify-between text-gray-400" x-show="$store.cart.needsShipping">
+            <span>Frete</span>
+            <span x-show="$store.cart.freightLoading" class="text-gray-600">calculando…</span>
+            <span x-show="!$store.cart.freightLoading && $store.cart.freight" x-text="money($store.cart.freightPrice)"></span>
+            <span x-show="!$store.cart.freightLoading && !$store.cart.freight" class="text-gray-600">informe o CEP</span>
+          </div>
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-gray-300 font-medium">Total</span>
+            <span class="text-xl font-extrabold text-brand" x-text="money($store.cart.total)"></span>
+          </div>
         </div>
         <p class="text-[11px] text-gray-500">Pagamento por Pix com cobrança discreta. O valor fica retido até você confirmar a entrega.</p>
         <a href="{% url 'payments_pages:checkout_page' %}" class="btn-primary w-full">Ir para o pagamento</a>
@@ -332,6 +402,13 @@ aninhados (x-data proprio) continuam funcionando normalmente.
         <ul class="space-y-1.5 text-gray-500">
           <li><a href="{% url 'core_pages:terms' %}" class="hover:text-gray-300">Termos de Uso</a></li>
           <li><a href="{% url 'core_pages:privacy' %}" class="hover:text-gray-300">Privacidade</a></li>
+          <li>
+            {% if request.user.is_authenticated and request.user.is_staff %}
+            <a href="{% url 'backoffice:dashboard' %}" class="hover:text-gray-300">Painel administrador</a>
+            {% else %}
+            <a href="{% url 'backoffice:login' %}" class="hover:text-gray-300">Login administrador</a>
+            {% endif %}
+          </li>
         </ul>
         <p class="text-gray-600 text-[11px] leading-relaxed mt-2">Verificação de idade obrigatória. Denuncie conteúdo suspeito pelo botão em cada anúncio.</p>
       </div>

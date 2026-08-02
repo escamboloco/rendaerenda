@@ -98,6 +98,14 @@ class Product(models.Model):
         default=0, help_text="Dias para produzir (só para itens sob encomenda)."
     )
     weight_grams = models.PositiveIntegerField(default=0, help_text="Necessário para cálculo de frete.")
+    # Valor declarado na cotação/seguro do frete. A vendedora informa um
+    # aproximado por peça; se zero, usamos o preço público do anúncio.
+    freight_declared_value = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Valor aproximado declarado no frete (seguro). Se zero, usa o preço do anúncio.",
+    )
     length_cm = models.PositiveSmallIntegerField(default=16)
     width_cm = models.PositiveSmallIntegerField(default=11)
     height_cm = models.PositiveSmallIntegerField(default=2)
@@ -133,6 +141,13 @@ class Product(models.Model):
             # um valor esquecido no formulario vire cobranca de frete.
             self.weight_grams = 0
         super().save(*args, **kwargs)
+
+    @property
+    def shipping_declared_value(self) -> Decimal:
+        """Valor usado na cotação/seguro do frete para esta peça."""
+        if self.freight_declared_value and self.freight_declared_value > 0:
+            return self.freight_declared_value
+        return self.price or Decimal("0.00")
 
     @property
     def requires_shipping(self) -> bool:
@@ -223,6 +238,17 @@ class ProductQuestion(models.Model):
         return self.question[:60]
 
 
+def _product_media_storage():
+    from django.conf import settings
+    from django.core.files.storage import default_storage
+
+    if settings.USE_S3_MEDIA:
+        return default_storage
+    from apps.core.media_signing import SignedProductStorage
+
+    return SignedProductStorage(location=str(settings.MEDIA_ROOT))
+
+
 class ProductImage(models.Model):
     """
     Midia armazenada em bucket privado (S3-compativel), servida via URL
@@ -230,7 +256,7 @@ class ProductImage(models.Model):
     """
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
-    file = models.ImageField(upload_to="products/%Y/%m/")
+    file = models.ImageField(upload_to="products/%Y/%m/", storage=_product_media_storage)
     is_cover = models.BooleanField(default=False)
     order = models.PositiveSmallIntegerField(default=0)
 
@@ -249,7 +275,7 @@ class ProductVideo(models.Model):
     """
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="videos")
-    file = models.FileField(upload_to="products/videos/%Y/%m/")
+    file = models.FileField(upload_to="products/videos/%Y/%m/", storage=_product_media_storage)
     order = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

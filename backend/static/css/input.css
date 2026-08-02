@@ -12,6 +12,405 @@
   font-display: swap;
   src: url("../fonts/bodoni-moda-latin-400-normal.woff2") format("woff2");
 }
+
+@layer components {
+  /* Tema claro somente na home e na loja. Checkout e áreas privadas mantêm
+     o noir para evitar uma alteração global arriscada. */
+  body.storefront-light {
+    color: #443840;
+    background-color: #f7f3f5;
+    background-image:
+      radial-gradient(circle at 8% 4%, rgba(190, 116, 150, 0.12), transparent 26rem),
+      linear-gradient(180deg, #fff 0, #f7f3f5 34rem);
+  }
+  .storefront-light .topbar {
+    color: #fff;
+    background: #4a4650;
+    border-color: transparent;
+  }
+  .storefront-light > header {
+    background: rgba(255, 255, 255, 0.96);
+    border-color: #e8dfe4;
+    box-shadow: 0 8px 24px -22px rgba(63, 43, 54, 0.55);
+  }
+  .storefront-light .logo-word__main,
+  .storefront-light .nav-link {
+    color: #352d33;
+  }
+  .storefront-light .nav-link:hover {
+    color: #a53f6b;
+  }
+  .storefront-light .intent-switch {
+    border-color: #e3d8de;
+    background: #f5eff2;
+  }
+  .storefront-light .intent-switch__item {
+    color: #756770;
+  }
+  .storefront-light .intent-switch__item--active {
+    color: #fff;
+    background: #b65f86;
+  }
+  .storefront-light > header .input-field {
+    color: #3d3339;
+    border-color: #e4d9df;
+    background: #f8f5f6;
+  }
+  .storefront-light > header .input-field::placeholder {
+    color: #8f8289;
+  }
+  .storefront-light .store-discovery {
+    border-color: #e7dce2;
+    background: #eef3f3;
+    background-image: linear-gradient(90deg, rgba(190, 116, 150, 0.08), transparent 45%);
+  }
+  .storefront-light .store-discovery__label strong,
+  .storefront-light .store-story__name {
+    color: #51454c;
+  }
+  .storefront-light .store-story__photo {
+    border-color: #eef3f3;
+    background: #fff;
+  }
+  .storefront-light .store-story__verified {
+    border-color: #eef3f3;
+  }
+  .storefront-light .store-discovery__all,
+  .storefront-light .rail-link {
+    color: #a53f6b;
+  }
+
+  .storefront-light .hero-shell {
+    border-color: #eadfe5;
+    background: #fff;
+    background-image:
+      radial-gradient(circle at 10% 12%, rgba(196, 116, 151, 0.12), transparent 34%),
+      linear-gradient(135deg, #fff 0%, #fbf7f9 100%);
+    box-shadow: 0 28px 70px -48px rgba(74, 44, 59, 0.55);
+  }
+  .storefront-light .hero-grid h1,
+  .storefront-light .section-title,
+  .storefront-light .community-board h2 {
+    color: #30272d;
+  }
+  .storefront-light .hero-grid .text-gray-400,
+  .storefront-light .section-sub {
+    color: #786b72;
+  }
+  .storefront-light .btn-ghost {
+    color: #8f4567;
+  }
+  .storefront-light .trust-strip {
+    border-color: #ded8d8;
+    background: #fff;
+    box-shadow: 0 16px 42px -38px rgba(69, 44, 56, 0.6);
+  }
+  .storefront-light .trust-strip__item,
+  .storefront-light .trust-strip > span {
+    color: #6f6369;
+  }
+  .storefront-light .trust-strip strong {
+    color: #3f353b;
+  }
+  .storefront-light .quick-category,
+  .storefront-light .card,
+  .storefront-light .surface-raised {
+    color: #443840;
+    border-color: #e6dce1;
+    background: #fff;
+    box-shadow: 0 16px 45px -42px rgba(74, 44, 59, 0.7);
+  }
+  .storefront-light .quick-category .text-gray-100,
+  .storefront-light .card .text-gray-100,
+  .storefront-light .surface-raised .text-white {
+    color: #3c3138;
+  }
+  .storefront-light .quick-category .text-gray-500,
+  .storefront-light .card .text-gray-500 {
+    color: #85777f;
+  }
+
+  .storefront-light .product-card {
+    border-color: #e5dbe0;
+    background: #fff;
+    box-shadow: 0 18px 50px -44px rgba(65, 39, 52, 0.9);
+  }
+  .storefront-light .product-card:hover {
+    border-color: rgba(182, 95, 134, 0.65);
+    box-shadow: 0 24px 52px -40px rgba(128, 62, 92, 0.65);
+  }
+  .storefront-light .product-card__body .text-gray-100,
+  .storefront-light .product-card__store {
+    color: #43363d;
+  }
+  .storefront-light .product-card__body .text-gray-600 {
+    color: #8f8188;
+  }
+  .storefront-light .product-card__body button {
+    color: #8f4567;
+    border-color: #e5d9df;
+    background: #f8f3f5;
+  }
+  .storefront-light .purchase-panel,
+  .storefront-light .seller-step {
+    color: #44383f;
+    border-color: #e3d9de;
+    background: #fff;
+    box-shadow: 0 18px 50px -44px rgba(66, 39, 53, 0.8);
+  }
+  .storefront-light .seller-step__number {
+    color: rgba(182, 95, 134, 0.11);
+  }
+  .storefront-light .stat-value {
+    color: #3b3036;
+  }
+  .storefront-light .mobile-buybar {
+    border-color: #ded3d9;
+    background: rgba(255, 255, 255, 0.97);
+  }
+  .storefront-light .mobile-buybar .text-white {
+    color: #3b3036;
+  }
+  .storefront-light .filter-bar {
+    border-color: #e4d9df;
+    background: rgba(247, 243, 245, 0.94);
+  }
+  .storefront-light .filter-pill {
+    color: #665860;
+    border-color: #e0d5db;
+    background: #fff;
+  }
+  .storefront-light .filter-pill--active {
+    color: #fff;
+    border-color: #b65f86;
+    background: #b65f86;
+  }
+  .storefront-light main .text-gray-100,
+  .storefront-light main .text-gray-200,
+  .storefront-light main .text-gray-300 {
+    color: #4d4148;
+  }
+  .storefront-light main .text-gray-400 {
+    color: #72656c;
+  }
+  .storefront-light main .text-gray-500 {
+    color: #887a82;
+  }
+
+  .community-board {
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 1fr) 15rem;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  .community-board__side,
+  .community-board__feed,
+  .community-board__profiles {
+    border: 1px solid #e4dbe0;
+    border-radius: 1rem;
+    background: #fff;
+    padding: 1.25rem;
+    box-shadow: 0 20px 50px -46px rgba(68, 41, 55, 0.75);
+  }
+  .community-board__links {
+    margin-top: 1.25rem;
+    border-block: 1px solid #eee5e9;
+  }
+  .community-board__links a {
+    min-height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    color: #665860;
+    font-size: 0.75rem;
+    border-bottom: 1px solid #eee5e9;
+  }
+  .community-board__links a:last-child {
+    border-bottom: 0;
+  }
+  .community-board__links a:hover {
+    color: #a53f6b;
+  }
+  .community-board__privacy {
+    display: flex;
+    gap: 0.7rem;
+    align-items: flex-start;
+    margin-top: 1.25rem;
+    padding: 0.9rem;
+    color: #6c5e65;
+    font-size: 0.7rem;
+    border-radius: 0.8rem;
+    background: #f5f0f2;
+  }
+  .community-board__privacy > span {
+    color: #b65f86;
+    font-size: 1.1rem;
+  }
+  .community-board__privacy strong {
+    color: #43363d;
+  }
+  .community-board__products {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+  .community-product {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #eadfe4;
+    border-radius: 0.85rem;
+    background: #faf7f8;
+  }
+  .community-product > img,
+  .community-product__empty {
+    width: 100%;
+    aspect-ratio: 4 / 5;
+    display: grid;
+    place-items: center;
+    object-fit: cover;
+    color: #8b7d84;
+    font-size: 0.7rem;
+    background: #eee8eb;
+    transition: transform 0.45s ease;
+  }
+  .community-product:hover > img {
+    transform: scale(1.04);
+  }
+  .community-product__body {
+    display: block;
+    padding: 0.65rem;
+  }
+  .community-product__body strong,
+  .community-product__body small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .community-product__body strong {
+    color: #3f333a;
+    font-size: 0.72rem;
+  }
+  .community-product__body small {
+    color: #8a7b82;
+    font-size: 0.62rem;
+    margin-top: 0.2rem;
+  }
+  .community-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.65rem;
+  }
+  .community-profile-grid a {
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    color: #fff;
+    font-family: "Bodoni Moda", serif;
+    border: 3px solid #f2ecef;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #b65f86, #7f4a89);
+    transition: transform 0.25s ease, border-color 0.25s ease;
+  }
+  .community-profile-grid a:hover {
+    transform: translateY(-2px);
+    border-color: #d69ab5;
+  }
+  .community-profile-grid img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .storefront-light .store-profile-page {
+    background: #eef2f2;
+    background-image: none;
+  }
+  .storefront-light .store-profile-panel {
+    color: #44383f;
+    border-color: #e3d9de;
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 20px 55px -40px rgba(62, 38, 50, 0.75);
+  }
+  .storefront-light .store-profile-panel h1 {
+    color: #342a30;
+  }
+  .storefront-light .store-profile-panel .text-gray-300,
+  .storefront-light .store-profile-panel .text-gray-400,
+  .storefront-light .store-profile-panel .text-gray-500 {
+    color: #766970;
+  }
+  .storefront-light .store-profile-page > nav {
+    border-color: #ded5da;
+    background: #fff;
+  }
+  .storefront-light .chip {
+    color: #6f6068;
+    border-color: #e1d7dc;
+    background: #fff;
+  }
+  .storefront-light .chip-active {
+    color: #fff !important;
+    border-color: #b65f86 !important;
+    background: #b65f86 !important;
+  }
+  .storefront-light .store-profile-page > .grid {
+    border-color: #ddd4d9;
+    background: #fff;
+  }
+  .storefront-light .store-profile-page > .grid .text-white {
+    color: #3b3036;
+  }
+  .storefront-light .store-profile-page > .grid .text-gray-500,
+  .storefront-light #produtos .text-gray-500 {
+    color: #82747b;
+  }
+  .storefront-light .store-profile-page .trust-strip {
+    border-color: #ddd4d9;
+  }
+  .storefront-light .btn-secondary {
+    color: #6f3f55;
+    border-color: #dfd3d9;
+    background: #fff;
+  }
+  .storefront-light main .input-field {
+    color: #40353b;
+    border-color: #ddd2d8;
+    background: #fff;
+  }
+  .storefront-light main .input-label {
+    color: #6f6269;
+  }
+  .storefront-light .store-profile-page > .grid > div {
+    border-color: #e5dce1;
+  }
+
+  @media (max-width: 1023px) {
+    .community-board {
+      grid-template-columns: 1fr 1fr;
+    }
+    .community-board__feed {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+  }
+  @media (max-width: 639px) {
+    .community-board {
+      grid-template-columns: 1fr;
+    }
+    .community-board__feed {
+      grid-column: auto;
+    }
+    .community-board__products {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .storefront-light .hero-shell {
+      border-radius: 1.25rem;
+    }
+  }
+}
 @font-face {
   font-family: "Bodoni Moda";
   font-style: italic;
@@ -749,4 +1148,26 @@
   .prose-legal a {
     @apply text-brand hover:underline;
   }
+}
+
+/* Anti-salvar mídia: impede seleção/arraste fácil e adiciona overlay. */
+.js-protect-media,
+img[src*="/media/protegido/"],
+.product-media,
+.store-photo-card__image {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+}
+.protect-media-wrap {
+  position: relative;
+  overflow: hidden;
+}
+.protect-media-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  z-index: 2;
 }

@@ -1,12 +1,13 @@
 Olá!
 
-O item do seu pedido #{{ order.id|slice:":8" }} foi postado nos Correios.
+O envio do seu pedido #{{ order.id|slice:":8" }} foi postado.
 
 Código de rastreio: {{ shipment.tracking_code }}
-Serviço: {{ shipment.get_service_display }}
+Serviço: {{ shipment.service }}
 Prazo estimado: {{ shipment.estimated_delivery_days }} dias úteis
 
-Acompanhe em: https://rastreamento.correios.com.br/app/index.php?objetos={{ shipment.tracking_code }}
+Acompanhe o status e converse com a loja:
+{{ order_url }}
 
 {{ site_name }}
 Este e-mail não contém detalhes dos itens por privacidade.

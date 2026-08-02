@@ -3,6 +3,7 @@
 {% block description %}Abra sua loja sem mensalidade, anuncie itens íntimos e conteúdo digital e receba por Pix depois da entrega confirmada. Sem expor seu nome real.{% endblock %}
 {% block robots %}index, follow{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+{% block body_class %}storefront-light{% endblock %}
 
 {% block content %}
 <section class="hero-shell mb-10">
@@ -67,7 +68,7 @@
       <span class="text-gray-400">Quem compra paga</span>
       <span class="font-bold text-brand">R$ {{ commission_percent|add:100|floatformat:"-2" }}</span>
     </div>
-    <p class="text-[11px] text-gray-500 pt-1">A taxa de embalagem vai para você; a plataforma compra a etiqueta de envio.</p>
+    <p class="text-[11px] text-gray-500 pt-1">A plataforma compra a etiqueta com o frete pago por quem compra; a embalagem neutra fica por sua conta.</p>
   </div>
 </section>
 

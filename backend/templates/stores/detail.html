@@ -5,6 +5,7 @@
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 {% block og_title %}{{ store.display_name }} — loja +18{% endblock %}
 {% block og_description %}{{ store.bio|default:"Loja verificada com pagamento em custódia."|truncatechars:150 }}{% endblock %}
+{% block body_class %}storefront-light{% endblock %}
 
 {% block extra_head %}
 <script type="application/ld+json">
@@ -61,7 +62,7 @@
 </section>
 {% endif %}
 
-<section class="hero-shell mb-8">
+<section class="hero-shell store-profile-page mb-8">
   <div class="store-cover" aria-label="Fotos da vitrine de {{ store.display_name }}">
     {% for showcase_product in products|slice:":4" %}
     {% with cover=showcase_product.images.first %}
@@ -78,7 +79,7 @@
     {% endfor %}
   </div>
 
-  <div class="relative z-20 mx-3 sm:mx-6 -mt-9 rounded-3xl border border-white/10 bg-surface-card/95 backdrop-blur-xl p-5 sm:p-7 flex flex-col sm:flex-row sm:items-center gap-5 shadow-float">
+  <div class="store-profile-panel relative z-20 mx-3 sm:mx-6 -mt-9 rounded-3xl border border-white/10 bg-surface-card/95 backdrop-blur-xl p-5 sm:p-7 flex flex-col sm:flex-row sm:items-center gap-5 shadow-float">
     <div class="relative w-20 h-20 rounded-3xl bg-gradient-brand shrink-0 flex items-center justify-center font-display text-3xl font-bold text-white shadow-glow rotate-[-3deg]">
       {{ store.display_name|slice:":1" }}
       <span class="absolute -right-1 -bottom-1 w-6 h-6 rounded-full bg-emerald-400 text-surface border-2 border-surface grid place-items-center text-xs">✓</span>
@@ -89,6 +90,11 @@
         {{ store.display_name }}
         <span class="badge-verified">Verificada</span>
       </h1>
+      {% if store.origin_city and store.origin_state %}
+      <p class="text-sm text-gray-400 mt-1.5">
+        Envia de <strong class="text-gray-200 font-medium">{{ store.origin_city }}/{{ store.origin_state }}</strong>
+      </p>
+      {% endif %}
       {% if store.bio %}<p class="text-gray-400 text-sm mt-2 max-w-2xl leading-relaxed">{{ store.bio }}</p>{% endif %}
       <div class="flex items-center gap-2 mt-2 flex-wrap">
         {% if store.review_count %}

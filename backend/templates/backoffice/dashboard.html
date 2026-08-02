@@ -1,0 +1,26 @@
+{% extends "backoffice/base.html" %}
+{% block title %}Visão geral — Gestão{% endblock %}
+{% block content %}
+<div class="top"><div><h1>Visão geral</h1><div class="muted">Operação, segurança e vendas em um só lugar.</div></div><div class="muted">Olá, {{ request.user.get_full_name|default:request.user.email }}</div></div>
+<section class="grid metrics">
+  <div class="card metric"><strong>{{ metrics.active_stores }}</strong><span>Lojas ativas / {{ metrics.stores }}</span></div>
+  <div class="card metric"><strong>{{ metrics.users }}</strong><span>Contas</span></div>
+  <div class="card metric"><strong>{{ metrics.orders }}</strong><span>Pedidos</span></div>
+  <div class="card metric"><strong>R$ {{ metrics.gross_sales|floatformat:2 }}</strong><span>Itens pagos</span></div>
+  <div class="card metric"><strong class="{% if alerts.urgent_reports %}danger{% endif %}">{{ alerts.urgent_reports }}</strong><span>Alertas urgentes</span></div>
+</section>
+<section class="section"><h2>Pendências que exigem ação</h2>
+  <div class="grid two">
+    <a class="card" href="{% url 'backoffice:moderation' %}"><strong>{{ alerts.moderation }}</strong> itens na moderação · <span class="danger">{{ alerts.urgent_reports }} denúncias urgentes</span></a>
+    <a class="card" href="{% url 'backoffice:disputes' %}"><strong>{{ alerts.disputes }}</strong> disputas abertas</a>
+    <a class="card" href="{% url 'backoffice:kyc_queue' %}"><strong>{{ alerts.kyc }}</strong> KYCs aguardando revisão (RG + selfie)</a>
+    <div class="card"><strong>{{ alerts.labels }}</strong> pedidos pagos sem etiqueta · <strong>{{ alerts.unpaid_expired }}</strong> Pix vencidos ainda abertos</div>
+  </div>
+</section>
+<section class="section"><h2>Pedidos recentes</h2>
+  <table><thead><tr><th>Pedido</th><th>Loja</th><th>Status</th><th>Total</th><th>Data</th></tr></thead><tbody>
+    {% for order in recent_orders %}<tr><td>{{ order.short_id }}</td><td>{{ order.store.display_name }}</td><td><span class="badge">{{ order.get_status_display }}</span></td><td>R$ {{ order.grand_total|floatformat:2 }}</td><td>{{ order.created_at|date:"d/m/Y H:i" }}</td></tr>
+    {% empty %}<tr><td colspan="5" class="empty">Nenhum pedido ainda.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endblock %}

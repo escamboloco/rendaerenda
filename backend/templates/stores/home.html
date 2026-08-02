@@ -1,8 +1,9 @@
 {% extends "core/base.html" %}
 {% block title %}Renda &amp; Renda — marketplace +18 com pagamento em custódia{% endblock %}
-{% block description %}Peças íntimas usadas e conteúdo digital direto de vendedoras verificadas. O Pix fica retido até você confirmar a entrega. Embalagem neutra e cobrança discreta.{% endblock %}
+{% block description %}Descubra peças exclusivas e packs irresistíveis de vendedoras verificadas. Pague com total segurança e tranquilidade, receba em embalagem neutra e discreta, e acompanhe todo o processo com privacidade absoluta.{% endblock %}
 {% block robots %}index, follow{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+{% block body_class %}storefront-light{% endblock %}
 
 {% block extra_head %}
 {% comment %} FAQ estruturada: o Google pode exibir as perguntas direto no resultado
@@ -43,8 +44,7 @@
           Compra sem medo.
         </h1>
         <p class="text-gray-400 max-w-xl text-sm sm:text-base leading-relaxed">
-          Descubra peças únicas e packs de vendedoras verificadas. Pague com proteção,
-          receba em embalagem neutra e acompanhe tudo sem exposição.
+          Descubra peças exclusivas e packs irresistíveis de vendedoras verificadas. Pague com total segurança e tranquilidade, receba em embalagem neutra e discreta, e acompanhe todo o processo com privacidade absoluta.
         </p>
       </div>
 
@@ -124,6 +124,79 @@
     <span><strong class="text-gray-200 block">Vendedoras verificadas</strong>documento e moderação prévia</span>
   </div>
 </div>
+
+{# Painel de descoberta inspirado em comunidades, sem inventar presença online. #}
+<section class="community-board section" aria-labelledby="community-title">
+  <aside class="community-board__side">
+    <span class="eyebrow">Acesso rápido</span>
+    <h2 id="community-title" class="text-xl font-bold mt-2">Encontre seu estilo</h2>
+    <div class="community-board__links">
+      <a href="{% url 'stores:ranking' %}">
+        <span>Vendedoras verificadas</span><strong>→</strong>
+      </a>
+      <a href="{% url 'stores:listing' %}?ordem=recentes">
+        <span>Anúncios mais recentes</span><strong>→</strong>
+      </a>
+      <a href="{% url 'stores:how_it_works' %}">
+        <span>Como protegemos sua compra</span><strong>→</strong>
+      </a>
+    </div>
+    <div class="community-board__privacy">
+      <span aria-hidden="true">◈</span>
+      <p><strong>Discrição por padrão</strong><br>Embalagem e cobrança sem exposição.</p>
+    </div>
+  </aside>
+
+  <div class="community-board__feed">
+    <div class="flex items-end justify-between gap-3 mb-4">
+      <div>
+        <span class="eyebrow">Novidades das lojas</span>
+        <h2 class="text-2xl font-bold mt-1">Acabou de chegar</h2>
+      </div>
+      <a href="{% url 'stores:listing' %}?ordem=recentes" class="rail-link">ver tudo →</a>
+    </div>
+    <div class="community-board__products">
+      {% for product in newest|slice:":4" %}
+      <a href="{% url 'catalog:detail' product.store.slug product.slug %}" class="community-product group">
+        {% with cover=product.images.first %}
+        {% if cover %}
+        <img src="{{ cover.file.url }}" alt="{{ product.title }}" loading="lazy">
+        {% else %}
+        <span class="community-product__empty">sem foto</span>
+        {% endif %}
+        {% endwith %}
+        <span class="community-product__body">
+          <strong>{{ product.title }}</strong>
+          <small>{{ product.store.display_name }} · R$ {{ product.price }}</small>
+        </span>
+      </a>
+      {% empty %}
+      <p class="text-sm text-gray-500">Novos anúncios aparecerão aqui após a moderação.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <aside class="community-board__profiles">
+    <span class="eyebrow">Perfis em destaque</span>
+    <h2 class="text-xl font-bold mt-2 mb-4">Conheça as lojas</h2>
+    <div class="community-profile-grid">
+      {% for profile_store in header_stores|slice:":9" %}
+      {% with product=profile_store.showcase_products.0 %}
+      {% with cover=product.images.all.0 %}
+      <a href="{% url 'stores:detail' profile_store.slug %}" title="{{ profile_store.display_name }}">
+        {% if cover %}
+        <img src="{{ cover.file.url }}" alt="{{ profile_store.display_name }}" loading="lazy">
+        {% else %}
+        <span>{{ profile_store.display_name|slice:":1" }}</span>
+        {% endif %}
+      </a>
+      {% endwith %}
+      {% endwith %}
+      {% endfor %}
+    </div>
+    <a href="{% url 'stores:ranking' %}" class="btn-secondary w-full mt-5">Ver ranking de lojas</a>
+  </aside>
+</section>
 
 {# ====================================================== categorias ==== #}
 {% if home_categories %}
@@ -247,11 +320,6 @@ importante (a custódia) ocupar o espaço que ela merece.
     </article>
   </div>
 </section>
-
-{# ========================================================= novidades ==== #}
-{% if newest %}
-{% include "catalog/_carousel.html" with items=newest title="Acabou de entrar" subtitle="Anúncios recém-aprovados pela moderação" link=listing_url|add:"?ordem=recentes" link_label="ver mais" show_store=True %}
-{% endif %}
 
 {# ============================================================ lojas ==== #}
 {% if featured_stores %}

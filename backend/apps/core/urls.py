@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import media_views, views
 
 app_name = "core"
 
@@ -15,6 +15,11 @@ api_urlpatterns = [
 page_urlpatterns = [
     path("healthz/", views.healthz, name="healthz"),
     path("robots.txt", views.robots_txt, name="robots_txt"),
+    path(
+        "media/protegido/<path:path>",
+        media_views.protected_product_media,
+        name="protected_media",
+    ),
     path("termos-de-uso/", views.legal_page, {"doc": "termos-de-uso"}, name="terms"),
     path("privacidade/", views.legal_page, {"doc": "privacidade"}, name="privacy"),
     path("email/descadastrar/<str:token>/", views.marketing_unsubscribe, name="marketing_unsubscribe"),

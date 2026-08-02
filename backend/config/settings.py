@@ -12,7 +12,15 @@ ALLOWED_HOSTS = config("DJANGO_ALLOWED_HOSTS", default="", cast=Csv())
 # processo Django - sem isso, request.is_secure() sempre da False atras do
 # proxy, quebrando SECURE_SSL_REDIRECT (loop de redirect) e o cookie CSRF.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="https://*.onrender.com", cast=Csv())
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default=(
+        "https://rendaerenda.com.br,"
+        "https://www.rendaerenda.com.br,"
+        "https://*.onrender.com"
+    ),
+    cast=Csv(),
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -39,6 +47,7 @@ INSTALLED_APPS = [
     "apps.offers",
     "apps.reviews",
     "apps.core",
+    "apps.backoffice",
 ]
 
 MIDDLEWARE = [
@@ -152,6 +161,8 @@ STORAGES = {
 SESSION_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_AGE = 60 * 60 * 12
+SESSION_SAVE_EVERY_REQUEST = True
 CSRF_COOKIE_SECURE = not DEBUG
 # False: o JS do checkout precisa ler o cookie csrftoken pro header X-CSRFToken.
 # O cookie CSRF nao e segredo de sessao; SameSite=Lax + Secure em producao.
@@ -250,6 +261,7 @@ REST_FRAMEWORK = {
         "report": "10/min",
         "phone": "5/min",
         "offers": "10/min",
+        "freight": "20/min",
         # A tela de pagamento consulta o status a cada 4s enquanto o Pix
         # nao cai; precisa de folga bem maior que o resto.
         "order_status": "60/min",
@@ -319,6 +331,13 @@ NEUTRAL_BOX_PRICES = config("NEUTRAL_BOX_PRICES", default="")
 # Pix pago por CPF diferente do titular do pedido: estornar automaticamente.
 # E uma trava de idade (so adulto identificado compra), nao antifraude.
 REFUND_ON_PAYER_CPF_MISMATCH = config("REFUND_ON_PAYER_CPF_MISMATCH", default=True, cast=bool)
+REQUIRE_PAYER_DOCUMENT = config("REQUIRE_PAYER_DOCUMENT", default=True, cast=bool)
+# True forcaria KYC biometrico no checkout. Padrao False: a trava e o
+# CPF do Pix bater com o cadastrado (REFUND_ON_PAYER_CPF_MISMATCH).
+REQUIRE_VERIFIED_BUYER_AGE = config(
+    "REQUIRE_VERIFIED_BUYER_AGE", default=False, cast=bool
+)
+ENABLE_STORE_PLAN_SALES = config("ENABLE_STORE_PLAN_SALES", default=False, cast=bool)
 PAYMENT_PROVIDER = config("PAYMENT_PROVIDER", default="asaas")
 ASAAS_API_KEY = config("ASAAS_API_KEY", default="")
 ASAAS_API_URL = config("ASAAS_API_URL", default="https://api.asaas.com/v3")
@@ -330,7 +349,7 @@ ASAAS_ACCOUNT_TYPE = config("ASAAS_ACCOUNT_TYPE", default="pf").lower()
 # com custodia ligada, o repasse acontece na liberacao (AUTO_PAYOUT_ON_RELEASE).
 AUTO_PAYOUT_ON_PAYMENT = config("AUTO_PAYOUT_ON_PAYMENT", default=False, cast=bool)
 # Soft-launch: abrir loja sem KYC aprovado (ainda exige idade +18 no site).
-REQUIRE_SELLER_KYC = config("REQUIRE_SELLER_KYC", default=False, cast=bool)
+REQUIRE_SELLER_KYC = config("REQUIRE_SELLER_KYC", default=True, cast=bool)
 
 # --- Verificacao de idade por biometria (Lei 15.211/2025) ---
 # Cada bureau tem endpoint proprio, entao a URL e explicita — nunca
@@ -362,9 +381,9 @@ PLATFORM_MUNICIPAL_SERVICE_CODE = config("PLATFORM_MUNICIPAL_SERVICE_CODE", defa
 SHIPPING_PROVIDER = config("SHIPPING_PROVIDER", default="superfrete")
 SUPERFRETE_TOKEN = config("SUPERFRETE_TOKEN", default="")
 SUPERFRETE_SANDBOX = config("SUPERFRETE_SANDBOX", default=True, cast=bool)
-# Serviços: PAC, SEDEX, Mini Envios e Jadlog. Loggi é controlada nas
-# configurações do token SuperFrete; J&T exige telefone do destinatário.
-SUPERFRETE_SERVICES = config("SUPERFRETE_SERVICES", default="1,2,17,3")
+# Serviços: Mini Envios primeiro (pacote pequeno/barato), depois PAC/SEDEX/Jadlog.
+# Loggi é controlada nas configurações do token SuperFrete; J&T exige telefone.
+SUPERFRETE_SERVICES = config("SUPERFRETE_SERVICES", default="17,1,2,3")
 SUPERFRETE_USER_AGENT = config(
     "SUPERFRETE_USER_AGENT",
     default=f"{SITE_NAME}/1.0 (suporte@{SITE_DOMAIN})",
@@ -408,6 +427,9 @@ EMAIL_BACKEND = config(
 LOGIN_URL = "/contas/login/"
 LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+# Logout só via POST (formulário com CSRF) — evita CSRF por link GET.
+ACCOUNT_LOGOUT_ON_GET = False
+BACKOFFICE_LOGIN_URL = "/gestao/entrar/"
 ACCOUNT_ADAPTER = "apps.accounts.adapter.AgeGatedAccountAdapter"
 ACCOUNT_SIGNUP_FORM_CLASS = "apps.accounts.forms.SignupForm"
 # django-allauth==65.3.0 usa as chaves de configuracao "legadas" (nao a
@@ -428,7 +450,7 @@ ACCOUNT_RATE_LIMITS = {
     "login_failed": "10/5m/ip,10/5m/key",
 }
 
-# Chave Pix da loja de teste (seed_payment_test). Em producao preencha no Render.
+# Chave Pix opcional da antiga loja smoke (seed_payment_test).
 PIX_TEST_KEY = config("PIX_TEST_KEY", default="")
-# Se True no build/deploy, cria/atualiza a loja teste com 3 produtos a R$ 5.
+# Se True no build/deploy, roda seed_demo (20+ lojas / 70+ produtos / fotos).
 SEED_PAYMENT_TEST = config("SEED_PAYMENT_TEST", default=False, cast=bool)

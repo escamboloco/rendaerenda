@@ -36,6 +36,16 @@
       <button type="submit" class="btn-primary w-full">Entrar</button>
     </form>
 
+    <div class="relative py-1">
+      <div class="absolute inset-0 flex items-center" aria-hidden="true"><div class="w-full border-t border-surface-border"></div></div>
+      <div class="relative flex justify-center"><span class="bg-surface-card px-3 text-[11px] uppercase tracking-wide text-gray-600">ou</span></div>
+    </div>
+
+    <a href="{% url 'backoffice:login' %}" class="btn-secondary w-full text-center">
+      Entrar como administrador
+    </a>
+    <p class="text-[11px] text-gray-600 text-center -mt-2">Painel de gestão, KYC e moderação — só equipe autorizada.</p>
+
     <div class="text-center text-sm text-gray-500 space-y-2">
       <p><a href="{% url 'account_reset_password' %}" class="text-brand hover:underline">Esqueci minha senha</a></p>
       <p>Não tem conta? <a href="{% url 'account_signup' %}" class="text-brand hover:underline">Cadastre-se</a></p>

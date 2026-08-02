@@ -44,7 +44,7 @@ class Order(models.Model):
     guest_email = models.EmailField(blank=True)
     guest_cpf = models.CharField(max_length=11, blank=True)
     guest_birth_date = models.DateField(null=True, blank=True)
-    access_token = models.CharField(max_length=64, blank=True, db_index=True)
+    access_token = models.CharField(max_length=64, unique=True, db_index=True)
 
     store = models.ForeignKey(Store, on_delete=models.PROTECT, related_name="orders")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AWAITING_PAYMENT)

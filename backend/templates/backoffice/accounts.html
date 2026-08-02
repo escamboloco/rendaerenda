@@ -1,0 +1,18 @@
+{% extends "backoffice/base.html" %}
+{% block title %}Contas — Gestão{% endblock %}
+{% block content %}
+<div class="top"><div><h1>Contas</h1><div class="muted">Busca de suporte; CPF aparece mascarado por padrão.</div></div></div>
+<form class="filters" method="get"><input type="search" name="q" value="{{ query }}" placeholder="Buscar por e-mail, nome ou CPF"><button class="btn primary" type="submit">Buscar</button></form>
+<table><thead><tr><th>Conta</th><th>CPF</th><th>Perfil</th><th>Verificações</th><th>Status</th><th>Cadastro</th><th>Ação</th></tr></thead><tbody>
+{% for user in users %}<tr>
+  <td><strong>{{ user.get_full_name|default:user.email }}</strong><div class="muted">{{ user.email }}</div></td>
+  <td>{{ user.cpf|slice:":3" }}.***.***-**</td>
+  <td>{{ user.get_role_display }}{% if user.is_staff %} · <span class="warn">Equipe</span>{% endif %}</td>
+  <td>{% if user.is_age_verified %}<span class="ok">Idade ✓</span>{% else %}<span class="danger">Idade pendente</span>{% endif %}<br>{% if user.is_phone_verified %}<span class="ok">Telefone ✓</span>{% else %}<span class="muted">Telefone pendente</span>{% endif %}</td>
+  <td>{% if user.is_banned %}<span class="danger">Banida</span>{% elif user.is_active %}<span class="ok">Ativa</span>{% else %}<span class="warn">Inativa</span>{% endif %}</td>
+  <td>{{ user.date_joined|date:"d/m/Y" }}</td>
+  <td><a class="btn" href="/admin/accounts/user/{{ user.id }}/change/">Abrir com dados completos</a></td>
+</tr>{% empty %}<tr><td colspan="7" class="empty">Nenhuma conta encontrada.</td></tr>{% endfor %}
+</tbody></table>
+{% include "backoffice/pagination.html" with page=users %}
+{% endblock %}

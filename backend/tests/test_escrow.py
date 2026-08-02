@@ -53,29 +53,46 @@ WEBHOOK_TOKEN = "token-webhook"
 class EscrowTests(PayoutAssertionsMixin, ApiTestCase):
     def setUp(self):
         super().setUp()
-        self.provider = FakeProvider()
+        self.provider = FakeProvider(payer_document="11144477735")
         patcher = mock.patch("apps.payments.services.get_payment_provider", return_value=self.provider)
         patcher.start()
         self.addCleanup(patcher.stop)
 
+        from .factories import CPF_BUYER, make_user
+
+        self.buyer = make_user(role="buyer", cpf=CPF_BUYER, email="compradora@example.com")
+        self.client.force_login(self.buyer)
         self.product = make_product(payout=Decimal("100.00"), stock=1)
+        payload = checkout_payload(self.product)
+        # Compra autenticada: confirmação exige a conta do comprador.
+        payload.pop("guest_name", None)
+        payload.pop("guest_email", None)
+        payload.pop("guest_cpf", None)
+        payload.pop("guest_birth_date", None)
         self.client.post(
             reverse("payments:checkout"),
-            checkout_payload(self.product),
+            payload,
             content_type="application/json",
         )
         self.order = Order.objects.get()
         self._pay()
         self.order.refresh_from_db()
+        if hasattr(self.order, "shipment"):
+            from apps.shipping.models import Shipment
+
+            shipment = self.order.shipment
+            shipment.status = Shipment.Status.DELIVERED
+            shipment.save(update_fields=["status"])
 
     def _pay(self):
         self.provider.paid = True
         self.client.get(reverse("payments:order_status", args=[self.order.access_token]))
 
     def _confirm(self, action):
+        payload = {"action": action}
         return self.client.post(
             reverse("payments:order_confirm", args=[self.order.access_token]),
-            {"action": action},
+            payload,
             content_type="application/json",
         )
 
@@ -117,6 +134,9 @@ class EscrowTests(PayoutAssertionsMixin, ApiTestCase):
         self.assertEqual(len(self.item_payouts()), 1)
 
     def test_matured_escrow_is_paid_by_the_cron(self):
+        # Físico só libera após postagem/entrega — nunca em PAID puro.
+        self.order.status = Order.Status.DELIVERED
+        self.order.save(update_fields=["status"])
         WalletEntry.objects.filter(order=self.order).update(available_at=timezone.now())
 
         self.assertEqual(release_matured_escrow(), 1)
@@ -124,6 +144,12 @@ class EscrowTests(PayoutAssertionsMixin, ApiTestCase):
         # Rodar de novo não paga outra vez.
         self.assertEqual(release_matured_escrow(), 0)
         self.assertEqual(len(self.item_payouts()), 1)
+
+    def test_unshipped_physical_order_is_not_auto_paid(self):
+        WalletEntry.objects.filter(order=self.order).update(available_at=timezone.now())
+        self.assertEqual(self.order.status, Order.Status.PAID)
+        self.assertEqual(release_matured_escrow(), 0)
+        self.assertEqual(self.item_payouts(), [])
 
     # ------------------------------------------------------------ disputa
 

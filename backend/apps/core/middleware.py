@@ -1,3 +1,5 @@
+from django.contrib.auth import logout
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 
@@ -6,14 +8,12 @@ from django.urls import reverse
 AGE_GATE_EXEMPT_PREFIXES = (
     "/entrada/",
     "/admin/",
+    "/gestao/",
+    "/contas/",  # login, cadastro, reset de senha (link do e-mail)
     "/static/",
+    "/media/protegido/",
     "/healthz",
     "/webhooks/",
-    # Chamadas de API sao feitas via fetch/XHR por paginas que ja
-    # passaram pelo age gate (renderizadas server-side) - um redirect
-    # HTML aqui quebraria o cliente JSON. Autenticacao/permissao de
-    # cada view (IsAuthenticated, is_age_verified) continua valendo.
-    "/api/",
     # robots.txt/sitemap.xml precisam ser legiveis por crawlers sem
     # sessao/cookie - nunca colocar HTML atras do gate aqui.
     "/robots.txt",
@@ -35,8 +35,28 @@ class AgeGateMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        user = getattr(request, "user", None)
+        if (
+            user
+            and user.is_authenticated
+            and (not user.is_active or getattr(user, "is_banned", False))
+        ):
+            logout(request)
+            if request.path.startswith("/api/"):
+                return JsonResponse({"detail": "Conta suspensa."}, status=403)
+
         if not request.path.startswith(AGE_GATE_EXEMPT_PREFIXES):
-            if not request.session.get(AGE_GATE_SESSION_KEY):
+            # Conta autenticada já passou pela declaração de maioridade no
+            # cadastro. O age gate visual vale para visitantes anônimos.
+            authenticated_adult = bool(
+                user and user.is_authenticated and user.is_active
+            )
+            if not authenticated_adult and not request.session.get(AGE_GATE_SESSION_KEY):
+                if request.path.startswith("/api/"):
+                    return JsonResponse(
+                        {"detail": "Confirme que você é maior de 18 anos."},
+                        status=403,
+                    )
                 gate_url = reverse("core:age_gate")
                 if request.path != gate_url:
                     return redirect(f"{gate_url}?next={request.path}")
@@ -45,4 +65,8 @@ class AgeGateMiddleware:
 
         if not request.path.startswith("/admin/"):
             response["X-Robots-Tag"] = response.get("X-Robots-Tag", "")
+        response["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=(), "
+            "interest-cohort=()"
+        )
         return response

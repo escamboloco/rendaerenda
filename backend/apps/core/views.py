@@ -96,10 +96,13 @@ def robots_txt(request):
     lines = [
         "User-agent: *",
         "Disallow: /admin/",
+        "Disallow: /gestao/",
         "Disallow: /api/",
         "Disallow: /webhooks/",
         "Disallow: /entrada/",
         "Disallow: /contas/",
+        "Disallow: /media/",
+        "Disallow: /pedido/",
         "Disallow: /vendedora/",
         "Disallow: /carteira/",
         "Disallow: /verificacao-idade/",

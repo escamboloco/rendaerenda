@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.core.media_security import sanitize_image, validate_safe_image
+
 from .models import SellerKYC
 
 
@@ -9,6 +11,9 @@ class AgeVerificationRequestSerializer(serializers.Serializer):
 
 class SellerKYCSerializer(serializers.ModelSerializer):
     accepts_majority_and_image_consent_term = serializers.BooleanField(write_only=True)
+    document_front = serializers.ImageField(validators=[validate_safe_image])
+    document_back = serializers.ImageField(validators=[validate_safe_image])
+    selfie_with_document = serializers.ImageField(validators=[validate_safe_image])
 
     class Meta:
         model = SellerKYC
@@ -28,6 +33,8 @@ class SellerKYCSerializer(serializers.ModelSerializer):
         from django.utils import timezone
 
         validated_data.pop("accepts_majority_and_image_consent_term")
+        for field in ("document_front", "document_back", "selfie_with_document"):
+            validated_data[field] = sanitize_image(validated_data[field])
         kyc, _ = SellerKYC.objects.update_or_create(
             user=self.context["request"].user,
             defaults={

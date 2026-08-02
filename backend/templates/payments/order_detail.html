@@ -129,8 +129,8 @@
     <ul class="space-y-2">
       {% for entry in digital_assets %}
       <li>
-        <a href="{% url 'catalog:download_asset' order.access_token entry.asset.id %}"
-           class="btn-secondary w-full justify-start text-sm">
+        <a href="{% url 'catalog:download_asset' order.access_token entry.asset.id %}{% if order.guest_email %}?email={{ order.guest_email|urlencode }}{% endif %}"
+           class="btn-secondary w-full justify-start text-sm" rel="noopener noreferrer" referrerpolicy="no-referrer">
           ⬇ {{ entry.asset.label|default:entry.product.title }}
         </a>
       </li>
@@ -140,8 +140,8 @@
   {% endif %}
 
   {# ----------------------------------------- custódia: confirmar/contestar #}
-  {% if can_confirm %}
-  <section class="card p-5 space-y-3" x-data="orderRelease('{{ order.access_token }}')">
+  {% if can_confirm or can_dispute %}
+  <section class="card p-5 space-y-3" x-data="orderRelease('{{ order.access_token }}', '{{ order.guest_email|default:""|escapejs }}')">
     <div>
       <p class="font-semibold">O pagamento está retido</p>
       <p class="text-sm text-gray-400 mt-1">
@@ -151,13 +151,14 @@
     </div>
     <p x-cloak x-show="error" x-text="error" class="input-error"></p>
     <div class="flex flex-wrap gap-2">
-      <button type="button" class="btn-primary flex-1" @click="confirm()" :disabled="loading">
+      {% if can_confirm %}<button type="button" class="btn-primary flex-1" @click="confirm()" :disabled="loading">
         <span x-show="!loading">Recebi, liberar pagamento</span>
         <span x-cloak x-show="loading">Enviando…</span>
-      </button>
+      </button>{% endif %}
+      {% if can_dispute %}
       <button type="button" class="btn-secondary !text-red-300" @click="dispute()" :disabled="loading">
         Tive um problema
-      </button>
+      </button>{% endif %}
     </div>
   </section>
   {% elif order.status == 'disputed' %}

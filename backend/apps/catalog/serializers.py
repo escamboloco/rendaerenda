@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.core.media_security import validate_digital_asset, validate_safe_image
+
 from .models import Category, Product, price_from_payout
 
 MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
@@ -26,24 +28,11 @@ def validate_video_file(file):
 
 
 def validate_image_file(file):
-    """Magic bytes de JPEG/PNG/WebP/GIF + limite de tamanho (não confiar no MIME do browser)."""
-    head = file.read(12)
-    file.seek(0)
-    is_jpeg = head[:3] == b"\xff\xd8\xff"
-    is_png = head[:8] == b"\x89PNG\r\n\x1a\n"
-    is_webp = head[:4] == b"RIFF" and head[8:12] == b"WEBP"
-    is_gif = head[:6] in (b"GIF87a", b"GIF89a")
-    if not (is_jpeg or is_png or is_webp or is_gif):
-        raise serializers.ValidationError(
-            "Arquivo não parece ser uma imagem válida (use JPEG, PNG, WebP ou GIF)."
-        )
-    if file.size > MAX_IMAGE_SIZE_BYTES:
-        raise serializers.ValidationError("Imagem muito grande (máximo 8MB).")
+    validate_safe_image(file, max_bytes=MAX_IMAGE_SIZE_BYTES)
 
 
 def validate_asset_file(file):
-    if file.size > MAX_ASSET_SIZE_BYTES:
-        raise serializers.ValidationError("Arquivo muito grande (máximo 200MB).")
+    validate_digital_asset(file, max_bytes=MAX_ASSET_SIZE_BYTES)
 
 
 class AddonInputSerializer(serializers.Serializer):
@@ -71,9 +60,16 @@ class ProductCreateSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(choices=Product.Kind.choices, default=Product.Kind.PHYSICAL)
     payout_amount = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=Decimal("1.00"))
     weight_grams = serializers.IntegerField(min_value=0, max_value=30000, required=False, default=0)
+    freight_declared_value = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        default=Decimal("0.00"),
+    )
     length_cm = serializers.IntegerField(min_value=1, max_value=100, default=16)
     width_cm = serializers.IntegerField(min_value=1, max_value=100, default=11)
-    height_cm = serializers.IntegerField(min_value=1, max_value=100, default=5)
+    height_cm = serializers.IntegerField(min_value=1, max_value=100, default=2)
     production_days = serializers.IntegerField(min_value=0, max_value=90, required=False, default=0)
     stock = serializers.IntegerField(min_value=1, max_value=1000, default=1)
     images = serializers.ListField(
@@ -131,6 +127,12 @@ class ProductUpdateSerializer(serializers.Serializer):
     )
     stock = serializers.IntegerField(min_value=0, max_value=1000, required=False)
     weight_grams = serializers.IntegerField(min_value=0, max_value=30000, required=False)
+    freight_declared_value = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+    )
     production_days = serializers.IntegerField(min_value=0, max_value=90, required=False)
 
     def validate(self, attrs):

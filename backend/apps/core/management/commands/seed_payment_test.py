@@ -39,15 +39,26 @@ PRODUCTS = [
 ]
 
 
-def _placeholder_image(label: str) -> bytes:
-    img = Image.new("RGB", (800, 800), (236, 228, 232))
+def _placeholder_image(label: str, accent: tuple[int, int, int]) -> bytes:
+    """JPEG leve e rápido — evita OOM/timeout no build do Render."""
+    img = Image.new("RGB", (640, 640), (28, 24, 32))
     draw = ImageDraw.Draw(img)
-    draw.rectangle([40, 40, 760, 760], outline=(120, 80, 110), width=4)
-    draw.text((80, 360), "TESTE R$ 5", fill=(90, 50, 80))
-    draw.text((80, 420), label[:40], fill=(90, 50, 80))
+    draw.rectangle([0, 0, 640, 160], fill=accent)
+    draw.rectangle([40, 200, 600, 600], outline=accent, width=4)
+    draw.rectangle([80, 260, 560, 480], fill=(18, 16, 22))
+    draw.text((110, 290), "SMOKE TEST", fill=(255, 255, 255))
+    draw.text((110, 350), "R$ 5,00", fill=accent)
+    draw.text((110, 410), (label or "Item teste")[:36], fill=(210, 200, 215))
     buf = BytesIO()
-    img.save(buf, format="JPEG", quality=85)
+    img.save(buf, format="JPEG", quality=75, optimize=True)
     return buf.getvalue()
+
+
+PRODUCT_ACCENTS = {
+    "teste-pagamento-calcinha": (216, 77, 121),
+    "teste-pagamento-sutia": (120, 160, 220),
+    "teste-pagamento-meia": (90, 190, 150),
+}
 
 
 class Command(BaseCommand):
@@ -58,6 +69,11 @@ class Command(BaseCommand):
             "--force",
             action="store_true",
             help="Permite rodar com DEBUG=False (produção).",
+        )
+        parser.add_argument(
+            "--refresh-images",
+            action="store_true",
+            help="Recria as imagens dos itens mesmo se já existirem.",
         )
         parser.add_argument(
             "--pix-key",
@@ -75,6 +91,14 @@ class Command(BaseCommand):
             raise CommandError(
                 "Em produção rode com --force. Ex.: "
                 "python manage.py seed_payment_test --force --pix-key=SEU_PIX"
+            )
+        if not settings.DEBUG and options["force"]:
+            self.stdout.write(
+                self.style.WARNING(
+                    "ATENÇÃO: criando loja/produtos de smoke test em DEBUG=False. "
+                    "Desligue SEED_PAYMENT_TEST e rode purge_demo_and_test_data "
+                    "antes de abrir o site ao público."
+                )
             )
 
         target_price = Decimal(options["price"]).quantize(Decimal("0.01"))
@@ -185,15 +209,22 @@ class Command(BaseCommand):
                 },
             )
             # Garante preço público exatamente igual ao pedido (evita arredondamento 4.99/5.01).
-            Product.objects.filter(pk=product.pk).update(price=target_price)
+            Product.objects.filter(pk=product.pk).update(
+                price=target_price,
+                status=Product.Status.PUBLISHED,
+                visibility=Product.Visibility.PUBLIC,
+                stock=20,
+            )
             product.refresh_from_db()
 
-            if was_created or not product.images.exists():
+            refresh_images = options["refresh_images"] or was_created or not product.images.exists()
+            if refresh_images:
                 product.images.all().delete()
+                accent = PRODUCT_ACCENTS.get(slug, (216, 77, 121))
                 ProductImage.objects.create(
                     product=product,
                     file=ContentFile(
-                        _placeholder_image(title),
+                        _placeholder_image(title, accent),
                         name=f"{slug}.jpg",
                     ),
                     is_cover=True,

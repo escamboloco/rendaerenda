@@ -30,10 +30,6 @@ class StoreOnboardSerializer(serializers.Serializer):
     pix_key_type = serializers.ChoiceField(
         choices=["CPF", "CNPJ", "EMAIL", "PHONE", "EVP"], required=False, allow_blank=True
     )
-    plan_id = serializers.PrimaryKeyRelatedField(
-        queryset=StorePlan.objects.filter(is_active=True), required=False, allow_null=True
-    )
-
     def validate_slug(self, value):
         if Store.objects.filter(slug=value).exists():
             raise serializers.ValidationError("Esse endereço de loja já está em uso.")
