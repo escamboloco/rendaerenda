@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.urls import reverse
+from django.utils.html import format_html
 
 from .models import AgeVerification, SellerKYC, User
 
@@ -36,20 +38,52 @@ class SellerKYCAdmin(admin.ModelAdmin):
     list_display = ("user", "status", "verification_code", "document_birth_date", "submitted_at", "reviewed_by")
     list_filter = ("status",)
     search_fields = ("user__username", "user__email", "user__cpf", "verification_code")
-    readonly_fields = ("verification_code", "submitted_at", "reviewed_at", "reviewed_by")
+    exclude = ("document_front", "document_back", "selfie_with_document")
+    readonly_fields = (
+        "verification_code",
+        "submitted_at",
+        "reviewed_at",
+        "reviewed_by",
+        "secure_document_front",
+        "secure_document_back",
+        "secure_selfie",
+    )
     actions = ["approve_selected", "reject_selected"]
+
+    def _secure_link(self, obj, field, label):
+        stored_file = getattr(obj, field)
+        if not stored_file:
+            return "Não enviado"
+        url = reverse("backoffice:kyc_file", args=[obj.id, field])
+        return format_html('<a href="{}" target="_blank" rel="noreferrer">{}</a>', url, label)
+
+    @admin.display(description="Documento — frente")
+    def secure_document_front(self, obj):
+        return self._secure_link(obj, "document_front", "Abrir frente com acesso protegido")
+
+    @admin.display(description="Documento — verso")
+    def secure_document_back(self, obj):
+        return self._secure_link(obj, "document_back", "Abrir verso com acesso protegido")
+
+    @admin.display(description="Selfie + código")
+    def secure_selfie(self, obj):
+        return self._secure_link(obj, "selfie_with_document", "Abrir selfie com acesso protegido")
 
     @admin.action(description="Aprovar (exige data de nascimento do documento preenchida)")
     def approve_selected(self, request, queryset):
         approved, missing = 0, 0
         for kyc in queryset:
-            if not kyc.document_birth_date:
+            try:
+                kyc.approve(reviewer=request.user)
+            except ValueError:
                 missing += 1
                 continue
-            kyc.approve(reviewer=request.user)
             approved += 1
         if approved:
-            self.message_user(request, f"{approved} KYC aprovado(s) e idade verificada.")
+            self.message_user(
+                request,
+                f"{approved} KYC aprovado(s), idade verificada e loja liberada quando aplicável.",
+            )
         if missing:
             self.message_user(
                 request,

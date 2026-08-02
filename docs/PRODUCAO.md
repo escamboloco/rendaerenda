@@ -20,9 +20,13 @@ para o público, e como conferir. O checklist **jurídico** é o da seção 7 de
 | 8 | Cron `expire-orders` rodando | Render → Cron → último run OK. Sem ele, carrinho abandonado tira peça única do ar para sempre |
 | 9 | Crons `release-deliveries` e `release-escrow` rodando | Sem eles o dinheiro fica preso na custódia e a vendedora nunca recebe |
 | 10 | `manage.py createcachetable` executado | Sem a tabela, o rate limit quebra |
-| 11 | `SEED_PAYMENT_TEST=False` depois do primeiro teste de pagamento | Senão a loja de teste com itens de R$ 5 fica pública |
+| 11 | `SEED_PAYMENT_TEST` | Em produção: `False` (obrigatório). O build limpa demo/smoke; `True` só para povoar catálogo fictício em smoke controlado |
+| 12 | SuperFrete em produção (token + saldo + sandbox off) | Ver seção 8 abaixo; `manage.py check_superfrete` |
 
 ## 2. Teste de fumaça (fazer com dinheiro real, valor baixo)
+
+Em produção `SEED_PAYMENT_TEST` deve permanecer `False`. O smoke test de
+pagamento/frete usa loja e item reais (criados por você), nunca o catálogo demo.
 
 1. Abrir o site anônimo → confirmar age gate.
 2. Adicionar item à sacola (com um adicional, se houver) → `/finalizar/`.
@@ -48,6 +52,9 @@ para o público, e como conferir. O checklist **jurídico** é o da seção 7 de
     volta para a vitrine.
 12. Abrir uma contestação em outro pedido e conferir que `release_escrow`
     **não** repassa o valor.
+13. Com SuperFrete ligado: no checkout o frete deve listar PAC/SEDEX (não
+    tarifa fixa). Depois do Pix, o `Shipment` precisa ter `label_url` e a
+    vendedora recebe o e-mail com o PDF.
 
 ## 3. Pagamento por CPF divergente
 
@@ -68,9 +75,9 @@ Antes de abrir para volume, decida:
 | KYC de vendedora (`REQUIRE_SELLER_KYC=False`) | Desligado no soft-launch | Qualquer conta abre loja |
 | Verificação de telefone (bureau + SMS) | Sem provider configurado | Pedido personalizado exige `is_phone_verified`, então fica bloqueado na prática |
 | NFS-e (`NFSE_PROVIDER_API_KEY`) | Não configurada; a task pula sem erro | Comissão sem nota fiscal |
-| Cotação de frete real | `CHECKOUT_FREE_SHIPPING=False` + `SUPERFRETE_TOKEN` + saldo SuperFrete | Sem token, cai na tarifa fixa; sem saldo a etiqueta não é liberada |
+| Cotação de frete real | Ver seção 8 (go-live SuperFrete) | Sem token, cai na tarifa fixa; sem saldo a etiqueta não é liberada |
 | Remetente discreto | `SHIPPING_SENDER_NAME` + `SHIPPING_SENDER_DOCUMENT` (CNPJ) | Sem isso, usa `PLATFORM_LEGAL_NAME` / `SITE_NAME` |
-| Etiqueta pré-paga | `PLATFORM_BUYS_SHIPPING_LABEL=True` | Vendedora só imprime PDF na carteira / e-mail |
+| Etiqueta pré-paga | `PLATFORM_BUYS_SHIPPING_LABEL=True` (já no `render.yaml`) | Vendedora só imprime PDF na carteira / e-mail |
 | Cartão de crédito | Funciona pela página hospedada do Asaas (sem formulário no site) | Um passo a mais que o Pix; parcelamento fica nas mãos do Asaas |
 | Boost de loja | `StoreBoostPurchaseView` cria o boost sem cobrar | Receita não realizada — desative a compra ou implemente a cobrança |
 | Mídia em disco do Render | `/var/data` com 5 GB | Disco cheio derruba upload; migrar para S3 antes de escalar |
@@ -124,3 +131,177 @@ propósito e um ERROR vai para o log — recuperar o valor é ação humana.
   se acumular, o cron `expire-orders` parou.
 - Admin → `WithdrawalRequest` com `status=failed`: repasse que não saiu,
   precisa de Pix manual pelo painel do Asaas.
+- Logs SuperFrete: `SuperFrete recusou`, `etiqueta` / `buy_label_for_order`.
+  Cron `poll-shipments` precisa rodar de hora em hora para o rastreio.
+
+## 8. Go-live SuperFrete (produção)
+
+O código já usa SuperFrete (`SHIPPING_PROVIDER=superfrete`). Falta só
+credencial e saldo reais no Render.
+
+### Painel SuperFrete
+1. Conta em [web.superfrete.com](https://web.superfrete.com) (produção — **não** sandbox).
+2. **Integrar → Desenvolvedores → Confirmar** e copiar o token.
+3. Recarregar saldo (Pix) — sem saldo a cotação funciona, mas
+   `POST /api/v1/orders/finalize` falha e a vendedora não recebe o PDF.
+4. Conferir serviços ativos (PAC=1, SEDEX=2, Mini Envios=17, Jadlog=3).
+
+Docs: [primeiros passos](https://superfrete.readme.io/reference/primeiros-passos).
+
+### Variáveis no Render (Environment Group `rendaerenda-shared` + Web)
+
+| Variável | Valor produção |
+|---|---|
+| `SHIPPING_PROVIDER` | `superfrete` (já no blueprint) |
+| `SUPERFRETE_SANDBOX` | `False` (já no blueprint) |
+| `SUPERFRETE_TOKEN` | token de **produção** (sync:false — preencher à mão) |
+| `SUPERFRETE_SERVICES` | `1,2,17,3` |
+| `SUPERFRETE_USER_AGENT` | `Renda & Renda/1.0 (suporte@rendaerenda.com.br)` |
+| `PLATFORM_BUYS_SHIPPING_LABEL` | `True` |
+| `CHECKOUT_FREE_SHIPPING` | `False` |
+| `SHIPPING_SENDER_NAME` | razão social / nome neutro na etiqueta |
+| `SHIPPING_SENDER_DOCUMENT` | CNPJ da plataforma |
+| `SHIPPING_SENDER_EMAIL` | `suporte@rendaerenda.com.br` |
+| `SHIPPING_SENDER_PHONE` | telefone com DDD |
+
+O token precisa existir **também** no cron `rendaerenda-poll-shipments`
+(já declarado no `render.yaml`).
+
+### Depois de salvar as env vars
+1. **Manual Deploy** do serviço web (e do cron de shipments, se não herdar).
+2. No Shell do Render (web):
+   ```bash
+   python manage.py check_superfrete
+   ```
+   Tem que listar opções PAC/SEDEX/etc. Se reclamar de sandbox ou token, a
+   variável não entrou — confira o Environment Group.
+3. Admin → Lojas: toda loja ativa precisa de CEP **e** rua/número/bairro/cidade/UF
+   de postagem (campos privados `origin_*`). Lojas antigas sem isso bloqueiam
+   a compra da etiqueta.
+4. Pedido real de valor baixo → pagar → conferir:
+   - `Shipment.shipping_provider=superfrete`
+   - `provider_order_id` preenchido
+   - `label_url` com PDF
+   - e-mail `label_ready` para a vendedora
+5. Após postagem, o cron `poll_shipments` atualiza o rastreio sozinho.
+
+### Não misturar ambientes
+- Token de sandbox **não** funciona em `api.superfrete.com`.
+- Com `SUPERFRETE_SANDBOX=True` as etiquetas **não** são válidas para postagem.
+- Remova qualquer `MELHOR_ENVIO_*` antigo do painel — não é mais lido.
+
+## 9. Envs pendentes — o que preencher e como
+
+Onde: Render → Environment Group `rendaerenda-shared` (a maioria) e
+serviço `rendaerenda-web` (Asaas/token). Depois de salvar → **Manual Deploy**.
+
+### Já pode ligar sem CNPJ
+
+| Variável | Onde | Valor / como gerar | Se ficar vazio |
+|---|---|---|---|
+| `ASAAS_WEBHOOK_TOKEN` | Web | Gere um segredo: `openssl rand -hex 32` | Webhook responde **503** — Pix pago **não** confirma sozinho |
+| `CHECKOUT_FREE_SHIPPING` | Shared | `False` (já no blueprint) | Se `True`, frete R$ 0 e sem cotação |
+| `MODERATION_ALERT_EMAIL` | Shared | Caixa que **você** lê (ex.: `moderacao@rendaerenda.com.br` ou Gmail pessoal) | Contestação só vai pro log — ninguém é avisado |
+| `STATEMENT_DESCRIPTOR` | Shared | Nome neutro curto, até ~22 chars (ex.: `RR COMERCIO` ou a razão social) | Checkout não mostra a linha “no extrato aparece …” |
+
+#### `ASAAS_WEBHOOK_TOKEN` — passo a passo
+1. No seu computador:
+   ```bash
+   openssl rand -hex 32
+   ```
+2. Cole o resultado em Render → `rendaerenda-web` → `ASAAS_WEBHOOK_TOKEN`.
+3. Asaas → Integrações → Webhooks (ou criar webhook):
+   - URL: `https://rendaerenda.com.br/webhooks/asaas/`
+   - Token / `asaas-access-token`: **o mesmo valor**
+   - Eventos: `PAYMENT_RECEIVED`, `PAYMENT_CONFIRMED`, `PAYMENT_REFUNDED`,
+     `PAYMENT_CHARGEBACK_REQUESTED`, `PAYMENT_OVERDUE`
+4. Conferir:
+   ```bash
+   curl -s https://rendaerenda.com.br/webhooks/asaas/
+   # {"ok": true, "service": "asaas-webhook", ...}
+   ```
+5. Redeploy do web. Sem o token no Render **e** no painel Asaas, o pedido
+   fica `awaiting_payment` mesmo depois do Pix.
+
+#### `CHECKOUT_FREE_SHIPPING`
+Confirme no painel que está `False` (string). Blueprint já manda isso; se o
+serviço foi criado antes, o valor antigo pode ter ficado — edite à mão.
+
+#### `MODERATION_ALERT_EMAIL`
+Use um e-mail que chega no celular. SMTP (`EMAIL_HOST` / USER / PASSWORD)
+precisa estar ok, senão o alerta também não sai.
+
+#### `STATEMENT_DESCRIPTOR`
+É **só copy no checkout**. O nome que aparece no extrato do cartão/Pix é o
+da **conta Asaas** (e, com CNPJ, a razão social neutra). Escolha algo genérico
+tipo comércio/marketplace — nunca o nicho adulto.
+
+### Depende do CNPJ (etiqueta + identidade legal)
+
+Sem CNPJ a plataforma ainda vende (Asaas `pf` + SuperFrete), mas a etiqueta
+fica frágil e a cobrança discreta no extrato não fecha de verdade.
+
+| Variável | Valor quando o CNPJ existir |
+|---|---|
+| `PLATFORM_LEGAL_NAME` | Razão social **neutra** do cartão CNPJ |
+| `PLATFORM_CNPJ` | Só dígitos, 14 chars (ex.: `12345678000199`) |
+| `SHIPPING_SENDER_NAME` | Mesma razão social (ou nome fantasia neutro) — **não** “Renda & Renda” se for explícito demais no pacote |
+| `SHIPPING_SENDER_DOCUMENT` | Mesmo CNPJ (só dígitos) |
+| `SHIPPING_SENDER_EMAIL` | `suporte@rendaerenda.com.br` (já no blueprint) |
+| `SHIPPING_SENDER_PHONE` | Celular/WhatsApp com DDD, só dígitos (ex.: `11999998888`) |
+
+**Não precisa** preencher `SHIPPING_SENDER_STREET/NUMBER/DISTRICT/CITY/STATE`
+se cada loja tiver o endereço de postagem (`origin_*`) — a etiqueta usa o
+endereço da vendedora e o **nome/CNPJ da plataforma**.
+
+#### Enquanto o CNPJ não sai
+1. Deixe `SHIPPING_SENDER_*` / `PLATFORM_CNPJ` vazios **ou**
+2. Temporário (só para testar etiqueta): `SHIPPING_SENDER_NAME` = nome civil
+   completo do titular PF + `SHIPPING_SENDER_DOCUMENT` = CPF (11 dígitos) +
+   telefone. A SuperFrete aceita documento; o remetente deixa de ser neutro.
+3. Priorize abrir o CNPJ com razão social neutra (`docs/BASE_JURIDICA.md`)
+   e aí troque para CNPJ + `ASAAS_ACCOUNT_TYPE=pj` quando for usar split.
+
+### Checklist rápido no Render depois de preencher
+- [ ] `ASAAS_WEBHOOK_TOKEN` no web **igual** ao token do webhook Asaas  
+- [ ] `CHECKOUT_FREE_SHIPPING=False`  
+- [ ] `MODERATION_ALERT_EMAIL` com caixa real  
+- [ ] `STATEMENT_DESCRIPTOR` neutro  
+- [ ] Com CNPJ: `PLATFORM_*` + `SHIPPING_SENDER_NAME/DOCUMENT/PHONE`  
+- [ ] Manual Deploy → `curl` no webhook → `python manage.py check_superfrete`
+
+## 10. Primeiro acesso ao painel de gestão
+
+O painel operacional fica em `https://rendaerenda.com.br/gestao/entrar/`.
+No serviço **web** do Render, preencha as quatro variáveis juntas:
+
+| Variável | Valor |
+|---|---|
+| `ADMIN_EMAIL` | e-mail exclusivo da pessoa administradora |
+| `ADMIN_PASSWORD` | senha aleatória com pelo menos 12 caracteres |
+| `ADMIN_CPF` | CPF da administradora, somente 11 dígitos |
+| `ADMIN_BIRTH_DATE` | nascimento no formato `AAAA-MM-DD` |
+
+Para gerar uma senha forte:
+
+```bash
+openssl rand -base64 32
+```
+
+O build executa `python manage.py create_admin`. Na primeira execução ele
+cria a conta; nos próximos deploys apenas confirma as permissões e **não**
+redefine a senha. Para trocar a senha deliberadamente, abra o Shell do web:
+
+```bash
+python manage.py create_admin --reset-password
+```
+
+Nesse comando, `ADMIN_PASSWORD` deve conter temporariamente a nova senha.
+Depois do acesso, prefira alterar a senha pelo Django Admin e remova
+`ADMIN_PASSWORD`, `ADMIN_CPF` e `ADMIN_BIRTH_DATE` do Render; mantenha somente
+`ADMIN_EMAIL`. Nos deploys seguintes, o comando apenas confirma as permissões
+da conta existente. Qualquer outra combinação parcial falha de propósito.
+
+O painel tem visão geral, pedidos, financeiro, lojas (melhores avaliações
+primeiro), moderação, denúncias, disputas e contas. O `/admin/` permanece para
+KYC e alterações técnicas profundas.

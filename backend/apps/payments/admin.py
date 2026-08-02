@@ -30,6 +30,11 @@ class OrderAdmin(admin.ModelAdmin):
         """Fecha a disputa a favor de quem comprou: estorna no PSP e desfaz o crédito."""
         from .checkout import refund_order
 
+        if not request.user.is_superuser:
+            self.message_user(
+                request, "Ação financeira restrita ao superusuário.", messages.ERROR
+            )
+            return
         done, failed = 0, 0
         for order in queryset.select_related("payment", "store"):
             try:
@@ -54,12 +59,16 @@ class OrderAdmin(admin.ModelAdmin):
         """Fecha a disputa a favor da vendedora: tira da custódia e paga."""
         from apps.wallet.services import release_and_payout
 
+        if not request.user.is_superuser:
+            self.message_user(
+                request, "Ação financeira restrita ao superusuário.", messages.ERROR
+            )
+            return
         done = 0
         for order in queryset.select_related("store"):
-            if order.status == Order.Status.DISPUTED:
+            if order.status == Order.Status.DISPUTED and release_and_payout(order):
                 order.status = Order.Status.DELIVERED
                 order.save(update_fields=["status"])
-            if release_and_payout(order):
                 done += 1
         self.message_user(request, f"{done} pedido(s) liberado(s) e repassado(s).", messages.SUCCESS)
 

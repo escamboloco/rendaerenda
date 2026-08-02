@@ -17,7 +17,7 @@ from .models import CustomOrderRequest
 CUSTOM_CATEGORY_NAME = "Pedidos personalizados"
 # Item fisico pequeno por padrao (roupa intima): a vendedora pode ajustar
 # depois no admin se o combinado for maior/mais pesado.
-DEFAULT_WEIGHT_GRAMS = 200
+DEFAULT_WEIGHT_GRAMS = 80
 
 
 def create_custom_request(*, buyer, store, title: str, description: str, offered_price) -> CustomOrderRequest:

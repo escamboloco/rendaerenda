@@ -213,6 +213,8 @@ def robots_txt(request):
         "Disallow: /webhooks/",
         "Disallow: /entrada/",
         "Disallow: /contas/",
+        "Disallow: /media/",
+        "Disallow: /pedido/",
         "Disallow: /vendedora/",
         "Disallow: /carteira/",
         "Disallow: /verificacao-idade/",

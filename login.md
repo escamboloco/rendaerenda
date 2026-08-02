@@ -1,10 +1,10 @@
 # Contas de demonstração — Renda & Renda
 
-> ⚠️ **APENAS DESENVOLVIMENTO/DEMONSTRAÇÃO.** Estas contas são criadas
-> pelo comando `python manage.py seed_demo`, que **se recusa a rodar com
-> `DJANGO_DEBUG=False`** — elas nunca devem existir em produção. As senhas
-> abaixo são públicas de propósito (estão no código do seed); jamais
-> reutilize em ambiente real.
+> ⚠️ **APENAS DESENVOLVIMENTO LOCAL.** Estas contas são criadas por
+> `python manage.py seed_demo`. Em produção (`SEED_PAYMENT_TEST=False` no
+> `render.yaml`) o build roda `purge_demo_and_test_data --force` e apaga
+> lojas/produtos/contas demo — elas **não** devem existir no site ao vivo.
+> As senhas abaixo são públicas de propósito; jamais reutilize em ambiente real.
 
 **Senha de todas as contas:** `demo12345`
 
@@ -43,8 +43,9 @@ O login no site é feito pelo **e-mail**. O admin (`/admin/`) usa o username.
 | Karina Heat | karina@demo.local | `/loja/karina-heat/` |
 | Lara Privê | lara@demo.local | `/loja/lara-prive/` |
 
-Cada vendedora tem: ~3 produtos publicados (fotos públicas Unsplash ou fallback),
-painel em `/vendedora/`, vendas/avaliações nas primeiras lojas e follows de compradores.
+Cada vendedora tem: 4 produtos publicados (≈88 no total), preços variados,
+CEP de origem em cidade diferente (frete), fotos públicas Unsplash/Pexels
+(ou fallback), painel em `/vendedora/`, e opcionalmente vendas/avaliações.
 
 ## Compradores
 
@@ -62,4 +63,6 @@ painel em `/vendedora/`, vendas/avaliações nas primeiras lojas e follows de co
 cd backend
 python manage.py migrate
 python manage.py seed_demo
+# produção / Render shell:
+# python manage.py seed_demo --force
 ```

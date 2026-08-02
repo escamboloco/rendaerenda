@@ -35,15 +35,24 @@ envVarGroups:
       - key: SITE_DOMAIN
         value: "rendaerenda.com.br"
       - key: CSRF_TRUSTED_ORIGINS
-        value: "https://rendaerenda.com.br,https://www.rendaerenda.com.br"
+        value: "https://rendaerenda.com.br,https://www.rendaerenda.com.br,https://*.onrender.com"
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT
         value: "20"
       - key: PACKAGING_FEE
         value: "0"
+      # False = cotação SuperFrete real. True zera frete (só soft-launch).
       - key: CHECKOUT_FREE_SHIPPING
         value: "False"
+      # Texto de cobrança discreta no checkout (não muda o extrato do banco).
+      # Extrato real = nome da conta Asaas / razão social no CNPJ.
+      - key: STATEMENT_DESCRIPTOR
+        sync: false
+      - key: PLATFORM_LEGAL_NAME
+        sync: false
+      - key: PLATFORM_CNPJ
+        sync: false
       # Tempo que o pedido segura o estoque esperando o Pix (min).
       - key: ORDER_PAYMENT_TTL_MINUTES
         value: "60"
@@ -51,10 +60,15 @@ envVarGroups:
       - key: PIX_DUE_DAYS
         value: "3"
       # Pix pago por CPF diferente do titular do pedido: estorno automatico
-      # (trava de idade). Deixe True enquanto a verificacao biometrica nao
-      # estiver ligada.
+      # (unica trava de identidade do comprador alem do age gate + CPF no cadastro).
       - key: REFUND_ON_PAYER_CPF_MISMATCH
         value: "True"
+      # Pagamento sem CPF retornado pelo PSP fica pendente, nunca libera produto.
+      - key: REQUIRE_PAYER_DOCUMENT
+        value: "True"
+      # False = nao exige biometria/bureau no checkout. A prova e o CPF do Pix.
+      - key: REQUIRE_VERIFIED_BUYER_AGE
+        value: "False"
       # --- Custodia: o dinheiro fica com a plataforma ate a entrega ---
       - key: ESCROW_ENABLED
         value: "True"
@@ -73,19 +87,32 @@ envVarGroups:
       - key: ESCROW_MAX_HOLD_DAYS
         value: "30"
       - key: REQUIRE_SELLER_KYC
-        value: "False"
+        value: "True"
       - key: WALLET_RELEASE_DAYS_AFTER_SHIPPING
         value: "0"
       - key: DELIVERY_CONFIRMATION_WINDOW_HOURS
         value: "24"
       - key: SHIPPING_PROVIDER
         value: "superfrete"
+      # False = API real (api.superfrete.com). Nunca True em produção.
       - key: SUPERFRETE_SANDBOX
         value: "False"
       - key: SUPERFRETE_SERVICES
-        value: "1,2,17,3"
+        value: "17,1,2,3"
       - key: SUPERFRETE_USER_AGENT
         value: "Renda & Renda/1.0 (suporte@rendaerenda.com.br)"
+      # Plataforma compra a etiqueta com o frete pago pelo comprador.
+      - key: PLATFORM_BUYS_SHIPPING_LABEL
+        value: "True"
+      # Remetente neutro impresso na etiqueta (não o apelido da loja).
+      - key: SHIPPING_SENDER_NAME
+        sync: false
+      - key: SHIPPING_SENDER_DOCUMENT
+        sync: false
+      - key: SHIPPING_SENDER_EMAIL
+        value: "suporte@rendaerenda.com.br"
+      - key: SHIPPING_SENDER_PHONE
+        sync: false
       - key: PAYMENT_PROVIDER
         value: "asaas"
       - key: ASAAS_API_URL
@@ -106,9 +133,10 @@ envVarGroups:
         sync: false
       - key: MEDIA_ROOT
         value: "/var/data/media"
-      # Cria loja teste com 3 itens a R$ 5 em todo deploy (idempotente).
+      # Produção: nunca recriar catálogo/contas demo. O build limpa todos os
+      # registros reconhecidos como seed/smoke test antes de subir o web.
       - key: SEED_PAYMENT_TEST
-        value: "True"
+        value: "False"
 
 services:
   - type: web
@@ -118,7 +146,8 @@ services:
     plan: starter
     rootDir: backend
     buildCommand: "bash build.sh"
-    startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 60"
+    # 2 workers no starter: 3 costumava estourar memória e gerar 502 em /vender/.
+    startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60"
     healthCheckPath: /healthz/
     # Disco persistente pras fotos (sobrevive a redeploy). Cobra ~US$0.25/GB/mes.
     disk:
@@ -138,6 +167,15 @@ services:
       - key: ASAAS_API_KEY
         sync: false
       - key: ASAAS_WEBHOOK_TOKEN
+        sync: false
+      # Primeiro acesso ao backoffice /gestao/entrar/ (create_admin no deploy).
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_CPF
+        sync: false
+      - key: ADMIN_BIRTH_DATE
         sync: false
       - key: SUPERFRETE_TOKEN
         sync: false
@@ -177,6 +215,31 @@ services:
           name: rendaerenda-db
           property: connectionString
       - key: SUPERFRETE_TOKEN
+        sync: false
+
+  # Retenta etiquetas SuperFrete que falharam no pagamento (token/saldo/API).
+  - type: cron
+    name: rendaerenda-buy-labels
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "*/15 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py buy_pending_labels"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: SUPERFRETE_TOKEN
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
         sync: false
 
   # Confere no Asaas os Pix pendentes (rede de seguranca caso o webhook

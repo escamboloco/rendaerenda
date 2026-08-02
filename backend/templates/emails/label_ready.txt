@@ -1,16 +1,34 @@
 Olá!
 
-Você tem uma venda paga no pedido #{{ order.id|slice:":8" }} — parabéns!
+Nova venda paga na loja {{ order.store.display_name }}.
 
-A etiqueta de envio já foi comprada e paga pela plataforma. É só:
+Pedido #{{ order.id|slice:":8" }}
+- Valor dos itens: R$ {{ order.items_total }}
+- Seu repasse do item: R$ {{ order.payout_total }}
+- Frete pago pelo comprador: R$ {{ order.shipping_total }}
+- Embalagem neutra: por sua conta
 
-1. Imprimir a etiqueta: {{ shipment.label_url }}
-2. Embalar o item (embalagem neutra, sem identificação do conteúdo)
-3. Colar a etiqueta na embalagem
-4. Levar a um ponto de postagem da transportadora indicada na etiqueta
+{% if item_lines %}Itens (descrição neutra):
+{% for line in item_lines %}- {{ line }}
+{% endfor %}{% endif %}
+Entregar em:
+{{ shipping_line }}
 
-O rastreio é automático — você não precisa digitar nada. O valor da
-venda aparece na sua carteira e é liberado após a confirmação de
-recebimento pelo comprador (ou automaticamente 1 dia depois da entrega).
+Comprador: {{ order.payer_name }}
+E-mail: {{ order.payer_email }}
+
+A etiqueta de envio já foi comprada e paga pela plataforma:
+
+1. Imprimir: {{ shipment.label_url }}
+2. Embalar com embalagem neutra (sem identificação do conteúdo)
+3. Colar a etiqueta e postar no ponto da transportadora
+
+{% if shipment.tracking_code %}Rastreio: {{ shipment.tracking_code }}
+{% endif %}
+Também está na sua carteira: {{ wallet_url }}
+
+O valor da venda fica em custódia e é liberado após a confirmação de
+recebimento (ou automaticamente depois da janela de confirmação).
 
 {{ site_name }}
+Este e-mail não lista o título íntimo do item por privacidade.

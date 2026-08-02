@@ -25,11 +25,10 @@ class SubscriptionCheckoutView(APIView):
     throttle_scope = "checkout"
 
     def post(self, request):
-        if not request.user.is_phone_verified:
+        if not request.user.cpf:
             return Response(
-                {"detail": "Confirme seu celular (vinculado ao seu CPF) antes de assinar.",
-                 "action": "verify_phone"},
-                status=status.HTTP_403_FORBIDDEN,
+                {"detail": "Complete seu cadastro com CPF antes de assinar."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         serializer = SubscriptionCheckoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

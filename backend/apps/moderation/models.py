@@ -44,12 +44,40 @@ class ModerationQueueItem(models.Model):
         indexes = [models.Index(fields=["decision", "target_type"])]
 
     def approve(self, reviewer):
+        from django.conf import settings as django_settings
+
+        from apps.catalog.models import Product
+        from apps.stores.models import Store
+
+        target = self.target
+        if isinstance(target, Store):
+            if getattr(django_settings, "REQUIRE_SELLER_KYC", True):
+                kyc = getattr(target.owner, "seller_kyc", None)
+                if not kyc or kyc.status != kyc.Status.APPROVED:
+                    raise ValueError(
+                        "Aprove o KYC (RG frente/verso + selfie) antes de liberar a loja."
+                    )
+            target.status = Store.Status.ACTIVE
+            target.save(update_fields=["status"])
+        elif isinstance(target, Product):
+            target.status = Product.Status.PUBLISHED
+            target.save(update_fields=["status", "price", "weight_grams"])
         self.decision = self.Decision.APPROVED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
         self.save(update_fields=["decision", "reviewed_by", "reviewed_at"])
 
     def reject(self, reviewer):
+        from apps.catalog.models import Product
+        from apps.stores.models import Store
+
+        target = self.target
+        if isinstance(target, Store):
+            target.status = Store.Status.SUSPENDED
+            target.save(update_fields=["status"])
+        elif isinstance(target, Product):
+            target.status = Product.Status.REJECTED
+            target.save(update_fields=["status", "price", "weight_grams"])
         self.decision = self.Decision.REJECTED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
@@ -77,6 +105,14 @@ class Report(models.Model):
     # + reporte as autoridades (Lei 15.211/2025 art. sobre exploracao infantil).
     requires_immediate_action = models.BooleanField(default=False)
     resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reports_resolved",
+    )
+    resolution_notes = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):

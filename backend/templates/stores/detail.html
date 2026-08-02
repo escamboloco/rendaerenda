@@ -94,6 +94,11 @@
         {{ store.display_name }}
         <span class="badge-verified">Verificada</span>
       </h1>
+      {% if store.origin_city and store.origin_state %}
+      <p class="text-sm text-gray-400 mt-1.5">
+        Envia de <strong class="text-gray-200 font-medium">{{ store.origin_city }}/{{ store.origin_state }}</strong>
+      </p>
+      {% endif %}
       {% if store.bio %}<p class="text-gray-400 text-sm mt-2 max-w-2xl leading-relaxed">{{ store.bio }}</p>{% endif %}
       <div class="flex items-center gap-2 mt-2 flex-wrap">
         {% if store.review_count %}

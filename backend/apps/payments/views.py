@@ -14,6 +14,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.shipping.models import Shipment
+
 from .asaas import AsaasError
 from .checkout import (
     CartLine,
@@ -69,8 +71,17 @@ def order_page(request, token):
                 digital_assets.append({"product": item.product, "asset": asset})
 
     shipment = getattr(order, "shipment", None)
-    can_confirm = paid and order.status != Order.Status.DISPUTED and not (
+    already_answered = bool(
         shipment and (shipment.buyer_confirmed_at or shipment.buyer_disputed_at)
+    )
+    can_confirm = (
+        paid
+        and order.status != Order.Status.DISPUTED
+        and not already_answered
+        and (order.is_digital_only or (shipment and shipment.status == Shipment.Status.DELIVERED))
+    )
+    can_dispute = (
+        paid and order.status != Order.Status.DISPUTED and not already_answered
     )
     return render(
         request,
@@ -80,6 +91,7 @@ def order_page(request, token):
             "payment": getattr(order, "payment", None),
             "digital_assets": digital_assets,
             "can_confirm": can_confirm,
+            "can_dispute": can_dispute,
             "timeline": _order_timeline(order, shipment),
             "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
         },
@@ -243,7 +255,13 @@ class CartSummaryView(APIView):
                 "grand_total": str(items_total),
                 "requires_shipping": needs_shipping,
                 "store": (
-                    {"slug": store.slug, "name": store.display_name, "url": f"/loja/{store.slug}/"}
+                    {
+                        "slug": store.slug,
+                        "name": store.display_name,
+                        "url": f"/loja/{store.slug}/",
+                        "origin_city": store.origin_city or "",
+                        "origin_state": (store.origin_state or "").upper(),
+                    }
                     if store
                     else None
                 ),
@@ -275,7 +293,28 @@ class CheckoutView(APIView):
         payload = serializer.validated_data
 
         guest_birth = None
+        if getattr(settings, "REQUIRE_VERIFIED_BUYER_AGE", False):
+            if not user:
+                return Response(
+                    {
+                        "detail": (
+                            "Entre na sua conta e conclua a verificação de idade "
+                            "antes de comprar."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if not user.is_age_verified:
+                return Response(
+                    {"detail": "Conclua a verificação de idade antes de comprar."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         if user:
+            if not user.is_active or user.is_banned:
+                return Response(
+                    {"detail": "Conta suspensa."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             if not user.cpf:
                 return Response(
                     {"detail": "Complete seu cadastro com CPF antes de comprar."},
@@ -385,6 +424,28 @@ class OrderConfirmView(APIView):
         now = timezone.now()
 
         if action == "confirm":
+            if order.buyer_id is None:
+                return Response(
+                    {
+                        "detail": (
+                            "Pedidos sem conta são liberados somente pelo prazo "
+                            "automático de segurança."
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if not request.user.is_authenticated or request.user.id != order.buyer_id:
+                return Response(
+                    {"detail": "Entre na conta usada na compra para confirmar."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if order.requires_shipping and (
+                not shipment or shipment.status != Shipment.Status.DELIVERED
+            ):
+                return Response(
+                    {"detail": "A liberação só fica disponível após a entrega registrada."},
+                    status=status.HTTP_409_CONFLICT,
+                )
             if shipment:
                 shipment.buyer_confirmed_at = now
                 shipment.save(update_fields=["buyer_confirmed_at"])
@@ -395,6 +456,26 @@ class OrderConfirmView(APIView):
 
         if action == "dispute":
             from .tasks import send_dispute_opened_email
+
+            # Token sozinho não basta: exige conta do comprador ou e-mail
+            # do guest no corpo (prova mínima contra link vazado).
+            if order.buyer_id:
+                if not request.user.is_authenticated or request.user.id != order.buyer_id:
+                    return Response(
+                        {"detail": "Entre na conta usada na compra para contestar."},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            else:
+                claimed = (request.data.get("guest_email") or "").strip().lower()
+                if not claimed or claimed != (order.guest_email or "").lower():
+                    return Response(
+                        {
+                            "detail": (
+                                "Para contestar, informe o mesmo e-mail usado no checkout."
+                            )
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
             if shipment:
                 shipment.buyer_disputed_at = now
@@ -455,6 +536,16 @@ class OrderMessagesView(APIView):
         from apps.moderation.services import run_automated_filters
 
         order, role = self._order_and_role(request, token)
+        if order.status not in (
+            Order.Status.PAID,
+            Order.Status.SHIPPED,
+            Order.Status.DELIVERED,
+            Order.Status.DISPUTED,
+        ):
+            return Response(
+                {"detail": "O chat só abre depois do pagamento confirmado."},
+                status=status.HTTP_409_CONFLICT,
+            )
         if order.status in (Order.Status.EXPIRED, Order.Status.CANCELED):
             return Response(
                 {"detail": "Este pedido não está mais ativo."}, status=status.HTTP_409_CONFLICT
@@ -517,7 +608,7 @@ class OrderStatusView(APIView):
                 "status": order.status,
                 "status_label": order.get_status_display(),
                 "paid": order.status
-                not in (Order.Status.AWAITING_PAYMENT, Order.Status.EXPIRED, Order.Status.CANCELED),
+                in (Order.Status.PAID, Order.Status.SHIPPED, Order.Status.DELIVERED),
                 "expired": order.status == Order.Status.EXPIRED,
                 "expires_at": order.expires_at,
                 "track_url": order.track_url,
@@ -528,8 +619,9 @@ class OrderStatusView(APIView):
 # ---------------------------------------------------------------- webhook
 
 
-# Eventos que significam "o dinheiro entrou".
-PAID_EVENTS = {"PAYMENT_RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_RECEIVED_IN_CASH"}
+# Eventos que significam "o dinheiro entrou" — nunca RECEIVED_IN_CASH
+# (exige operação manual no PSP e não deve liberar produto sozinho).
+PAID_EVENTS = {"PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"}
 # Eventos que desfazem a cobranca.
 REFUND_EVENTS = {
     "PAYMENT_REFUNDED",
@@ -538,6 +630,65 @@ REFUND_EVENTS = {
     "PAYMENT_CHARGEBACK_DISPUTE",
     "PAYMENT_REVERSED",
 }
+
+
+def _psp_confirms_paid(payment: Payment) -> bool:
+    """Reconsulta o Asaas: webhook sozinho nunca libera produto/dinheiro."""
+    from decimal import Decimal
+
+    from apps.payments.services import get_payment_provider
+
+    if not payment.provider_charge_id:
+        return False
+    try:
+        charge = get_payment_provider().get_charge(payment.provider_charge_id)
+    except AsaasError as exc:
+        logger.warning(
+            "Webhook ignorado: falha ao reconsultar cobrança %s (%s)",
+            payment.provider_charge_id,
+            exc.user_message,
+        )
+        return False
+    if not charge.is_paid:
+        logger.warning(
+            "Webhook de pagamento ignorado: cobrança %s ainda não paga no PSP (%s).",
+            payment.provider_charge_id,
+            charge.status,
+        )
+        return False
+    expected = Decimal(str(payment.order.grand_total)).quantize(Decimal("0.01"))
+    # ChargeResult pode não carregar value — quando houver, confere.
+    raw_value = getattr(charge, "value", None)
+    if raw_value is not None:
+        got = Decimal(str(raw_value)).quantize(Decimal("0.01"))
+        if got != expected:
+            logger.error(
+                "Webhook rejeitado: valor PSP %s != pedido %s (%s)",
+                got,
+                expected,
+                payment.order_id,
+            )
+            return False
+    return True
+
+
+def _psp_confirms_refunded(payment: Payment) -> bool:
+    from apps.payments.services import get_payment_provider
+
+    if not payment.provider_charge_id:
+        return False
+    try:
+        charge = get_payment_provider().get_charge(payment.provider_charge_id)
+    except AsaasError:
+        return False
+    status = (charge.status or "").upper()
+    return status in {
+        "REFUNDED",
+        "REFUND_REQUESTED",
+        "CHARGEBACK_REQUESTED",
+        "CHARGEBACK_DISPUTE",
+        "REVERSED",
+    }
 
 
 @csrf_exempt
@@ -551,14 +702,7 @@ def asaas_webhook(request):
     então responder 200 para evento já processado é o comportamento certo.
     """
     if request.method == "GET":
-        # Navegador abre com GET — nao e erro. O Asaas so usa POST.
-        return JsonResponse(
-            {
-                "ok": True,
-                "service": "asaas-webhook",
-                "hint": "Endpoint ativo. O Asaas deve enviar POST com o header asaas-access-token.",
-            }
-        )
+        return HttpResponse(status=404)
     if request.method != "POST":
         return HttpResponse(status=405)
 
@@ -594,16 +738,27 @@ def asaas_webhook(request):
         # Pode ser cobranca de assinatura/plano (nao tem Order).
         from apps.subscriptions.services import activate_subscription
 
-        if event in PAID_EVENTS and activate_subscription(provider_charge_id):
-            return JsonResponse({"received": True, "kind": "subscription"})
+        if event in PAID_EVENTS:
+            from apps.payments.services import get_payment_provider
+
+            try:
+                charge = get_payment_provider().get_charge(provider_charge_id)
+            except AsaasError:
+                return JsonResponse({"received": True, "ignored": "cobranca nao confirmada"})
+            if charge.is_paid and activate_subscription(provider_charge_id):
+                return JsonResponse({"received": True, "kind": "subscription"})
         logger.info("Webhook Asaas para cobranca desconhecida %s (%s)", provider_charge_id, event)
         return JsonResponse({"received": True, "ignored": "cobranca desconhecida"})
 
     if event in PAID_EVENTS:
+        if not _psp_confirms_paid(payment):
+            return JsonResponse({"received": True, "ignored": "psp_nao_confirmou_pagamento"}, status=200)
         confirmed = confirm_paid_order(payment, webhook_payload=payload)
         return JsonResponse({"received": True, "confirmed_now": confirmed})
 
     if event in REFUND_EVENTS:
+        if not _psp_confirms_refunded(payment):
+            return JsonResponse({"received": True, "ignored": "psp_nao_confirmou_estorno"})
         mark_refunded(payment, reason=event.lower())
         return JsonResponse({"received": True, "action": "refunded"})
 

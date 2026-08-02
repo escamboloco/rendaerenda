@@ -1266,3 +1266,25 @@
     @apply text-brand hover:underline;
   }
 }
+
+/* Anti-salvar mídia: impede seleção/arraste fácil e adiciona overlay. */
+.js-protect-media,
+img[src*="/media/protegido/"],
+.product-media,
+.store-photo-card__image {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+}
+.protect-media-wrap {
+  position: relative;
+  overflow: hidden;
+}
+.protect-media-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  z-index: 2;
+}

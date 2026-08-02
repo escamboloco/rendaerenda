@@ -1,0 +1,7 @@
+{% if page.paginator.num_pages > 1 %}
+<div class="actions" style="margin-top:14px">
+  {% if page.has_previous %}<a class="btn" href="?page={{ page.previous_page_number }}&q={{ query|urlencode }}&status={{ status_filter|urlencode }}&ordem={{ ordering|urlencode }}">Anterior</a>{% endif %}
+  <span class="card">Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a class="btn" href="?page={{ page.next_page_number }}&q={{ query|urlencode }}&status={{ status_filter|urlencode }}&ordem={{ ordering|urlencode }}">Próxima</a>{% endif %}
+</div>
+{% endif %}

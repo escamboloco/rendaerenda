@@ -62,19 +62,16 @@ class DisputeResolutionTests(ApiTestCase):
 
     def test_refund_wipes_the_seller_credit(self):
         """
-        Reembolso tira da vendedora o que o comprador recebeu de volta.
+        Reembolso tira da vendedora o crédito do item.
 
-        Com etiqueta pela plataforma, só a embalagem neutra foi Pixada na
-        confirmação — o saldo fica negativo nesse valor (dívida dela).
+        Embalagem neutra não é mais creditada (custo dela). Com etiqueta
+        pela plataforma, o frete da transportadora fica na plataforma.
         """
-        packaging = self.order.packaging_fee or Decimal("0.00")
-        # Embalagem já saiu via Pix na confirmação; o item ainda está creditado.
         self.assertEqual(self.balance(), self.order.payout_total)
 
         refund_order(self.order)
 
-        # Dívida = embalagem já Pixada (transportadora ficou na plataforma).
-        self.assertEqual(self.balance(), -packaging)
+        self.assertEqual(self.balance(), Decimal("0.00"))
 
     def test_refunding_twice_does_not_double_reverse(self):
         refund_order(self.order)
@@ -86,7 +83,7 @@ class DisputeResolutionTests(ApiTestCase):
             WalletEntry.objects.filter(
                 order=self.order, kind=WalletEntry.Kind.ADJUSTMENT
             ).count(),
-            2,  # um estorno do item, um do frete
+            1,  # estorno do item (sem crédito de embalagem)
         )
 
     def test_order_without_charge_cannot_be_refunded(self):
@@ -103,7 +100,7 @@ class DisputeResolutionTests(ApiTestCase):
 
         self.client.post(
             reverse("payments:order_confirm", args=[self.order.access_token]),
-            {"action": "dispute"},
+            {"action": "dispute", "guest_email": self.order.guest_email},
             content_type="application/json",
         )
         self.order.refresh_from_db()
@@ -126,6 +123,8 @@ class DisputeResolutionTests(ApiTestCase):
         """Estorno que chega pelo webhook segue o mesmo caminho."""
         import json
 
+        self.provider.refunded = True
+        self.provider.paid = False
         with override_settings(ASAAS_WEBHOOK_TOKEN="tok"):
             self.client.post(
                 reverse("payments_webhooks:asaas_webhook"),

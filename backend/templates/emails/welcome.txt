@@ -1,0 +1,20 @@
+Olá{% if user.public_alias %}, {{ user.public_alias }}{% endif %}!
+
+Sua conta no {{ site_name }} foi criada.
+
+Informações de acesso:
+- Usuário/e-mail: {{ user.email }}
+- Apelido público: {{ user.interaction_name }}
+- Entrar: {{ login_url }}
+
+Por segurança, sua senha não é enviada nem armazenada em texto. Se esquecer,
+crie uma nova pelo link seguro:
+{{ reset_url }}
+
+No Meu Perfil você acompanha compras, pagamentos, conversas e rastreios:
+{{ profile_url }}
+
+Se você não criou esta conta, redefina a senha e fale com o suporte.
+
+{{ site_name }}
+Este e-mail usa linguagem neutra para preservar sua privacidade.

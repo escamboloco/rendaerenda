@@ -135,7 +135,9 @@ class DigitalProductTests(ApiTestCase):
         order = Order.objects.get()
         url = reverse("catalog:download_asset", args=[order.access_token, self.asset.id])
 
-        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertEqual(
+            self.client.get(url, {"email": order.guest_email}).status_code, 404
+        )
 
     def test_download_works_after_payment(self):
         self._buy()
@@ -144,10 +146,18 @@ class DigitalProductTests(ApiTestCase):
         self.client.get(reverse("payments:order_status", args=[order.access_token]))
 
         url = reverse("catalog:download_asset", args=[order.access_token, self.asset.id])
-        response = self.client.get(url)
+        response = self.client.get(url, {"email": order.guest_email})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(b"".join(response.streaming_content), b"conteudo secreto")
+
+    def test_download_without_guest_email_is_blocked(self):
+        self._buy()
+        order = Order.objects.get()
+        self.provider.paid = True
+        self.client.get(reverse("payments:order_status", args=[order.access_token]))
+        url = reverse("catalog:download_asset", args=[order.access_token, self.asset.id])
+        self.assertEqual(self.client.get(url).status_code, 404)
 
     def test_asset_of_another_order_is_not_downloadable(self):
         self._buy()
@@ -161,7 +171,9 @@ class DigitalProductTests(ApiTestCase):
         )
         url = reverse("catalog:download_asset", args=[order.access_token, other_asset.id])
 
-        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertEqual(
+            self.client.get(url, {"email": order.guest_email}).status_code, 404
+        )
 
     def test_digital_product_has_no_weight(self):
         self.assertEqual(self.product.weight_grams, 0)

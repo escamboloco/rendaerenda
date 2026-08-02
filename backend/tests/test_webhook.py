@@ -42,9 +42,19 @@ class AsaasWebhookTests(ApiTestCase):
         self.url = reverse("payments_webhooks:asaas_webhook")
 
     def send(self, event="PAYMENT_RECEIVED", *, token=WEBHOOK_TOKEN, charge_id=None):
+        if event in {"PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"}:
+            self.provider.paid = True
+            self.provider.refunded = False
+        if event.startswith("PAYMENT_REFUND") or "CHARGEBACK" in event or event == "PAYMENT_REVERSED":
+            self.provider.refunded = True
+            self.provider.paid = False
         body = {
             "event": event,
-            "payment": {"id": charge_id or self.payment.provider_charge_id, "status": "RECEIVED"},
+            "payment": {
+                "id": charge_id or self.payment.provider_charge_id,
+                "status": "REFUNDED" if self.provider.refunded else "RECEIVED",
+                "value": float(self.order.grand_total),
+            },
         }
         return self.client.post(
             self.url,
@@ -67,8 +77,8 @@ class AsaasWebhookTests(ApiTestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.AWAITING_PAYMENT)
 
-    def test_get_returns_ok_for_browser(self):
-        self.assertEqual(self.client.get(self.url).status_code, 200)
+    def test_get_does_not_disclose_webhook_endpoint(self):
+        self.assertEqual(self.client.get(self.url).status_code, 404)
 
     def test_unknown_charge_is_acknowledged_without_side_effects(self):
         response = self.send(charge_id="pay_inexistente")
@@ -109,11 +119,10 @@ class AsaasWebhookTests(ApiTestCase):
             WalletEntry.objects.filter(order=self.order, kind=WalletEntry.Kind.SALE_CREDIT).count(), 1
         )
 
-    def test_credits_are_split_between_item_and_shipping(self):
+    def test_credits_item_only_when_platform_buys_label(self):
         """
-        Item retido em custódia; embalagem neutra liberada na hora.
-        Com etiqueta pela plataforma, o frete da transportadora fica
-        com a plataforma (não credita na carteira da vendedora).
+        Item retido em custódia. Embalagem é custo da vendedora (sem crédito).
+        Frete da transportadora fica com a plataforma para a etiqueta.
         """
         self.send("PAYMENT_RECEIVED")
         self.order.refresh_from_db()
@@ -122,12 +131,13 @@ class AsaasWebhookTests(ApiTestCase):
             order=self.order, kind=WalletEntry.Kind.SALE_CREDIT
         ).amount
         self.assertEqual(item, self.order.payout_total)
-        shipping_entry = WalletEntry.objects.filter(
-            order=self.order, kind=WalletEntry.Kind.SHIPPING_CREDIT
-        ).first()
-        shipping = shipping_entry.amount if shipping_entry else Decimal("0.00")
-        self.assertEqual(shipping, self.order.packaging_fee)
-        self.assertEqual(self.order.grand_total - item - shipping, self.order.platform_amount)
+        self.assertFalse(
+            WalletEntry.objects.filter(
+                order=self.order, kind=WalletEntry.Kind.SHIPPING_CREDIT
+            ).exists()
+        )
+        self.assertEqual(self.order.packaging_fee, Decimal("0.00"))
+        self.assertEqual(self.order.grand_total - item, self.order.platform_amount)
 
     def test_store_sales_counter_increases_once(self):
         self.send("PAYMENT_RECEIVED")

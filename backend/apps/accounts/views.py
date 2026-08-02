@@ -4,13 +4,18 @@ import json
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.debug import sensitive_post_parameters
+from django.views.decorators.http import require_http_methods
 from rest_framework import parsers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .deletion import AccountDeletionError, account_has_open_orders, delete_user_account
+from .models import SellerKYC, generate_kyc_code
 from .serializers import AgeVerificationRequestSerializer, SellerKYCSerializer
 from .services import AgeVerificationError, apply_verification_result, request_age_verification
 
@@ -25,12 +30,14 @@ def verification_page(request):
 def seller_kyc_page(request):
     """
     Página de verificação. A linha do KYC é criada já na primeira visita
-    para que o código que a vendedora escreve no papel não mude entre
-    abrir a página e tirar a selfie.
+    para o código carimbado na selfie ficar estável durante a captura.
     """
-    from .models import SellerKYC
-
     kyc, _ = SellerKYC.objects.get_or_create(user=request.user)
+    # Em reenvio após recusa, gera código novo para invalidar selfie antiga.
+    if kyc.status == SellerKYC.Status.REJECTED and request.GET.get("novo_codigo") == "1":
+        kyc.verification_code = generate_kyc_code()
+        kyc.save(update_fields=["verification_code"])
+        return redirect("accounts_pages:seller_kyc_page")
     return render(request, "accounts/seller_kyc.html", {"kyc": kyc})
 
 
@@ -42,14 +49,83 @@ def phone_page(request):
 
 @login_required
 def profile_page(request):
-    """Perfil minimo: apelido de interacao + status das verificacoes."""
+    """Hub do comprador: conta, transações, pedidos, rastreios e conversas."""
     if request.method == "POST":
         alias = request.POST.get("public_alias", "").strip()[:40]
         request.user.public_alias = alias
         request.user.save(update_fields=["public_alias"])
-        return render(request, "accounts/profile.html", {"saved": True})
-    return render(request, "accounts/profile.html")
+        return redirect(f"{reverse('accounts_pages:profile_page')}?salvo=1")
 
+    from apps.payments.models import Order, Payment
+
+    orders = list(
+        Order.objects.filter(buyer=request.user)
+        .select_related("store", "shipment", "payment", "invoice")
+        .prefetch_related("items", "messages")
+        .order_by("-created_at")[:50]
+    )
+    active_statuses = {
+        Order.Status.AWAITING_PAYMENT,
+        Order.Status.PAID,
+        Order.Status.SHIPPED,
+        Order.Status.DISPUTED,
+    }
+    conversations = [order for order in orders if order.messages.all()]
+    stats = {
+        "orders": len(orders),
+        "active": sum(order.status in active_statuses for order in orders),
+        "spent": sum(
+            (order.grand_total for order in orders if order.status not in {
+                Order.Status.CANCELED,
+                Order.Status.EXPIRED,
+                Order.Status.REFUNDED,
+            }),
+            start=0,
+        ),
+        "chats": len(conversations),
+    }
+    return render(
+        request,
+        "accounts/profile.html",
+        {
+            "orders": orders,
+            "conversations": conversations[:20],
+            "stats": stats,
+            "payment_methods": Payment.Method,
+            "saved": request.GET.get("salvo") == "1",
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+@sensitive_post_parameters("password")
+def delete_account_page(request):
+    """Exclusão de conta com confirmação de senha (LGPD)."""
+    error = ""
+    blocked = account_has_open_orders(request.user)
+    if request.method == "POST":
+        if blocked:
+            error = (
+                "Há pedidos em andamento. Conclua ou cancele antes de excluir a conta."
+            )
+        elif request.POST.get("confirm_delete") != "EXCLUIR":
+            error = 'Digite EXCLUIR no campo de confirmação para continuar.'
+        else:
+            try:
+                delete_user_account(
+                    request.user,
+                    password=request.POST.get("password", ""),
+                    request=request,
+                )
+                return redirect("stores:home")
+            except AccountDeletionError as exc:
+                error = str(exc)
+    return render(
+        request,
+        "accounts/delete_account.html",
+        {"error": error, "blocked": blocked},
+    )
 
 class AgeVerificationRequestView(APIView):
     """POST /api/verificacao-idade/ — dispara a checagem biométrica no provider (idwall/unico/CAF)."""
@@ -106,14 +182,23 @@ def age_verification_webhook(request):
     if not hmac.compare_digest(token, expected):
         return HttpResponseForbidden("Token inválido.")
 
-    payload = json.loads(request.body)
-    apply_verification_result(
-        reference_id=payload["reference_id"],
-        approved=payload["approved"],
-        liveness_score=payload.get("liveness_score"),
-        document_validated=payload.get("document_validated", False),
-        validated_birth_date=payload.get("birth_date"),
-    )
+    if len(request.body) > 64 * 1024:
+        return JsonResponse({"detail": "payload muito grande"}, status=413)
+    try:
+        payload = json.loads(request.body or b"{}")
+        reference_id = str(payload["reference_id"]).strip()
+        approved = payload["approved"]
+        if not reference_id or not isinstance(approved, bool):
+            raise ValueError
+        apply_verification_result(
+            reference_id=reference_id,
+            approved=approved,
+            liveness_score=payload.get("liveness_score"),
+            document_validated=bool(payload.get("document_validated", False)),
+            validated_birth_date=payload.get("birth_date"),
+        )
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return JsonResponse({"detail": "payload inválido"}, status=400)
     return JsonResponse({"received": True})
 
 
@@ -154,13 +239,11 @@ class PhoneVerificationConfirmView(APIView):
 class SellerKYCSubmitView(APIView):
     """
     POST /api/vendedora/kyc/ — documento frente/verso + selfie com o
-    código da conta + termo de maioridade e cessão de imagem.
+    código da conta carimbado na foto + termo de maioridade e cessão.
 
     NÃO exige idade já verificada: é este envio que produz a verificação.
     A conferência é humana (admin), e é lá que a data de nascimento do
-    documento vira a idade oficial da conta. Exigir `is_age_verified`
-    aqui criava um impasse — a única outra porta é o bureau biométrico,
-    que só existe quando `AGE_KYC_API_URL` está configurada.
+    documento vira a idade oficial da conta.
     """
 
     permission_classes = [IsAuthenticated]

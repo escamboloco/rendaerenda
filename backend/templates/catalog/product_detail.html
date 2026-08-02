@@ -130,7 +130,7 @@ duas vaza literal para dentro do JSON e invalida o bloco inteiro.
         <p class="text-4xl font-extrabold text-brand-light">R$ {{ product.price }}</p>
         <span class="text-xs text-gray-500 pb-1">via Pix ou cartão</span>
       </div>
-      <p class="text-xs text-gray-500">{% if product.requires_shipping %}Frete calculado pelo seu CEP no checkout · embalagem neutra{% else %}Sem frete · liberação após pagamento{% endif %}</p>
+      <p class="text-xs text-gray-500">{% if product.requires_shipping %}{% if store.origin_city and store.origin_state %}Envio de {{ store.origin_city }}/{{ store.origin_state }} · {% endif %}calcule o frete pelo CEP abaixo{% else %}Sem frete · liberação após pagamento{% endif %}</p>
     </div>
 
     {% if not product.is_available %}
@@ -144,6 +144,7 @@ duas vaza literal para dentro do JSON e invalida o bloco inteiro.
            productId: '{{ product.id }}',
            storeSlug: '{{ store.slug }}',
            price: {{ product.price|unlocalize }},
+           requiresShipping: {{ product.requires_shipping|yesno:'true,false' }},
            addons: JSON.parse(document.getElementById('product-addons').textContent)
          })">
       {% if product.stock == 1 %}
@@ -171,6 +172,29 @@ duas vaza literal para dentro do JSON e invalida o bloco inteiro.
       <div class="flex items-center justify-between border-t border-surface-border pt-3">
         <span class="text-sm text-gray-400">Total</span>
         <span class="text-xl font-extrabold text-brand" x-text="totalLabel"></span>
+      </div>
+      {% endif %}
+
+      {% if product.requires_shipping %}
+      <div class="rounded-xl border border-surface-border bg-surface-alt/50 p-3 space-y-2">
+        <p class="text-xs font-medium text-gray-300">Frete para o seu CEP</p>
+        <div class="flex gap-2">
+          <input type="text" inputmode="numeric" maxlength="8" placeholder="00000000"
+                 class="input-field flex-1" x-model="freightCep"
+                 @keydown.enter.prevent="quoteFreight()">
+          <button type="button" class="btn-secondary !px-3 shrink-0" :disabled="freightLoading" @click="quoteFreight()">
+            <span x-show="!freightLoading">Calcular</span>
+            <span x-show="freightLoading">…</span>
+          </button>
+        </div>
+        <p x-cloak x-show="freightError" x-text="freightError" class="input-error"></p>
+        <template x-if="freight">
+          <p class="text-sm text-gray-300">
+            <span x-text="freight.label"></span>
+            · <strong class="text-brand" x-text="money(freightPrice)"></strong>
+            <span class="text-xs text-gray-500" x-text="' · ' + (freight.deadline_days || '—') + ' dias úteis'"></span>
+          </p>
+        </template>
       </div>
       {% endif %}
 
@@ -232,7 +256,7 @@ duas vaza literal para dentro do JSON e invalida o bloco inteiro.
             <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.2 7.7 8.9a1 1 0 10-1.4 1.4l2 2a1 1 0 001.4 0l4-4z" clip-rule="evenodd"/></svg>
           </p>
           <p class="text-xs text-gray-500">
-            {% if store.review_count %}★ {{ store.avg_rating }} · {{ store.review_count }} avaliaç{{ store.review_count|pluralize:"ão,ões" }} · {% endif %}{{ store.sales_count }} venda{{ store.sales_count|pluralize }}
+            {% if store.origin_city and store.origin_state %}{{ store.origin_city }}/{{ store.origin_state }} · {% endif %}{% if store.review_count %}★ {{ store.avg_rating }} · {{ store.review_count }} avaliaç{{ store.review_count|pluralize:"ão,ões" }} · {% endif %}{{ store.sales_count }} venda{{ store.sales_count|pluralize }}
           </p>
         </div>
         <span class="text-xs text-brand shrink-0">Ver loja</span>

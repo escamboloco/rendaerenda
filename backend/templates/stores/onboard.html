@@ -25,18 +25,34 @@
     </div>
   </div>
 
-  {% elif require_seller_kyc and (not seller_kyc or seller_kyc.status != 'approved') %}
+  {% elif require_seller_kyc and not seller_kyc %}
   <div class="card p-6 text-center space-y-3">
     <p class="text-gray-300">
-      {% if seller_kyc and seller_kyc.status == 'pending' %}Seu KYC de vendedora está em análise.
-      {% else %}Envie seus documentos de verificação de vendedora para continuar.{% endif %}
+      Envie RG frente/verso e selfie com o código da conta. Depois disso você cria a loja; o admin libera a vitrine após a análise.
     </p>
-    <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="btn-primary w-full">
-      {% if seller_kyc and seller_kyc.status == 'pending' %}Ver status{% else %}Enviar documentos{% endif %}
-    </a>
+    <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="btn-primary w-full">Enviar documentos de segurança</a>
   </div>
 
-  {% elif not request.user.is_age_verified %}
+  {% elif require_seller_kyc and seller_kyc.status == 'not_sent' %}
+  <div class="card p-6 text-center space-y-3">
+    <p class="text-gray-300">
+      Envie RG frente/verso e selfie com o código da conta. Depois disso você cria a loja; o admin libera a vitrine após a análise.
+    </p>
+    <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="btn-primary w-full">Enviar documentos de segurança</a>
+  </div>
+
+  {% elif require_seller_kyc and seller_kyc.status == 'rejected' %}
+  <div class="card p-6 text-center space-y-3">
+    <p class="text-gray-300">
+      Seu envio anterior não foi aprovado. Reenvie RG frente/verso e selfie para continuar.
+    </p>
+    {% if seller_kyc.rejection_reason %}
+    <p class="text-xs text-brand-light">{{ seller_kyc.rejection_reason }}</p>
+    {% endif %}
+    <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="btn-primary w-full">Reenviar documentos</a>
+  </div>
+
+  {% elif not require_seller_kyc and not request.user.is_age_verified %}
   <div class="card p-6 text-center space-y-3">
     <p class="text-gray-300">Primeiro, confirme sua idade e identidade.</p>
     <p class="text-xs text-gray-500">Esta etapa protege você e impede que menores publiquem ou vendam na plataforma.</p>
@@ -44,6 +60,11 @@
   </div>
 
   {% else %}
+  {% if require_seller_kyc and seller_kyc.status == 'pending' %}
+  <div class="rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 text-sm text-amber-100">
+    Documentos em análise. Você já pode criar a loja — a vitrine só fica pública depois que o admin aprovar o KYC.
+  </div>
+  {% endif %}
   <div x-data="storeOnboarding()" class="space-y-6">
     <form x-show="step === 1" @submit.prevent="createStore()" class="purchase-panel space-y-5">
       <div>
@@ -69,7 +90,7 @@
       <div>
         <label class="input-label">CEP de postagem</label>
         <input type="text" x-model="originCep" @blur="lookupCep()" required pattern="\d{8}" maxlength="8" inputmode="numeric" placeholder="01001000" class="input-field">
-        <p class="input-help">Usado para calcular o frete e gerar a etiqueta SuperFrete. Seu endereço não aparece na loja.</p>
+        <p class="input-help">Usado para calcular o frete e gerar a etiqueta. Na loja aparece só a cidade/UF — rua e número ficam privados.</p>
       </div>
       <div class="grid sm:grid-cols-6 gap-3">
         <div class="sm:col-span-4">
@@ -104,7 +125,7 @@
         <p class="input-help">Por segurança, o Pix só pode ser enviado ao CPF da titular verificada.</p>
       </div>
       <div class="rounded-xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-gray-400">
-        Você recebe <strong class="text-gray-200">o valor líquido definido no anúncio + taxa de embalagem</strong>. A plataforma compra a etiqueta usando o frete pago pelo comprador.
+        Você recebe <strong class="text-gray-200">o valor líquido definido no anúncio</strong>. A plataforma compra a etiqueta com o frete pago pelo comprador; a embalagem neutra fica por sua conta.
       </div>
       <p x-show="error" x-text="error" class="input-error"></p>
       <button type="submit" class="btn-primary w-full" :disabled="loading">

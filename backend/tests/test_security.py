@@ -14,12 +14,23 @@ from .factories import make_product, make_user
 
 
 class AgeGateTests(ApiTestCase):
+<<<<<<< HEAD
     def test_public_page_is_covered_by_the_gate(self):
         """
         O portão cobre a página em vez de redirecionar. Redirect deixava o
         site inteiro fora do índice: crawler não tem sessão e levava 302
         para /entrada/, que é noindex.
         """
+=======
+    def setUp(self):
+        super().setUp()
+        # Estes testes exercitam o gate — começam sem confirmação.
+        session = self.client.session
+        session.pop("age_gate_confirmed", None)
+        session.save()
+
+    def test_public_page_redirects_to_age_gate(self):
+>>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)

@@ -10,61 +10,91 @@
     <div>
       <span class="eyebrow">Painel da vendedora</span>
       <h1 class="text-3xl font-bold mt-1">{{ store.display_name }}</h1>
-      <p class="text-sm text-gray-400 mt-1">Seu resumo de hoje e o próximo passo para vender mais.</p>
+      <p class="text-sm text-gray-400 mt-1">
+        Status:
+        {% if store.status == 'active' %}<span class="text-emerald-300 font-medium">loja liberada</span>
+        {% elif store.status == 'pending' %}<span class="text-amber-300 font-medium">aguardando liberação do admin</span>
+        {% else %}<span class="text-brand-light font-medium">{{ store.get_status_display|lower }}</span>{% endif %}
+        · comissão {{ commission_percent }}%
+      </p>
     </div>
     <div class="flex flex-wrap gap-2">
       {% if store.status == 'active' %}
       <a href="{% url 'catalog:create' %}" class="btn-primary">Anunciar peça</a>
       <a href="{% url 'stores:detail' store.slug %}" class="btn-secondary">Ver vitrine pública</a>
       {% else %}
-      <span class="badge-pending">Loja em moderação</span>
+      <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="btn-primary">Verificação de segurança</a>
+      <span class="badge-pending">Loja ainda não pública</span>
       {% endif %}
     </div>
   </div>
   </div>
 </section>
 
-{% if store.status != 'active' %}
-<section class="mb-6 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 sm:p-5 flex gap-3">
-  <span class="w-9 h-9 rounded-xl bg-amber-400/10 text-amber-300 grid place-items-center shrink-0">⌛</span>
-  <div>
-    <p class="font-semibold text-amber-100">Sua loja está em análise</p>
-    <p class="text-xs text-gray-400 mt-1">Você será avisada quando a vitrine for aprovada. Depois disso, o botão para criar o primeiro anúncio será liberado.</p>
-  </div>
+{% if seller_kyc and seller_kyc.status != 'approved' or store.status != 'active' %}
+<section class="mb-6 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 sm:p-5">
+  <p class="font-semibold text-amber-100">
+    {% if not seller_kyc or seller_kyc.status == 'not_sent' or seller_kyc.status == 'rejected' %}
+    Envie RG frente/verso e selfie para o admin liberar sua loja
+    {% elif seller_kyc.status == 'pending' %}
+    Documentos em análise — a loja será liberada após a avaliação
+    {% else %}
+    Identidade ok — finalizando liberação da vitrine
+    {% endif %}
+  </p>
+  <p class="text-xs text-gray-400 mt-1">
+    O admin confere as fotos de segurança no painel. Depois da aprovação, sua vitrine fica pública e você pode anunciar.
+  </p>
+  <ol class="mt-4 space-y-2">
+    {% for item in checklist %}
+    <li class="flex items-start gap-2 text-sm {% if item.done %}text-emerald-300{% else %}text-gray-400{% endif %}">
+      <span class="shrink-0">{% if item.done %}✓{% else %}○{% endif %}</span>
+      <span>{{ item.label }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% if not seller_kyc or seller_kyc.status != 'approved' %}
+  <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="btn-primary mt-4 inline-flex">Abrir verificação KYC</a>
+  {% endif %}
+  {% if seller_kyc and seller_kyc.status == 'rejected' and seller_kyc.rejection_reason %}
+  <p class="text-xs text-brand-light mt-3">Motivo da recusa: {{ seller_kyc.rejection_reason }}</p>
+  {% endif %}
 </section>
 {% endif %}
 
-{% if open_questions or open_customs or pending %}
+{% if open_questions or open_customs or pending or disputed_orders %}
 <section class="mb-6 rounded-2xl border border-brand/25 bg-brand/[0.06] p-4 sm:p-5">
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div>
       <p class="eyebrow">Prioridade agora</p>
       <p class="font-semibold mt-1">
-        {% if open_questions %}Você tem {{ open_questions }} pergunta{{ open_questions|pluralize }} esperando resposta.
+        {% if disputed_orders %}{{ disputed_orders }} disputa{{ disputed_orders|pluralize }} aberta{{ disputed_orders|pluralize }}.
+        {% elif open_questions %}Você tem {{ open_questions }} pergunta{{ open_questions|pluralize }} esperando resposta.
         {% elif open_customs %}Você tem {{ open_customs }} pedido{{ open_customs|pluralize }} sob medida para analisar.
         {% else %}{{ pending }} anúncio{{ pending|pluralize }} aguardando moderação.{% endif %}
       </p>
       <p class="text-xs text-gray-500 mt-1">Responder rápido reduz dúvidas e aumenta a chance de venda.</p>
     </div>
-    {% if open_questions %}<a href="{% url 'catalog:seller_questions' %}" class="btn-primary shrink-0">Responder agora</a>
+    {% if disputed_orders %}<a href="{% url 'wallet:dashboard' %}" class="btn-primary shrink-0">Ver pedidos</a>
+    {% elif open_questions %}<a href="{% url 'catalog:seller_questions' %}" class="btn-primary shrink-0">Responder agora</a>
     {% elif open_customs %}<a href="{% url 'offers:my_requests' %}" class="btn-primary shrink-0">Ver pedidos</a>
     {% else %}<a href="{% url 'catalog:seller_products' %}" class="btn-secondary shrink-0">Acompanhar</a>{% endif %}
   </div>
 </section>
 {% endif %}
 
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
   <div class="surface-raised p-4 sm:p-5">
     <p class="stat-value text-2xl">{{ published }}</p>
     <p class="stat-label">à venda</p>
   </div>
   <div class="surface-raised p-4 sm:p-5">
-    <p class="stat-value text-2xl">{{ pending }}</p>
-    <p class="stat-label">em moderação</p>
-  </div>
-  <div class="surface-raised p-4 sm:p-5">
     <p class="stat-value text-2xl">{{ active_orders }}</p>
     <p class="stat-label">pedidos ativos</p>
+  </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-2xl">R$ {{ available_balance|floatformat:2 }}</p>
+    <p class="stat-label">saldo disponível</p>
   </div>
   <div class="surface-raised p-4 sm:p-5">
     <p class="stat-value text-2xl">{{ follower_count }}</p>
@@ -72,37 +102,80 @@
   </div>
 </div>
 
-<section class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-10">
-  <a href="{% url 'catalog:seller_products' %}" class="card card-hover p-5 space-y-2">
-    <span class="trust-icon">▦</span>
-    <p class="font-semibold">Anúncios e estoque</p>
-    <p class="text-xs text-gray-500">Editar, pausar e acompanhar moderação</p>
-  </a>
-  <a href="{% url 'catalog:seller_questions' %}" class="card card-hover p-5 space-y-2 {% if open_questions %}border-brand/40{% endif %}">
-    <span class="trust-icon">?</span>
-    <p class="font-semibold">Perguntas {% if open_questions %}<span class="text-brand">({{ open_questions }})</span>{% endif %}</p>
-    <p class="text-xs text-gray-500">Responda rápido — aumenta conversão</p>
-  </a>
-  <a href="{% url 'offers:my_requests' %}" class="card card-hover p-5 space-y-2 {% if open_customs %}border-brand/40{% endif %}">
-    <span class="trust-icon">◇</span>
-    <p class="font-semibold">Pedidos sob medida {% if open_customs %}<span class="text-brand">({{ open_customs }})</span>{% endif %}</p>
-    <p class="text-xs text-gray-500">Aceitar, recusar ou contra-propor</p>
-  </a>
-  <a href="{% url 'wallet:dashboard' %}" class="card card-hover p-5 space-y-2">
-    <span class="trust-icon">R$</span>
-    <p class="font-semibold">Carteira e envios</p>
-    <p class="text-xs text-gray-500">Saldo, rastreio e saques</p>
-  </a>
-  <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="card card-hover p-5 space-y-2">
-    <span class="trust-icon">✓</span>
-    <p class="font-semibold">Verificação KYC</p>
-    <p class="text-xs text-gray-500">Documento e selfie — gera o selo Verificada</p>
-  </a>
-  <div class="card p-5 space-y-2">
-    <span class="trust-icon">%</span>
-    <p class="font-semibold">Comissão da plataforma</p>
-    <p class="text-xs text-gray-500">{{ commission_percent }}% sobre o item (você recebe o líquido que pediu)</p>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-xl">R$ {{ gross_sales|floatformat:2 }}</p>
+    <p class="stat-label">vendas brutas (itens)</p>
   </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-xl">R$ {{ pending_balance|floatformat:2 }}</p>
+    <p class="stat-label">em custódia</p>
+  </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-xl">{{ delivered_orders }}</p>
+    <p class="stat-label">entregues</p>
+  </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-xl">{{ store.avg_rating|floatformat:1 }} <span class="text-sm text-gray-500">({{ store.review_count }})</span></p>
+    <p class="stat-label">avaliação · {{ pending }} em moderação · {{ draft_count }} rascunho{{ draft_count|pluralize }}</p>
+  </div>
+</div>
+
+<section class="grid lg:grid-cols-3 gap-4 mb-10">
+  <div class="lg:col-span-2 space-y-3">
+    <h2 class="text-lg font-bold">Atalhos da operação</h2>
+    <div class="grid sm:grid-cols-2 gap-3">
+      <a href="{% url 'catalog:seller_products' %}" class="card card-hover p-5 space-y-2">
+        <span class="trust-icon">▦</span>
+        <p class="font-semibold">Anúncios e estoque</p>
+        <p class="text-xs text-gray-500">Editar, pausar e acompanhar moderação</p>
+      </a>
+      <a href="{% url 'catalog:seller_questions' %}" class="card card-hover p-5 space-y-2 {% if open_questions %}border-brand/40{% endif %}">
+        <span class="trust-icon">?</span>
+        <p class="font-semibold">Perguntas {% if open_questions %}<span class="text-brand">({{ open_questions }})</span>{% endif %}</p>
+        <p class="text-xs text-gray-500">Responda rápido — aumenta conversão</p>
+      </a>
+      <a href="{% url 'offers:my_requests' %}" class="card card-hover p-5 space-y-2 {% if open_customs %}border-brand/40{% endif %}">
+        <span class="trust-icon">◇</span>
+        <p class="font-semibold">Pedidos sob medida {% if open_customs %}<span class="text-brand">({{ open_customs }})</span>{% endif %}</p>
+        <p class="text-xs text-gray-500">Aceitar, recusar ou contra-propor</p>
+      </a>
+      <a href="{% url 'wallet:dashboard' %}" class="card card-hover p-5 space-y-2">
+        <span class="trust-icon">R$</span>
+        <p class="font-semibold">Carteira, envios e saques</p>
+        <p class="text-xs text-gray-500">Saldo, rastreio e repasses</p>
+      </a>
+      <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="card card-hover p-5 space-y-2 {% if not seller_kyc or seller_kyc.status != 'approved' %}border-amber-400/40{% endif %}">
+        <span class="trust-icon">✓</span>
+        <p class="font-semibold">
+          Verificação KYC
+          {% if seller_kyc %}
+          <span class="text-xs font-normal text-gray-400">({{ seller_kyc.get_status_display }})</span>
+          {% endif %}
+        </p>
+        <p class="text-xs text-gray-500">RG frente/verso + selfie — libera a loja</p>
+      </a>
+      <a href="{% url 'stores:detail' store.slug %}" class="card card-hover p-5 space-y-2">
+        <span class="trust-icon">◎</span>
+        <p class="font-semibold">Prévia da vitrine</p>
+        <p class="text-xs text-gray-500">{% if store.status == 'active' %}Como o público vê sua loja{% else %}Disponível após liberação{% endif %}</p>
+      </a>
+    </div>
+  </div>
+
+  <aside class="space-y-3">
+    <h2 class="text-lg font-bold">Saúde da loja</h2>
+    <div class="card p-5 space-y-3 text-sm">
+      <div class="flex justify-between gap-3"><span class="text-gray-500">Endereço de postagem</span><span>{% if origin_complete %}<span class="text-emerald-300">Completo</span>{% else %}<span class="text-amber-300">Incompleto</span>{% endif %}</span></div>
+      <div class="flex justify-between gap-3"><span class="text-gray-500">Chave Pix</span><span>{% if store.pix_key %}<span class="text-emerald-300">{{ store.pix_key_type }}</span>{% else %}<span class="text-amber-300">Pendente</span>{% endif %}</span></div>
+      <div class="flex justify-between gap-3"><span class="text-gray-500">Idade verificada</span><span>{% if request.user.is_age_verified %}<span class="text-emerald-300">Sim</span>{% else %}<span class="text-amber-300">Não</span>{% endif %}</span></div>
+      <div class="flex justify-between gap-3"><span class="text-gray-500">Vendas registradas</span><span>{{ store.sales_count }}</span></div>
+      <div class="flex justify-between gap-3"><span class="text-gray-500">Disputas abertas</span><span>{% if disputed_orders %}<span class="text-brand-light">{{ disputed_orders }}</span>{% else %}0{% endif %}</span></div>
+      <p class="text-xs text-gray-500 border-t border-white/10 pt-3">
+        Você recebe o líquido que pediu no anúncio; a plataforma soma {{ commission_percent }}% por cima no preço do comprador.
+      </p>
+    </div>
+  </aside>
 </section>
 
 <section>
@@ -114,13 +187,17 @@
     {% for order in recent_orders %}
     <a href="{% url 'payments_pages:guest_order' order.access_token %}" class="card card-hover px-4 py-3 flex items-center justify-between gap-3 text-sm">
       <div class="min-w-0">
+<<<<<<< HEAD
         <p class="font-medium truncate">Pedido {{ order.id|meta_text:10 }}</p>
+=======
+        <p class="font-medium truncate">Pedido {{ order.short_id }}</p>
+>>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
         <p class="text-xs text-gray-500">{{ order.get_status_display }} · {{ order.created_at|date:"d/m/Y H:i" }}</p>
       </div>
       <p class="font-bold text-brand shrink-0">R$ {{ order.items_total }}</p>
     </a>
     {% empty %}
-    <p class="text-sm text-gray-500 py-8 text-center">Ainda sem pedidos. Anuncie a primeira peça para começar.</p>
+    <p class="text-sm text-gray-500 py-8 text-center">Ainda sem pedidos. {% if store.status == 'active' %}Anuncie a primeira peça para começar.{% else %}Assim que a loja for liberada, seus anúncios entram na vitrine.{% endif %}</p>
     {% endfor %}
   </div>
 </section>

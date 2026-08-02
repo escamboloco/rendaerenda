@@ -1,0 +1,47 @@
+{% extends "core/base.html" %}
+{% block title %}Excluir conta — Renda &amp; Renda{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto space-y-6">
+  <div class="text-center space-y-2">
+    <h1 class="text-2xl font-bold">Excluir conta</h1>
+    <p class="text-sm text-gray-400">
+      Esta ação desativa o login e anonimiza seus dados pessoais. Não dá para desfazer pelo site.
+    </p>
+  </div>
+
+  {% if blocked %}
+  <div class="card p-5 text-sm text-amber-200 border-amber-400/30 bg-amber-400/5 space-y-2">
+    <p class="font-semibold">Há pedidos em andamento</p>
+    <p class="text-amber-100/80">
+      Conclua envios, pagamentos ou disputas abertas antes de excluir.
+      Veja <a href="{% url 'payments_pages:my_purchases' %}" class="underline">Minhas compras</a>
+      {% if request.user.has_store %}ou o <a href="{% url 'stores:seller_hub' %}" class="underline">painel da loja</a>{% endif %}.
+    </p>
+  </div>
+  {% endif %}
+
+  {% if error %}
+  <div class="card px-4 py-3 text-sm text-brand-light">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" class="card p-5 space-y-4" {% if blocked %}aria-disabled="true"{% endif %}>
+    {% csrf_token %}
+    <div>
+      <label class="input-label" for="password">Confirme sua senha</label>
+      <input id="password" type="password" name="password" required autocomplete="current-password"
+             class="input-field" {% if blocked %}disabled{% endif %}>
+    </div>
+    <div>
+      <label class="input-label" for="confirm_delete">Digite EXCLUIR para confirmar</label>
+      <input id="confirm_delete" type="text" name="confirm_delete" required autocomplete="off"
+             class="input-field uppercase" placeholder="EXCLUIR" {% if blocked %}disabled{% endif %}>
+    </div>
+    <button type="submit" class="btn-primary w-full !bg-brand" {% if blocked %}disabled{% endif %}>
+      Excluir minha conta definitivamente
+    </button>
+    <a href="{% url 'accounts_pages:profile_page' %}" class="btn-secondary w-full text-center">Cancelar</a>
+  </form>
+</div>
+{% endblock %}

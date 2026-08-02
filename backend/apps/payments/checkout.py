@@ -96,7 +96,9 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
         return test_free_freight_option()
 
     quantities = {str(line.product_id): line.quantity for line in lines}
-    weight = sum(p.weight_grams * quantities.get(str(p.id), 1) for p in products)
+    from apps.shipping.package_defaults import cheapest_option, quote_package
+
+    weight, length_cm, width_cm, height_cm = quote_package(products, quantities)
     origin_cep = products[0].store.origin_cep
 
     if not origin_cep:
@@ -108,11 +110,13 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
         options = calculate_freight_options(
             destination_cep=destination_cep,
             weight_grams=weight,
-            length_cm=max(p.length_cm for p in products),
-            width_cm=max(p.width_cm for p in products),
-            height_cm=sum(p.height_cm * quantities.get(str(p.id), 1) for p in products),
+            length_cm=length_cm,
+            width_cm=width_cm,
+            height_cm=height_cm,
             origin_cep=origin_cep,
-            declared_value=sum(p.price for p in products),
+            declared_value=sum(
+                p.shipping_declared_value * quantities.get(str(p.id), 1) for p in products
+            ),
         )
     except Exception:
         # Transportadora fora do ar ou sem contrato: cai para a tarifa fixa
@@ -133,26 +137,18 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
                 company="Correios",
             )
         ]
-    chosen = next((o for o in options if o.service == preferred_service), options[0])
-
-    # Embalagem neutra embutida no frete: com etiqueta pela plataforma,
-    # só essa parcela vai para a vendedora; o restante compra a etiqueta.
-    from apps.shipping.packaging import neutral_box_for
-
-    box = neutral_box_for(
-        weight_grams=weight,
-        length_cm=max(p.length_cm for p in products),
-        width_cm=max(p.width_cm for p in products),
-        height_cm=sum(p.height_cm * quantities.get(str(p.id), 1) for p in products),
-    )
-    packaging = box.price + Decimal(str(getattr(settings, "PACKAGING_FEE", 0) or 0))
+    # Preferência do cliente, senão a mais barata (Mini Envios / envelope).
+    chosen = next((o for o in options if o.service == preferred_service), None)
+    if chosen is None:
+        chosen = cheapest_option(options)
+    # Embalagem neutra fica a cargo da vendedora — não soma no frete.
     return FreightOption(
         service=chosen.service,
-        label=f"{chosen.label} + {box.label.lower()}" if packaging else chosen.label,
-        price=float(Decimal(str(chosen.price)) + packaging),
+        label=chosen.label,
+        price=float(chosen.price),
         deadline_days=chosen.deadline_days,
         company=chosen.company,
-        packaging_amount=float(packaging),
+        packaging_amount=0.0,
     )
 
 
@@ -400,6 +396,9 @@ def confirm_paid_order(payment: Payment, webhook_payload: dict | None = None) ->
     Idempotente: chamado varias vezes (webhook do Asaas repete entrega,
     e o polling da pagina roda em paralelo) so tem efeito na primeira.
     Retorna True se ESTA chamada foi a que confirmou o pedido.
+
+    Pedido já expirado/cancelado NUNCA libera produto: estorna no PSP
+    para evitar double-sell (Pix tardio depois do estoque voltar).
     """
     from apps.stores.services import increment_sales_count
     from apps.wallet.services import credit_and_auto_payout
@@ -420,7 +419,41 @@ def confirm_paid_order(payment: Payment, webhook_payload: dict | None = None) ->
         if webhook_payload:
             locked.raw_webhook_payload = webhook_payload
 
-        if not services.verify_payer_cpf(locked, webhook_payload):
+        # Double-sell: estoque já pode ter voltado após expire/cancel.
+        if order.status not in (Order.Status.AWAITING_PAYMENT, Order.Status.PAID):
+            locked.provider_status = "late_payment_rejected"
+            locked.save(update_fields=["provider_status", "raw_webhook_payload"] if webhook_payload else ["provider_status"])
+            logger.error(
+                "Pagamento tardio no pedido %s (status=%s) — estorno automático, produto não liberado.",
+                order.id,
+                order.status,
+            )
+            _refund_stale_charge(locked)
+            return False
+
+        if order.stock_restored:
+            locked.provider_status = "stock_already_restored"
+            locked.save(update_fields=["provider_status", "raw_webhook_payload"] if webhook_payload else ["provider_status"])
+            logger.error(
+                "Pedido %s com estoque já restaurado — estorno automático, produto não liberado.",
+                order.id,
+            )
+            _refund_stale_charge(locked)
+            return False
+
+        try:
+            payer_ok = services.verify_payer_cpf(locked, webhook_payload)
+        except AsaasError:
+            # Documento do pagador ainda indisponível: não libera produto.
+            locked.last_synced_at = timezone.now()
+            locked.save(update_fields=["last_synced_at", "payer_document", "payer_cpf_matched"])
+            logger.warning(
+                "Pedido %s pago sem identificação segura do pagador — produto retido.",
+                order.id,
+            )
+            return False
+
+        if not payer_ok:
             locked.status = Payment.Status.REFUNDED
             locked.save()
             order.status = Order.Status.REFUNDED
@@ -457,6 +490,23 @@ def confirm_paid_order(payment: Payment, webhook_payload: dict | None = None) ->
     _enqueue_shipping_label(order)
     _dispatch_paid_notifications(order)
     return True
+
+
+def _refund_stale_charge(payment: Payment) -> None:
+    if not payment.provider_charge_id:
+        return
+    try:
+        services.get_payment_provider().refund_charge(
+            provider_charge_id=payment.provider_charge_id
+        )
+        payment.status = Payment.Status.REFUNDED
+        payment.save(update_fields=["status"])
+    except Exception:
+        logger.exception(
+            "Falha ao estornar cobrança tardia %s do pedido %s",
+            payment.provider_charge_id,
+            payment.order_id,
+        )
 
 
 def _enqueue_shipping_label(order: Order) -> None:
@@ -552,6 +602,7 @@ def cancel_order(order: Order, *, reason: str = "cancelado") -> None:
     order.canceled_reason = reason[:80]
     order.expires_at = None
     order.save(update_fields=["status", "canceled_reason", "expires_at"])
+    _cancel_provider_charge(order)
     restore_stock(order)
 
 
@@ -560,7 +611,29 @@ def expire_order(order: Order) -> None:
     order.canceled_reason = "pix_nao_pago"
     order.expires_at = None
     order.save(update_fields=["status", "canceled_reason", "expires_at"])
+    _cancel_provider_charge(order)
     restore_stock(order)
+
+
+def _cancel_provider_charge(order: Order) -> None:
+    """Invalida o QR/Pix no PSP para impedir pagamento depois do estoque voltar."""
+    payment = getattr(order, "payment", None)
+    if not payment or not payment.provider_charge_id:
+        return
+    if payment.status in (Payment.Status.CONFIRMED, Payment.Status.REFUNDED):
+        return
+    try:
+        services.get_payment_provider().cancel_unpaid_charge(
+            provider_charge_id=payment.provider_charge_id
+        )
+        payment.provider_status = "DELETED"
+        payment.save(update_fields=["provider_status"])
+    except Exception:
+        logger.exception(
+            "Falha ao cancelar cobrança %s do pedido %s",
+            payment.provider_charge_id,
+            order.id,
+        )
 
 
 def expire_stale_orders(*, now=None) -> int:

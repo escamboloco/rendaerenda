@@ -38,7 +38,7 @@ class CheckoutApiTests(ApiTestCase):
 
         order = Order.objects.get()
         self.assertEqual(order.status, Order.Status.AWAITING_PAYMENT)
-        # 120 do item + frete (tarifa + embalagem neutra) cobrado a parte.
+        # 120 do item + frete (só transportadora) cobrado à parte.
         self.assertEqual(order.items_total, Decimal("120.00"))
         self.assertEqual(order.grand_total, order.items_total + order.shipping_total)
         self.assertEqual(order.payout_total, Decimal("100.00"))
