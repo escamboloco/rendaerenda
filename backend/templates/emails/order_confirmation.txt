@@ -8,12 +8,21 @@ Resumo:
 - Frete: R$ {{ order.shipping_total }}
 - Total pago: R$ {{ order.grand_total }}
 - Loja: {{ order.store.display_name }}
+- Pagamento: {{ order.payment.get_method_display }}
+- Situação: {{ order.payment.get_status_display }}
 
+{% if order.requires_shipping %}
 Endereço de entrega:
 {{ shipping_line }}
 
 A loja já foi avisada e é responsável por postar o item.
-Quando houver código de rastreio, você recebe outro e-mail.
+{% if shipment.tracking_code %}Código de rastreio: {{ shipment.tracking_code }}
+Prazo estimado: {{ shipment.estimated_delivery_days }} dias úteis
+{% else %}Quando houver código de rastreio, você recebe outro e-mail.
+{% endif %}
+{% else %}
+Este pedido é digital e não possui frete ou código de rastreio.
+{% endif %}
 
 Acompanhe o pedido (guarde este link):
 {{ order_url }}

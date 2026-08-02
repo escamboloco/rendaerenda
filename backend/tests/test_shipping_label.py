@@ -2,13 +2,14 @@
 from decimal import Decimal
 from unittest import mock
 
+from django.core import mail
 from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
 from apps.payments.models import Order, Payment
 from apps.shipping import superfrete
 from apps.shipping.superfrete import BoughtLabel
-from apps.shipping.tasks import buy_label_for_order
+from apps.shipping.tasks import buy_label_for_order, send_shipment_posted_email
 from apps.wallet.models import WalletEntry
 
 from .base import ApiTestCase
@@ -124,6 +125,27 @@ class PlatformLabelFlowTests(ApiTestCase):
                 order=order, kind=WalletEntry.Kind.SHIPPING_CREDIT
             ).exists()
         )
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_buyer_receives_tracking_code_and_order_link(self):
+        self.client.post(
+            reverse("payments:checkout"),
+            checkout_payload(self.product),
+            content_type="application/json",
+        )
+        order = Order.objects.get()
+        order.status = Order.Status.PAID
+        order.save(update_fields=["status"])
+        shipment = order.shipment
+        shipment.tracking_code = "AA123456789BR"
+        shipment.save(update_fields=["tracking_code"])
+        mail.outbox.clear()
+
+        send_shipment_posted_email(str(shipment.id))
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("AA123456789BR", mail.outbox[0].body)
+        self.assertIn(order.track_url, mail.outbox[0].body)
 
     @override_settings(PLATFORM_BUYS_SHIPPING_LABEL=True)
     def test_buy_label_uses_neutral_sender(self):

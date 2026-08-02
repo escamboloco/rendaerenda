@@ -91,7 +91,7 @@ aninhados (x-data proprio) continuam funcionando normalmente.
               <a href="{% url 'stores:onboard_page' %}" class="nav-link hidden md:inline">Abrir loja</a>
             {% endif %}
           {% endif %}
-          <a href="{% url 'accounts_pages:profile_page' %}" class="nav-link hidden sm:inline">Conta</a>
+          <a href="{% url 'accounts_pages:profile_page' %}" class="nav-link hidden sm:inline">Meu Perfil</a>
           <form method="post" action="{% url 'account_logout' %}" class="hidden sm:inline">
             {% csrf_token %}
             <button type="submit" class="nav-link text-gray-400 hover:text-gray-200">Sair</button>
@@ -145,7 +145,7 @@ aninhados (x-data proprio) continuam funcionando normalmente.
           {% elif request.user.role == 'seller' %}
             <a href="{% url 'stores:onboard_page' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 text-brand-light">Abrir minha loja</a>
           {% endif %}
-          <a href="{% url 'accounts_pages:profile_page' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Minha conta</a>
+          <a href="{% url 'accounts_pages:profile_page' %}" class="px-3 py-3 rounded-xl hover:bg-white/5">Meu Perfil</a>
           {% if request.user.is_staff %}
           <a href="{% url 'backoffice:dashboard' %}" class="px-3 py-3 rounded-xl hover:bg-white/5 font-semibold text-brand-light">Painel administrador</a>
           {% endif %}

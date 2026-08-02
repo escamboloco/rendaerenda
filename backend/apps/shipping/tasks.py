@@ -23,11 +23,20 @@ def send_shipment_posted_email(shipment_id: str):
         logger.warning("Pedido %s sem e-mail do comprador — e-mail de postagem pulado.", shipment.order_id)
         return
     try:
+        scheme = "http" if settings.DEBUG else "https"
+        order_url = (
+            f"{scheme}://{settings.SITE_DOMAIN}{shipment.order.track_url}"
+        )
         send_mail(
             subject=f"Seu pedido #{str(shipment.order_id)[:8]} foi postado",
             message=render_to_string(
                 "emails/shipment_posted.txt",
-                {"shipment": shipment, "order": shipment.order, "site_name": settings.SITE_NAME},
+                {
+                    "shipment": shipment,
+                    "order": shipment.order,
+                    "site_name": settings.SITE_NAME,
+                    "order_url": order_url,
+                },
             ),
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[recipient],

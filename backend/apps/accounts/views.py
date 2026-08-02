@@ -5,6 +5,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods
@@ -48,13 +49,52 @@ def phone_page(request):
 
 @login_required
 def profile_page(request):
-    """Perfil: apelido, CPF no Pix, senha, sair e exclusão LGPD."""
+    """Hub do comprador: conta, transações, pedidos, rastreios e conversas."""
     if request.method == "POST":
         alias = request.POST.get("public_alias", "").strip()[:40]
         request.user.public_alias = alias
         request.user.save(update_fields=["public_alias"])
-        return render(request, "accounts/profile.html", {"saved": True})
-    return render(request, "accounts/profile.html")
+        return redirect(f"{reverse('accounts_pages:profile_page')}?salvo=1")
+
+    from apps.payments.models import Order, Payment
+
+    orders = list(
+        Order.objects.filter(buyer=request.user)
+        .select_related("store", "shipment", "payment", "invoice")
+        .prefetch_related("items", "messages")
+        .order_by("-created_at")[:50]
+    )
+    active_statuses = {
+        Order.Status.AWAITING_PAYMENT,
+        Order.Status.PAID,
+        Order.Status.SHIPPED,
+        Order.Status.DISPUTED,
+    }
+    conversations = [order for order in orders if order.messages.all()]
+    stats = {
+        "orders": len(orders),
+        "active": sum(order.status in active_statuses for order in orders),
+        "spent": sum(
+            (order.grand_total for order in orders if order.status not in {
+                Order.Status.CANCELED,
+                Order.Status.EXPIRED,
+                Order.Status.REFUNDED,
+            }),
+            start=0,
+        ),
+        "chats": len(conversations),
+    }
+    return render(
+        request,
+        "accounts/profile.html",
+        {
+            "orders": orders,
+            "conversations": conversations[:20],
+            "stats": stats,
+            "payment_methods": Payment.Method,
+            "saved": request.GET.get("salvo") == "1",
+        },
+    )
 
 
 @login_required

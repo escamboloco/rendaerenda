@@ -56,7 +56,11 @@ def _safe_send(subject: str, template: str, context: dict, recipient: str) -> bo
 def send_order_confirmation_email(order_id: str):
     from .models import Order
 
-    order = Order.objects.select_related("buyer", "store").prefetch_related("items").get(id=order_id)
+    order = (
+        Order.objects.select_related("buyer", "store", "payment", "shipment")
+        .prefetch_related("items")
+        .get(id=order_id)
+    )
     track = (
         f"/pedido/{order.access_token}/"
         if order.access_token
@@ -67,6 +71,7 @@ def send_order_confirmation_email(order_id: str):
         "site_name": settings.SITE_NAME,
         "order_url": _site_url(track),
         "shipping_line": _shipping_line(order),
+        "shipment": getattr(order, "shipment", None),
     }
     _safe_send(
         subject=f"Pedido confirmado #{str(order.id)[:8]}",

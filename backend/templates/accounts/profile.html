@@ -1,76 +1,189 @@
 {% extends "core/base.html" %}
-{% block title %}Minha conta — Renda &amp; Renda{% endblock %}
+{% block title %}Meu Perfil — Renda &amp; Renda{% endblock %}
 
 {% block content %}
-<div class="max-w-md mx-auto space-y-6">
-  <h1 class="text-2xl font-bold">Minha conta</h1>
+<div class="max-w-5xl mx-auto space-y-6">
+  <header class="space-y-2">
+    <span class="eyebrow">Área pessoal</span>
+    <h1 class="text-2xl sm:text-3xl font-bold">Meu Perfil</h1>
+    <p class="text-sm text-gray-400">
+      Olá, {{ request.user.interaction_name }}. Compras, conversas e privacidade em um só lugar.
+    </p>
+  </header>
 
   {% if saved %}
   <div class="card px-4 py-3 text-sm text-emerald-400">Alterações salvas.</div>
   {% endif %}
 
-  <div class="card p-5 space-y-3 text-sm">
-    <h2 class="font-semibold text-sm text-gray-400 uppercase tracking-wide">Sessão</h2>
-    <p class="text-gray-300">{{ request.user.email }}</p>
-    <form method="post" action="{% url 'account_logout' %}">
-      {% csrf_token %}
-      <button type="submit" class="btn-secondary w-full">Sair da conta</button>
-    </form>
-  </div>
+  <section class="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Resumo">
+    <div class="card p-4"><p class="text-2xl font-bold">{{ stats.orders }}</p><p class="text-xs text-gray-500">pedidos</p></div>
+    <div class="card p-4"><p class="text-2xl font-bold text-brand-light">{{ stats.active }}</p><p class="text-xs text-gray-500">em andamento</p></div>
+    <div class="card p-4"><p class="text-2xl font-bold">R$ {{ stats.spent|floatformat:2 }}</p><p class="text-xs text-gray-500">em transações válidas</p></div>
+    <div class="card p-4"><p class="text-2xl font-bold">{{ stats.chats }}</p><p class="text-xs text-gray-500">conversas</p></div>
+  </section>
 
-  <div class="card p-5 space-y-4">
-    <h2 class="font-semibold text-sm text-gray-400 uppercase tracking-wide">Privacidade na interação</h2>
-    <form method="post" class="space-y-3">
-      {% csrf_token %}
+  <nav class="flex gap-2 overflow-x-auto pb-1" aria-label="Seções do perfil">
+    <a href="#pedidos" class="chip chip-active">Pedidos</a>
+    <a href="#conversas" class="chip">Conversas</a>
+    <a href="#pagamentos" class="chip">Transações</a>
+    <a href="#conta" class="chip">Conta e privacidade</a>
+  </nav>
+
+  <section id="pedidos" class="space-y-3 scroll-mt-24">
+    <div class="flex items-end justify-between gap-3">
       <div>
-        <label class="input-label" for="public_alias">Apelido (opcional)</label>
-        <input id="public_alias" type="text" name="public_alias" maxlength="40"
-               value="{{ request.user.public_alias }}" placeholder="Como você aparece para a outra parte"
-               class="input-field">
-        <p class="input-help">
-          Usado apenas na conversa e nos pedidos personalizados com a outra parte.
-          Seus dados reais (nome e CPF) continuam valendo em pedidos, pagamentos
-          e notas fiscais.
-        </p>
+        <h2 class="text-xl font-bold">Pedidos e envios</h2>
+        <p class="text-xs text-gray-500">Status, pagamento, rastreio e comprovantes.</p>
       </div>
-      <button type="submit" class="btn-primary w-full">Salvar</button>
-    </form>
-  </div>
+      <a href="{% url 'payments_pages:my_purchases' %}" class="text-xs text-brand hover:underline">Visão completa →</a>
+    </div>
 
-  <div class="card p-5 space-y-3 text-sm">
-    <h2 class="font-semibold text-sm text-gray-400 uppercase tracking-wide">Pagamento e CPF</h2>
-    <p class="text-gray-300 leading-relaxed">
-      O Pix da compra precisa sair da conta do <strong class="text-white">mesmo CPF</strong> cadastrado.
-      Se outra pessoa pagar, o valor é <strong class="text-white">estornado automaticamente</strong> para a conta original.
-    </p>
-    {% if request.user.cpf %}
-    <p class="text-xs text-gray-500">
-      CPF da conta: •••.•••.{{ request.user.cpf|slice:"6:9" }}-{{ request.user.cpf|slice:"9:11" }}
-    </p>
-    {% else %}
-    <p class="text-xs text-amber-300">
-      Cadastre seu CPF para comprar e receber com segurança.
-    </p>
+    <div class="grid md:grid-cols-2 gap-3">
+      {% for order in orders %}
+      <article class="card p-4 space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <a href="{{ order.track_url }}" class="font-semibold hover:underline">#{{ order.short_id }}</a>
+            <p class="text-xs text-gray-500">{{ order.store.display_name }} · {{ order.created_at|date:"d/m/Y H:i" }}</p>
+          </div>
+          <span class="badge {% if order.status == 'paid' or order.status == 'shipped' %}badge-pending{% elif order.status == 'delivered' %}badge-verified{% else %}badge-neutral{% endif %}">
+            {{ order.get_status_display }}
+          </span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="rounded-lg bg-white/5 p-2">
+            <span class="text-gray-500 block">Total</span>
+            <strong>R$ {{ order.grand_total }}</strong>
+          </div>
+          <div class="rounded-lg bg-white/5 p-2">
+            <span class="text-gray-500 block">Pagamento</span>
+            <strong>{% if order.payment %}{{ order.payment.get_method_display }}{% else %}—{% endif %}</strong>
+          </div>
+        </div>
+        {% if order.shipment.tracking_code %}
+        <div class="rounded-xl border border-emerald-400/20 bg-emerald-400/5 px-3 py-2">
+          <p class="text-[10px] uppercase tracking-wide text-gray-500">Código de envio</p>
+          <p class="font-mono text-sm text-emerald-300">{{ order.shipment.tracking_code }}</p>
+          {% if order.shipment.last_tracking_event %}<p class="text-[11px] text-gray-500">{{ order.shipment.last_tracking_event }}</p>{% endif %}
+        </div>
+        {% elif order.requires_shipping %}
+        <p class="text-xs text-gray-500">O rastreio aparecerá aqui após a postagem.</p>
+        {% endif %}
+        <div class="flex gap-2">
+          <a href="{{ order.track_url }}" class="btn-secondary !py-2 !min-h-0 text-xs flex-1 text-center">Detalhes</a>
+          {% if order.messages.count %}
+          <a href="{{ order.track_url }}#conversa" class="btn-secondary !py-2 !min-h-0 text-xs flex-1 text-center">Abrir chat</a>
+          {% endif %}
+        </div>
+      </article>
+      {% empty %}
+      <div class="card p-8 text-center text-sm text-gray-500 md:col-span-2">
+        Você ainda não fez compras. <a href="{% url 'stores:listing' %}" class="text-brand hover:underline">Descobrir peças</a>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="conversas" class="space-y-3 scroll-mt-24">
+    <div>
+      <h2 class="text-xl font-bold">Conversas</h2>
+      <p class="text-xs text-gray-500">Chats protegidos, vinculados aos pedidos.</p>
+    </div>
+    <div class="card divide-y divide-surface-border">
+      {% for order in conversations %}
+      {% with last=order.messages.last %}
+      <a href="{{ order.track_url }}#conversa" class="flex items-center gap-3 p-4 hover:bg-white/5">
+        <span class="w-10 h-10 rounded-full bg-brand/15 text-brand-light grid place-items-center font-bold">{{ order.store.display_name|slice:":1" }}</span>
+        <span class="min-w-0 flex-1">
+          <strong class="text-sm block">{{ order.store.display_name }} · #{{ order.short_id }}</strong>
+          <span class="text-xs text-gray-500 truncate block">{{ last.body }}</span>
+        </span>
+        <time class="text-[10px] text-gray-600 shrink-0">{{ last.created_at|date:"d/m H:i" }}</time>
+      </a>
+      {% endwith %}
+      {% empty %}
+      <p class="p-5 text-sm text-gray-500">Nenhuma conversa iniciada.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="pagamentos" class="space-y-3 scroll-mt-24">
+    <div>
+      <h2 class="text-xl font-bold">Transações e pagamento</h2>
+      <p class="text-xs text-gray-500">Não armazenamos dados de cartão; o processamento é feito pelo Asaas.</p>
+    </div>
+    <div class="card overflow-x-auto">
+      <table class="w-full text-sm min-w-[640px]">
+        <thead class="text-xs text-gray-500 border-b border-surface-border">
+          <tr><th class="text-left p-3">Data</th><th class="text-left p-3">Pedido</th><th class="text-left p-3">Forma</th><th class="text-left p-3">Situação</th><th class="text-right p-3">Valor</th><th class="text-right p-3">Nota</th></tr>
+        </thead>
+        <tbody class="divide-y divide-surface-border">
+          {% for order in orders %}
+          <tr>
+            <td class="p-3 text-gray-500">{{ order.created_at|date:"d/m/Y" }}</td>
+            <td class="p-3"><a href="{{ order.track_url }}" class="hover:underline">#{{ order.short_id }}</a></td>
+            <td class="p-3">{% if order.payment %}{{ order.payment.get_method_display }}{% else %}—{% endif %}</td>
+            <td class="p-3">{% if order.payment %}{{ order.payment.get_status_display }}{% else %}{{ order.get_status_display }}{% endif %}</td>
+            <td class="p-3 text-right font-semibold">R$ {{ order.grand_total }}</td>
+            <td class="p-3 text-right">{% if order.invoice.pdf_url %}<a href="{{ order.invoice.pdf_url }}" target="_blank" rel="noopener" class="text-brand hover:underline">PDF</a>{% else %}—{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="p-5 text-center text-gray-500">Sem transações.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card p-4 text-sm text-gray-400">
+      Pix: precisa sair de uma conta com o mesmo CPF cadastrado.
+      {% if request.user.cpf %}<span class="text-gray-500">CPF: •••.•••.{{ request.user.cpf|slice:"6:9" }}-{{ request.user.cpf|slice:"9:11" }}</span>{% endif %}
+    </div>
+  </section>
+
+  <section id="conta" class="grid md:grid-cols-2 gap-4 scroll-mt-24">
+    <div class="card p-5 space-y-4">
+      <div>
+        <h2 class="font-semibold">Identidade pública</h2>
+        <p class="text-xs text-gray-500">Seu nome civil não aparece nos chats.</p>
+      </div>
+      <form method="post" class="space-y-3">
+        {% csrf_token %}
+        <div>
+          <label class="input-label" for="public_alias">Nickname / apelido</label>
+          <input id="public_alias" type="text" name="public_alias" maxlength="40"
+                 value="{{ request.user.public_alias }}" placeholder="Como você aparece nos chats"
+                 class="input-field">
+          <p class="input-help">Usado nas conversas e pedidos personalizados.</p>
+        </div>
+        <button type="submit" class="btn-primary w-full">Salvar nickname</button>
+      </form>
+    </div>
+
+    <div class="card p-5 space-y-3 text-sm">
+      <h2 class="font-semibold">Acesso e segurança</h2>
+      <p class="text-gray-400">Login: <span class="text-gray-200">{{ request.user.email }}</span></p>
+      <a href="{% url 'account_change_password' %}" class="btn-secondary w-full text-center">Trocar senha</a>
+      <a href="{% url 'account_reset_password' %}" class="block text-center text-brand hover:underline text-xs">Receber redefinição por e-mail</a>
+      <form method="post" action="{% url 'account_logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn-secondary w-full">Sair da conta</button>
+      </form>
+    </div>
+
+    {% if request.user.role == 'seller' and request.user.has_store %}
+    <div class="card p-5 space-y-3">
+      <h2 class="font-semibold">Área da vendedora</h2>
+      <div class="flex gap-2">
+        <a href="{% url 'stores:seller_hub' %}" class="btn-secondary flex-1 text-center">Painel</a>
+        <a href="{% url 'wallet:dashboard' %}" class="btn-secondary flex-1 text-center">Carteira</a>
+      </div>
+    </div>
     {% endif %}
-  </div>
 
-  <div class="card p-5 space-y-3 text-sm">
-    <h2 class="font-semibold text-sm text-gray-400 uppercase tracking-wide">Senha</h2>
-    <a href="{% url 'account_change_password' %}" class="btn-secondary w-full text-center">Trocar senha</a>
-    <a href="{% url 'account_reset_password' %}" class="block text-center text-brand hover:underline text-xs">
-      Esqueci minha senha — receber link por e-mail
-    </a>
-  </div>
-
-  <div class="card p-5 space-y-3 text-sm border-brand/30">
-    <h2 class="font-semibold text-sm text-brand-light uppercase tracking-wide">Excluir conta</h2>
-    <p class="text-gray-400 leading-relaxed">
-      Remove seu acesso e anonimiza dados pessoais (LGPD). Pedidos fiscais podem
-      manter registro mínimo por obrigação legal.
-    </p>
-    <a href="{% url 'accounts_pages:delete_account' %}" class="btn-secondary w-full text-center !border-brand/40 !text-brand-light">
-      Quero excluir minha conta
-    </a>
-  </div>
+    <div class="card p-5 space-y-3 border-brand/30">
+      <h2 class="font-semibold text-brand-light">Privacidade e LGPD</h2>
+      <p class="text-sm text-gray-400">Exclua o acesso e anonimize dados pessoais. Registros fiscais mínimos podem ser preservados por obrigação legal.</p>
+      <a href="{% url 'accounts_pages:delete_account' %}" class="btn-secondary w-full text-center !border-brand/40 !text-brand-light">Excluir minha conta</a>
+    </div>
+  </section>
 </div>
 {% endblock %}
