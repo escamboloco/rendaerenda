@@ -12,6 +12,8 @@
   "@type": "Product",
   "name": "{{ product.title|escapejs }}",
   "description": "{{ product.description|truncatechars:300|escapejs }}",
+  {% with cover=product.images.first %}{% if cover %}"image": ["{{ cover.file.url }}"],{% endif %}{% endwith %}
+  "brand": {"@type": "Brand", "name": "{{ store.display_name|escapejs }}"},
   "offers": {
     "@type": "Offer",
     "priceCurrency": "BRL",
@@ -19,6 +21,17 @@
     "availability": "{% if product.is_available %}https://schema.org/InStock{% else %}https://schema.org/OutOfStock{% endif %}",
     "url": "{{ request.build_absolute_uri }}"
   }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Início", "item": "{{ request.scheme }}://{{ request.get_host }}/"},
+    {"@type": "ListItem", "position": 2, "name": "{{ store.display_name|escapejs }}", "item": "{{ request.scheme }}://{{ request.get_host }}{% url 'stores:detail' store.slug %}"},
+    {"@type": "ListItem", "position": 3, "name": "{{ product.title|escapejs }}"}
+  ]
 }
 </script>
 {% endblock %}

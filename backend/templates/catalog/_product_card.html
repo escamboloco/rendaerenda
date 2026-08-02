@@ -48,9 +48,14 @@ linha com o nome da loja (na pagina da propria loja fica redundante).
 
     <p class="price text-[1.35rem] leading-none mt-auto pt-1.5">R$ {{ product.price }}</p>
 
-    <button type="button" class="btn-primary w-full !py-2 !min-h-0 text-xs" @click="add()">
-      <span x-show="!added">Adicionar à sacola</span>
-      <span x-cloak x-show="added">na sacola ✓</span>
-    </button>
+    <div class="grid grid-cols-1 gap-1.5">
+      <button type="button" class="btn-primary w-full !py-2 !min-h-0 text-xs" @click="buyNow()">
+        Comprar agora
+      </button>
+      <button type="button" class="btn-secondary w-full !py-2 !min-h-0 text-xs" @click="add()">
+        <span x-show="!added">Adicionar à sacola</span>
+        <span x-cloak x-show="added">na sacola ✓</span>
+      </button>
+    </div>
   </div>
 </article>

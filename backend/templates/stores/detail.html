@@ -3,8 +3,64 @@
 {% block description %}{{ store.bio|default:"Loja verificada no Renda & Renda."|truncatechars:150 }}{% endblock %}
 {% block robots %}index, follow{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+{% block og_title %}{{ store.display_name }} — loja +18{% endblock %}
+{% block og_description %}{{ store.bio|default:"Loja verificada com pagamento em custódia."|truncatechars:150 }}{% endblock %}
+
+{% block extra_head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Store",
+  "name": "{{ store.display_name|escapejs }}",
+  "description": "{{ store.bio|default:''|escapejs }}",
+  "url": "{{ request.build_absolute_uri }}"{% if store.review_count %},
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "{{ store.avg_rating }}",
+    "reviewCount": {{ store.review_count }}
+  }{% endif %}
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Início", "item": "{{ request.scheme }}://{{ request.get_host }}/"},
+    {"@type": "ListItem", "position": 2, "name": "Lojas", "item": "{{ request.scheme }}://{{ request.get_host }}{% url 'stores:ranking' %}"},
+    {"@type": "ListItem", "position": 3, "name": "{{ store.display_name|escapejs }}"}
+  ]
+}
+</script>
+{% endblock %}
 
 {% block content %}
+<nav class="text-xs text-gray-500 mb-4 flex items-center gap-1.5 flex-wrap">
+  <a href="{% url 'stores:home' %}" class="hover:text-gray-300">Vitrine</a>
+  <span>/</span>
+  <a href="{% url 'stores:ranking' %}" class="hover:text-gray-300">Lojas</a>
+  <span>/</span>
+  <span class="text-gray-400 truncate">{{ store.display_name }}</span>
+</nav>
+
+{% if is_owner %}
+<section class="card p-4 mb-4 border-brand/30 bg-brand/5 flex flex-col sm:flex-row sm:items-center gap-3">
+  <div class="flex-1">
+    <p class="font-semibold text-sm">Você está vendo a vitrine pública da sua loja</p>
+    <p class="text-xs text-gray-500 mt-0.5">
+      {% if pending_products %}{{ pending_products }} anúncio(s) em moderação · {% endif %}
+      {% if open_questions %}{{ open_questions }} pergunta(s) sem resposta · {% endif %}
+      {{ follower_count }} seguidor{{ follower_count|pluralize:"es" }}
+    </p>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    <a href="{% url 'stores:seller_hub' %}" class="btn-primary !py-2 !min-h-0 text-xs">Painel da loja</a>
+    <a href="{% url 'catalog:create' %}" class="btn-secondary !py-2 !min-h-0 text-xs">Anunciar</a>
+    <a href="{% url 'catalog:seller_questions' %}" class="btn-secondary !py-2 !min-h-0 text-xs">Perguntas</a>
+  </div>
+</section>
+{% endif %}
+
 <section class="mb-8">
   <div class="card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4">
     <div class="w-20 h-20 rounded-full bg-white/10 avatar-ring shrink-0 flex items-center justify-center text-2xl font-bold text-gray-400">
@@ -28,15 +84,28 @@
         <span class="text-xs text-gray-500">{{ store.sales_count }} venda{{ store.sales_count|pluralize }}</span>
         <span class="text-gray-600">·</span>
         <span class="text-xs text-gray-500">{{ product_count }} peça{{ product_count|pluralize }} à venda</span>
+        <span class="text-gray-600">·</span>
+        <span class="text-xs text-gray-500">{{ follower_count }} seguidor{{ follower_count|pluralize:"es" }}</span>
       </div>
     </div>
-    {% include "moderation/_report_button.html" with target_type="store" object_id=store.id %}
+    <div class="flex flex-col sm:items-end gap-2 shrink-0">
+      {% if not is_owner %}
+      <div x-data="storeFollow('{{ store.slug }}', {{ is_following|yesno:'true,false' }}, {{ follower_count }})">
+        {% if request.user.is_authenticated %}
+        <button type="button" class="btn-secondary w-full sm:w-auto"
+                @click="toggle()" :disabled="loading"
+                :class="following ? 'border-brand/50 text-brand-light' : ''">
+          <span x-text="following ? 'Seguindo ✓' : 'Seguir loja'"></span>
+        </button>
+        {% else %}
+        <a href="{% url 'account_login' %}?next={{ request.path }}" class="btn-secondary w-full sm:w-auto">Seguir loja</a>
+        {% endif %}
+      </div>
+      {% endif %}
+      {% include "moderation/_report_button.html" with target_type="store" object_id=store.id %}
+    </div>
   </div>
 
-  {% comment %} Painel de confiança: o que a pessoa precisa saber antes de comprar de
-     alguém que ela não conhece. Tudo vem do banco — nenhum número aqui é
-     decorativo.
-{% endcomment %}
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
     <div class="card p-4 text-center">
       <p class="font-display text-2xl text-white">{{ store.sales_count }}</p>
@@ -57,26 +126,18 @@
   </div>
 
   <div class="card p-4 mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-400">
-    <span class="flex items-center gap-1.5">
-      <span class="text-emerald-400">✓</span> Identidade conferida por documento
-    </span>
-    <span class="flex items-center gap-1.5">
-      <span class="text-emerald-400">✓</span> Pagamento retido até você confirmar
-    </span>
-    <span class="flex items-center gap-1.5">
-      <span class="text-emerald-400">✓</span> {{ dispute_window_days }} dias para contestar
-    </span>
-    <span class="flex items-center gap-1.5">
-      <span class="text-emerald-400">✓</span> Embalagem sem identificação
-    </span>
+    <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> Identidade conferida por documento</span>
+    <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> Pagamento retido até você confirmar</span>
+    <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> {{ dispute_window_days }} dias para contestar</span>
+    <span class="flex items-center gap-1.5"><span class="text-emerald-400">✓</span> Embalagem sem identificação</span>
   </div>
 
   {% if request.user.is_authenticated and request.user != store.owner %}
-  <div class="mt-4" x-data="customRequestModal('{{ store.slug }}')">
-    <button type="button" class="btn-secondary w-full sm:w-auto" @click="open = true">
-      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+  <div class="mt-4 flex flex-wrap gap-2" x-data="customRequestModal('{{ store.slug }}')">
+    <button type="button" class="btn-primary w-full sm:w-auto" @click="open = true">
       Pedir uma peça sob medida
     </button>
+    <a href="{% url 'stores:listing' %}?q={{ store.display_name|urlencode }}" class="btn-secondary w-full sm:w-auto">Ver anúncios dela</a>
 
     <template x-if="open">
       <div class="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/75" @click.self="open = false" @keydown.escape.window="open = false">
@@ -117,11 +178,20 @@
       </div>
     </template>
   </div>
+  {% elif not request.user.is_authenticated %}
+  <div class="mt-4 card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+    <p class="text-sm text-gray-400 flex-1">Quer peça sob medida ou seguir esta loja? Entre com a conta — a compra avulsa continua sem cadastro.</p>
+    <a href="{% url 'account_login' %}?next={{ request.path }}" class="btn-secondary shrink-0">Entrar</a>
+  </div>
   {% endif %}
 </section>
 
-<h2 class="text-lg font-bold mb-1">Peças à venda</h2>
-<p class="text-sm text-gray-500 mb-4">Junte quantas quiser desta loja — tudo vai num pedido só.</p>
+<div class="flex items-end justify-between gap-3 mb-4">
+  <div>
+    <h2 class="text-lg font-bold">Peças à venda</h2>
+    <p class="text-sm text-gray-500">Junte quantas quiser desta loja — tudo vai num pedido só.</p>
+  </div>
+</div>
 
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
   {% for product in products %}
@@ -145,7 +215,6 @@
       <p class="text-[11px] text-gray-500 mt-1">{{ store.review_count }} avaliaç{{ store.review_count|pluralize:"ão,ões" }}</p>
     </div>
 
-    {# Distribuição das notas: média sozinha esconde o caso ruim. #}
     <div class="flex-1 w-full space-y-1.5">
       {% for row in rating_breakdown %}
       <div class="flex items-center gap-2 text-xs">

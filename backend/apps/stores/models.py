@@ -112,3 +112,23 @@ class StoreBoost(models.Model):
     @property
     def is_active(self) -> bool:
         return self.paid and self.starts_at <= timezone.now() <= self.ends_at
+
+
+class StoreFollow(models.Model):
+    """
+    Comprador segue a loja para voltar nela (novidades / vitrine).
+    Não envia e-mail sozinho — serve de base para digest futuro.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="followers")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="followed_stores"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["store", "user"], name="store_follow_unique"),
+        ]
+        indexes = [models.Index(fields=["-created_at"])]

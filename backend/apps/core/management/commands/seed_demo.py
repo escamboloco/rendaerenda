@@ -1,29 +1,28 @@
 """
-Povoamento de DEMONSTRAÇÃO: lojas, vendedoras, produtos (com imagens
-placeholder geradas na hora - nenhuma foto real), compradoras, pedidos
-entregues, avaliações e pedidos personalizados.
+Povoamento de DEMONSTRAÇÃO: 20+ lojas, 50+ produtos com fotos públicas
+(Unsplash — licença gratuita), compradoras, pedidos e avaliações.
 
 Uso:
     python manage.py seed_demo
 
 Regras:
-- SÓ roda com DEBUG=True (aborta em produção - dados e senhas de demo
-  jamais podem existir num ambiente real).
-- Idempotente: rodar de novo não duplica (get_or_create por chaves fixas).
-- As credenciais criadas aqui estão documentadas em login.md (raiz do
-  repositório) e são públicas de propósito - NUNCA reutilizar em produção.
+- SÓ roda com DEBUG=True.
+- Idempotente (get_or_create por chaves fixas).
+- Credenciais em login.md — NUNCA reutilizar em produção.
 """
 import datetime
 import io
 import random
-import unicodedata
+import secrets
+import urllib.error
+import urllib.request
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw
 
 from apps.accounts.models import AgeVerification, SellerKYC, User
 from apps.catalog.models import Category, Product, ProductImage
@@ -32,41 +31,107 @@ from apps.payments.models import Order, OrderItem
 from apps.reviews.models import Review
 from apps.reviews.services import create_review
 from apps.shipping.models import Shipment
-from apps.stores.models import Store
+from apps.stores.models import Store, StoreFollow
 from apps.stores.services import increment_sales_count
 from apps.wallet.services import credit_sale, release_sale
 
 PASSWORD = "demo12345"
 
-CATEGORIES = ["Calcinhas", "Sutiãs", "Meias", "Sungas", "Bodys"]
+CATEGORIES = ["Calcinhas", "Sutiãs", "Meias", "Sungas", "Bodys", "Packs"]
 
-# (username, nome da loja, slug, bio, CEP de origem)
+# Fotos públicas Unsplash (moda íntima / lingerie / meias) — licença Unsplash.
+# Fallback automático para JPEG gerado se a rede falhar.
+PHOTO_POOL = {
+    "Calcinhas": [
+        "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1566174053879-31528523f8ae?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1571513722275-4b41940f54b8?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1617922001439-4a2e6562f328?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1581044777550-4cfa60707c03?auto=format&fit=crop&w=900&q=80",
+    ],
+    "Sutiãs": [
+        "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&w=900&q=80",
+    ],
+    "Meias": [
+        "https://images.unsplash.com/photo-1586350977771-b3b0abd50c82?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=900&q=80",
+    ],
+    "Sungas": [
+        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?auto=format&fit=crop&w=900&q=80",
+    ],
+    "Bodys": [
+        "https://images.unsplash.com/photo-1515372039744-b8f1729e5bb1?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1509631179647-0177331693ae?auto=format&fit=crop&w=900&q=80",
+    ],
+    "Packs": [
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1452587925148-ce544e77e70d?auto=format&fit=crop&w=900&q=80",
+        "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&w=900&q=80",
+    ],
+}
+
 SELLERS = [
     ("luna", "Ateliê da Luna", "atelie-da-luna", "Peças delicadas, embalagem discreta e envio no mesmo dia.", "01310100"),
     ("valentina", "Valentina Secreta", "valentina-secreta", "Uso com carinho e capricho na embalagem. Aceito pedidos personalizados.", "20040030"),
     ("morena", "Morena Misteriosa", "morena-misteriosa", "Itens usados com discrição total. Envio rápido pelo ponto de coleta.", "30130010"),
     ("ruiva", "Ruiva do Sul", "ruiva-do-sul", "Do frio do sul com muito capricho. Peças de renda são minha especialidade.", "90010150"),
     ("gata", "Gata Paulista", "gata-paulista", "Sempre respondo pedidos personalizados em até 24h.", "04538132"),
+    ("bella", "Bella Íntima", "bella-intima", "Lingerie usada com perfume suave. Embalagem lacrada.", "01415000"),
+    ("nina", "Nina da Noite", "nina-da-noite", "Packs e peças físicas. Comunicação só pela plataforma.", "22041080"),
+    ("clara", "Clara Sedução", "clara-seducao", "Calcinhas e meias com dias de uso à escolha.", "80010000"),
+    ("maya", "Maya Velvet", "maya-velvet", "Toque aveludado, fotos reais do item, envio rastreado.", "60160150"),
+    ("sofia", "Sofia Lace", "sofia-lace", "Renda belga e algodão. Pedidos sob medida bem-vindos.", "70040902"),
+    ("iara", "Iara do Centro", "iara-do-centro", "Entrega rápida em SP. Embalagem 100% neutra.", "01001000"),
+    ("priscila", "Priscila Pink", "priscila-pink", "Tons rosa e vinho. Packs digitais também.", "13010000"),
+    ("helena", "Helena Silk", "helena-silk", "Seda e cetim usados com carinho.", "40020000"),
+    ("bruna", "Bruna Fitness", "bruna-fitness", "Meias e sungas pós-treino. Cheiro real de academia.", "29010000"),
+    ("camila", "Camila Closet", "camila-closet", "Desapego íntimo semanal. Estoque rotativo.", "50010000"),
+    ("duda", "Duda Secret", "duda-secret", "Peças únicas — quando acaba, acaba.", "69005040"),
+    ("fernanda", "Fernanda Rouge", "fernanda-rouge", "Vermelho e preto clássicos. Avaliação 5 estrelas é minha meta.", "88010000"),
+    ("giovana", "Giovana Soft", "giovana-soft", "Conforto e sensualidade. Respondo perguntas no anúncio.", "64000030"),
+    ("isabela", "Isabela Night", "isabela-night", "Bodys e packs. Conteúdo digital libera na hora do Pix.", "69020000"),
+    ("juliana", "Juliana Bloom", "juliana-bloom", "Flores e renda. Loja ativa todos os dias.", "74003010"),
+    ("karina", "Karina Heat", "karina-heat", "Meia 7/8 e arrastão. Aceito encomendas.", "65010000"),
+    ("lara", "Lara Privê", "lara-prive", "Packs exclusivos e peças físicas sob encomenda.", "49010000"),
 ]
 
-# (título, categoria, payout, gramas)
-PRODUCTS = [
-    ("Calcinha de renda preta — 3 dias de uso", "Calcinhas", "60.00", 80),
-    ("Calcinha fio dental vermelha — 2 dias", "Calcinhas", "55.00", 60),
-    ("Conjunto renda vinho — usado 1 vez", "Sutiãs", "95.00", 150),
-    ("Sutiã de renda lilás — 2 dias de uso", "Sutiãs", "70.00", 120),
-    ("Meia 7/8 preta — usada em ocasião especial", "Meias", "45.00", 90),
-    ("Meias soquete brancas — 3 dias", "Meias", "35.00", 70),
-    ("Body de renda preto — usado 1 noite", "Bodys", "110.00", 180),
-    ("Calcinha de algodão rosa — 4 dias", "Calcinhas", "50.00", 70),
-    ("Sunga usada em treino — 2 dias", "Sungas", "48.00", 110),
-    ("Meia-calça arrastão — 1 uso", "Meias", "42.00", 85),
+PRODUCT_TEMPLATES = [
+    ("Calcinha de renda preta — {days} dias de uso", "Calcinhas", "physical", "58.00", 80),
+    ("Calcinha fio dental vermelha — {days} dias", "Calcinhas", "physical", "52.00", 60),
+    ("Calcinha de algodão rosa — {days} dias", "Calcinhas", "physical", "45.00", 70),
+    ("Calcinha cintura alta nude — {days} dias", "Calcinhas", "physical", "62.00", 85),
+    ("Conjunto renda vinho — usado 1 vez", "Sutiãs", "physical", "98.00", 150),
+    ("Sutiã de renda lilás — {days} dias de uso", "Sutiãs", "physical", "72.00", 120),
+    ("Sutiã push-up preto — 1 uso", "Sutiãs", "physical", "80.00", 130),
+    ("Meia 7/8 preta — ocasião especial", "Meias", "physical", "48.00", 90),
+    ("Meias soquete brancas — {days} dias", "Meias", "physical", "32.00", 70),
+    ("Meia-calça arrastão — 1 uso", "Meias", "physical", "44.00", 85),
+    ("Meia 3/4 vinho — 2 treinos", "Meias", "physical", "38.00", 75),
+    ("Sunga usada em treino — {days} dias", "Sungas", "physical", "49.00", 110),
+    ("Sunga slim preta — 1 uso", "Sungas", "physical", "55.00", 100),
+    ("Body de renda preto — 1 noite", "Bodys", "physical", "115.00", 180),
+    ("Body tule vermelho — usado 1 vez", "Bodys", "physical", "108.00", 170),
+    ("Pack fotos íntimas — 12 fotos", "Packs", "digital", "35.00", 0),
+    ("Pack premium — 25 fotos + vídeo curto", "Packs", "digital", "79.00", 0),
+    ("Pack meias — 8 fotos do kit", "Packs", "digital", "29.00", 0),
+    ("Pack lingerie — 15 fotos", "Packs", "digital", "49.00", 0),
 ]
 
 BUYERS = [
     ("comprador1", "Gato Misterioso"),
     ("comprador2", "Admirador Secreto"),
-    ("comprador3", ""),  # sem apelido - testa o identificador neutro
+    ("comprador3", ""),
+    ("comprador4", "Colecionador Quiet"),
+    ("comprador5", "Fã Discreto"),
 ]
 
 REVIEW_COMMENTS = [
@@ -75,243 +140,30 @@ REVIEW_COMMENTS = [
     "Vendedora atenciosa, item bem embalado.",
     "Demorou um pouco mais que o previsto, mas veio tudo certo.",
     "Perfeito, já quero comprar de novo.",
+    "Pack liberou na hora do Pix. Top.",
     "",
 ]
 
-# --- Geração de imagens ilustrativas de produto ---------------------------
-# NAO sao fotos reais: sao ilustracoes vetoriais (silhueta da peca) sobre um
-# fundo de estudio, na cor mencionada no titulo. Placeholder digno de
-# catalogo, sem qualquer conteudo fotografico (por isso nao ha questao de
-# consentimento/KYC de pessoa real - ver docs/BASE_JURIDICA.md).
-
-COLOR_RGB = {
-    "preta": (38, 38, 44), "preto": (38, 38, 44),
-    "vermelha": (198, 32, 52), "vermelho": (198, 32, 52),
-    "vinho": (120, 22, 48),
-    "lilás": (176, 140, 214), "lilas": (176, 140, 214),
-    "rosa": (233, 120, 162),
-    "branca": (240, 240, 244), "branco": (240, 240, 244),
-    "azul": (60, 92, 184),
-    "nude": (216, 178, 150),
-}
-
-
-def garment_color(title: str):
-    t = title.lower()
-    for key, rgb in COLOR_RGB.items():
-        if key in t:
-            return rgb
-    return (124, 77, 191)  # violeta da marca como padrao
-
-
-def _darker(rgb, f=0.62):
-    return tuple(int(c * f) for c in rgb)
-
-
-def _lighter(rgb, f=0.45):
-    return tuple(int(c + (255 - c) * f) for c in rgb)
-
-
-_FONT_PATHS = [
-    "C:/Windows/Fonts/arialbd.ttf", "C:/Windows/Fonts/arial.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/Library/Fonts/Arial.ttf",
-]
-
-
-def _font(size: int):
-    """TrueType (com acentos) se disponível; senão a bitmap padrão (sem acentos)."""
-    for path in _FONT_PATHS:
-        try:
-            return ImageFont.truetype(path, size), True
-        except OSError:
-            continue
-    return ImageFont.load_default(size=size), False
-
-
-def _ascii(s: str) -> str:
-    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
-
-
-def _studio_bg(w: int) -> Image.Image:
-    """Fundo de estudio: leve gradiente vertical mauve claro."""
-    top, bot = (240, 235, 242), (206, 197, 215)
-    mask = Image.linear_gradient("L").resize((w, w))
-    return Image.composite(Image.new("RGB", (w, w), bot), Image.new("RGB", (w, w), top), mask)
-
-
-def _draw_garment(d: ImageDraw.ImageDraw, w: int, category: str, c, cd, cl):
-    def P(f):  # fracao -> pixel
-        return int(f * w)
-
-    trim = max(P(0.006), 2)
-    if category == "Calcinhas":
-        d.rounded_rectangle([P(.34), P(.37), P(.66), P(.43)], radius=P(.02), fill=cd)
-        body = [(P(.34), P(.41)), (P(.66), P(.41)), (P(.615), P(.52)),
-                (P(.55), P(.62)), (P(.50), P(.67)), (P(.45), P(.62)), (P(.385), P(.52))]
-        d.polygon(body, fill=c)
-        d.line(body + [body[0]], fill=cl, width=trim, joint="curve")
-    elif category == "Sutiãs":
-        d.rounded_rectangle([P(.32), P(.54), P(.68), P(.60)], radius=P(.02), fill=cd)
-        d.ellipse([P(.32), P(.40), P(.505), P(.62)], fill=c)
-        d.ellipse([P(.495), P(.40), P(.68), P(.62)], fill=c)
-        d.line([(P(.36), P(.42)), (P(.42), P(.20))], fill=c, width=P(.022))
-        d.line([(P(.64), P(.42)), (P(.58), P(.20))], fill=c, width=P(.022))
-        d.arc([P(.32), P(.40), P(.505), P(.66)], 20, 160, fill=cl, width=trim)
-        d.arc([P(.495), P(.40), P(.68), P(.66)], 20, 160, fill=cl, width=trim)
-    elif category == "Meias":
-        for base in (.30, .52):
-            left, right = P(base), P(base + .18)
-            d.rounded_rectangle([left, P(.18), right, P(.82)], radius=P(.06), fill=c)
-            d.rounded_rectangle([left, P(.18), right, P(.28)], radius=P(.05), fill=cd)
-            d.line([(left, P(.29)), (right, P(.29))], fill=cl, width=trim)
-    elif category == "Sungas":
-        d.rounded_rectangle([P(.34), P(.40), P(.66), P(.47)], radius=P(.02), fill=cd)
-        d.polygon([(P(.34), P(.45)), (P(.66), P(.45)), (P(.62), P(.62)),
-                   (P(.54), P(.70)), (P(.46), P(.70)), (P(.38), P(.62))], fill=c)
-        d.polygon([(P(.46), P(.70)), (P(.50), P(.60)), (P(.54), P(.70))], fill=(0, 0, 0, 0))
-        d.line([(P(.34), P(.47)), (P(.66), P(.47))], fill=cl, width=trim)
-    else:  # Bodys — maiô/body inteiriço: ombros, cintura leve, quadril arredondado
-        d.line([(P(.40), P(.31)), (P(.44), P(.20))], fill=c, width=P(.018))
-        d.line([(P(.60), P(.31)), (P(.56), P(.20))], fill=c, width=P(.018))
-        body = [(P(.38), P(.30)), (P(.62), P(.30)), (P(.58), P(.44)),
-                (P(.545), P(.54)), (P(.58), P(.66)), (P(.53), P(.70)),
-                (P(.50), P(.715)), (P(.47), P(.70)), (P(.42), P(.66)),
-                (P(.455), P(.54)), (P(.42), P(.44))]
-        d.polygon(body, fill=c)
-        d.polygon([(P(.47), P(.30)), (P(.53), P(.30)), (P(.50), P(.375))], fill=(0, 0, 0, 0))
-        d.line([(P(.455), P(.54)), (P(.545), P(.54))], fill=cl, width=trim)
-
-
-
-def _lace_texture(w: int, color, seed: int) -> Image.Image:
-    """
-    Malha de renda procedural: arcos entrelaçados em grade hexagonal.
-
-    É o detalhe que separa "silhueta chapada" de "parece tecido". Gerado
-    na hora, então não depende de nenhum arquivo externo nem de imagem de
-    terceiro — só de matemática.
-    """
-    rnd = random.Random(seed)
-    tex = Image.new("RGBA", (w, w), (0, 0, 0, 0))
-    d = ImageDraw.Draw(tex)
-    passo = max(w // 26, 8)
-    raio = int(passo * 0.62)
-    linha = max(1, w // 620)
-    for linha_i, y in enumerate(range(-passo, w + passo, int(passo * 0.72))):
-        desloc = (passo // 2) if linha_i % 2 else 0
-        for x in range(-passo + desloc, w + passo, passo):
-            jx, jy = rnd.randint(-1, 1), rnd.randint(-1, 1)
-            caixa = [x - raio + jx, y - raio + jy, x + raio + jx, y + raio + jy]
-            d.arc(caixa, 200, 340, fill=color, width=linha)
-            d.arc(caixa, 20, 160, fill=color, width=linha)
-    return tex
-
-
-def _fabric_shading(w: int, seed: int) -> Image.Image:
-    """Dobras e brilho do tecido: manchas claras/escuras borradas."""
-    rnd = random.Random(seed + 7)
-    sombra = Image.new("L", (w, w), 128)
-    d = ImageDraw.Draw(sombra)
-    for _ in range(14):
-        cx, cy = rnd.randint(0, w), rnd.randint(int(w * .25), int(w * .8))
-        rx, ry = rnd.randint(w // 12, w // 5), rnd.randint(w // 16, w // 6)
-        tom = rnd.choice([96, 104, 150, 162])
-        d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=tom)
-    return sombra.filter(ImageFilter.GaussianBlur(w // 22))
-
-
-def _vignette(w: int) -> Image.Image:
-    """
-    Vinheta de softbox: centro claro (255), bordas escurecidas.
-
-    Desenha do maior para o menor com valor CRESCENTE — o inverso escurece
-    justamente o miolo da foto, que é onde a peça está.
-    """
-    v = Image.new("L", (w, w), 0)
-    d = ImageDraw.Draw(v)
-    passos = 24
-    for i in range(passos):
-        f = i / passos                      # 0 = borda, 1 = centro
-        margem = int(w * 0.5 * f * 0.9)
-        d.ellipse([margem, margem, w - margem, w - margem], fill=int(60 + 195 * f))
-    return v.filter(ImageFilter.GaussianBlur(w // 12))
-
-
-def make_product_image(category: str, title: str, variant: int) -> bytes:
-    """Ilustração 800x800 da peça (supersampling 2x) sobre fundo de estúdio."""
-    w, ss = 800, 2
-    wk = w * ss
-    c = garment_color(title)
-    cd, cl = _darker(c), _lighter(c)
-
-    bg = _studio_bg(w)
-
-    shadow = Image.new("RGBA", (w, w), (0, 0, 0, 0))
-    ImageDraw.Draw(shadow).ellipse([w * 0.28, w * 0.74, w * 0.72, w * 0.86], fill=(40, 20, 50, 90))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(14))
-    bg.paste(shadow, (0, 0), shadow)
-
-    layer = Image.new("RGBA", (wk, wk), (0, 0, 0, 0))
-    _draw_garment(ImageDraw.Draw(layer), wk, category, c, cd, cl)
-    layer = layer.resize((w, w), Image.LANCZOS)
-
-    semente = abs(hash((title, variant))) % 9973
-
-    # Renda: desenhada sobre a peça e recortada pela silhueta, para a malha
-    # acompanhar exatamente o contorno em vez de vazar para o fundo.
-    renda = _lace_texture(w, _lighter(cl) + (110,), semente)
-    silhueta = layer.split()[3]
-    renda.putalpha(Image.composite(renda.split()[3], Image.new("L", (w, w), 0), silhueta))
-    layer = Image.alpha_composite(layer, renda)
-
-    # Dobras/brilho: multiplica o sombreado só dentro da peça.
-    # Dobras: mistura suave entre a cor chapada e a versao sombreada.
-    # Multiply puro escurece demais e mata a cor — 35% de mistura basta
-    # para sugerir volume sem apagar a peca.
-    sombreado = _fabric_shading(w, semente)
-    base = layer.convert("RGB")
-    volume = ImageChops.multiply(base, Image.merge("RGB", (sombreado,) * 3)).point(
-        lambda v: min(255, int(v * 2.0))
-    )
-    rgb = Image.blend(base, volume, 0.35)
-    layer = Image.merge("RGBA", (*rgb.split(), silhueta))
-
-    if variant == 1:  # 2a foto: leve angulo, como se fosse outro shot
-        layer = layer.rotate(-8, resample=Image.BICUBIC, expand=False)
-    bg.paste(layer, (0, 0), layer)
-
-    # Vinheta por cima de tudo: dá o acabamento de foto tirada em estúdio.
-    bordas = Image.new("RGB", (w, w), (176, 166, 190))
-    bg = Image.blend(bg, Image.composite(bg, bordas, _vignette(w)), 0.75)
-
-    dd = ImageDraw.Draw(bg)
-    wm_font, has_unicode = _font(22)
-    lb_font, _ = _font(18)
-    wordmark = "RENDA & RENDA"
-    label = f"{category} · foto ilustrativa"
-    if not has_unicode:  # bitmap padrão não tem acentos/·: normaliza pra ASCII
-        wordmark, label = _ascii(wordmark), _ascii(label)
-    dd.text((24, 22), wordmark, fill=(120, 90, 140), font=wm_font)
-    dd.text((24, w - 40), label, fill=(90, 70, 110), font=lb_font)
-
-    buf = io.BytesIO()
-    bg.convert("RGB").save(buf, format="JPEG", quality=85)
-    return buf.getvalue()
-
-
-# Descrições variadas, montadas por peça (não explícitas).
 FABRIC = {
     "Calcinhas": ["renda", "algodão", "microfibra", "cetim"],
     "Sutiãs": ["renda", "cetim", "microfibra"],
     "Meias": ["algodão", "fio de seda", "poliamida"],
     "Sungas": ["poliéster", "microfibra"],
     "Bodys": ["renda", "tule", "cetim"],
+    "Packs": ["arquivo digital"],
 }
 SIZES = ["PP", "P", "M", "G"]
 
+_IMAGE_CACHE: dict[str, bytes] = {}
 
-def build_description(title: str, category: str, idx: int) -> str:
+
+def build_description(title: str, category: str, idx: int, kind: str) -> str:
+    if kind == "digital":
+        return (
+            f"{title}. Arquivos digitais liberados na página do pedido assim que o Pix confirmar. "
+            "Sem frete. Conteúdo produzido por adulta verificada; uso pessoal do comprador. "
+            "Toda a conversa fica dentro da plataforma."
+        )
     fabrics = FABRIC.get(category, ["tecido macio"])
     fabric = fabrics[idx % len(fabrics)]
     size = SIZES[idx % len(SIZES)]
@@ -326,6 +178,62 @@ def build_description(title: str, category: str, idx: int) -> str:
     )
 
 
+def _fallback_jpeg(category: str, title: str, variant: int) -> bytes:
+    """JPEG fotográfico sintético (não desenho de silhueta) se Unsplash falhar."""
+    w = 900
+    rng = random.Random(hash((category, title, variant)) & 0xFFFFFFFF)
+    base = {
+        "Calcinhas": (42, 28, 38),
+        "Sutiãs": (48, 32, 44),
+        "Meias": (36, 34, 42),
+        "Sungas": (28, 40, 48),
+        "Bodys": (40, 30, 46),
+        "Packs": (30, 30, 36),
+    }.get(category, (40, 30, 40))
+    img = Image.new("RGB", (w, w), base)
+    d = ImageDraw.Draw(img)
+    for _ in range(40):
+        x0, y0 = rng.randint(0, w), rng.randint(0, w)
+        x1, y1 = x0 + rng.randint(40, 220), y0 + rng.randint(40, 220)
+        color = (
+            min(255, base[0] + rng.randint(20, 90)),
+            min(255, base[1] + rng.randint(10, 70)),
+            min(255, base[2] + rng.randint(20, 90)),
+        )
+        d.ellipse([x0, y0, x1, y1], fill=color)
+    # vinheta leve
+    overlay = Image.new("RGB", (w, w), (10, 6, 8))
+    img = Image.blend(img, overlay, 0.18)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=88)
+    return buf.getvalue()
+
+
+def fetch_photo(url: str, category: str, title: str, variant: int) -> bytes:
+    if url in _IMAGE_CACHE:
+        return _IMAGE_CACHE[url]
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "RendaRendaSeed/1.0 (demo; +https://rendaerenda.com.br)"},
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = resp.read()
+        # Garante JPEG/PNG válido
+        Image.open(io.BytesIO(data)).verify()
+        _IMAGE_CACHE[url] = data
+        return data
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError, ValueError):
+        data = _fallback_jpeg(category, title, variant)
+        _IMAGE_CACHE[url] = data
+        return data
+
+
+def pick_photos(category: str, idx: int, count: int = 2) -> list[str]:
+    pool = PHOTO_POOL.get(category) or PHOTO_POOL["Calcinhas"]
+    return [pool[(idx + i) % len(pool)] for i in range(count)]
+
+
 class Command(BaseCommand):
     help = "Povoa o banco com dados de demonstração (APENAS em DEBUG)."
 
@@ -335,9 +243,8 @@ class Command(BaseCommand):
                 "seed_demo só roda com DJANGO_DEBUG=True - dados de demonstração nunca em produção."
             )
 
-        rng = random.Random(42)  # determinístico: mesmo resultado a cada seed em banco limpo
+        rng = random.Random(42)
 
-        # --- admin ---
         if not User.objects.filter(username="admin").exists():
             User.objects.create_superuser(
                 username="admin", email="admin@demo.local", password=PASSWORD,
@@ -346,24 +253,32 @@ class Command(BaseCommand):
             )
         self.stdout.write("admin ok")
 
-        # --- categorias ---
         categories = {}
         for name in CATEGORIES:
-            slug = name.lower().replace("ã", "a").replace("í", "i")
+            slug = (
+                name.lower()
+                .replace("ã", "a")
+                .replace("í", "i")
+                .replace("á", "a")
+            )
             categories[name], _ = Category.objects.get_or_create(name=name, defaults={"slug": slug})
 
-        # --- vendedoras + lojas ---
         stores = []
         for index, (username, display_name, slug, bio, cep) in enumerate(SELLERS):
-            cpf = f"1{index}122233344"[:11].ljust(11, "0")
+            cpf = f"{(index + 1):02d}1222333{(index % 10)}"[:11].ljust(11, str(index % 10))
+            # CPFs únicos e com 11 dígitos
+            cpf = f"1{index:02d}{1000000 + index * 137:07d}"[:11]
             seller, created = User.objects.get_or_create(
                 username=username,
                 defaults={
-                    "email": f"{username}@demo.local", "cpf": cpf,
-                    "birth_date": datetime.date(1990 + index, 3, 15),
-                    "is_age_verified": True, "is_phone_verified": True,
-                    "role": "seller", "public_alias": display_name,
-                    "phone_number": f"5511977700{index:02d}",
+                    "email": f"{username}@demo.local",
+                    "cpf": cpf,
+                    "birth_date": datetime.date(1988 + (index % 10), 3, 15),
+                    "is_age_verified": True,
+                    "is_phone_verified": True,
+                    "role": "seller",
+                    "public_alias": display_name,
+                    "phone_number": f"55119777{index:04d}",
                 },
             )
             if created:
@@ -371,65 +286,100 @@ class Command(BaseCommand):
                 seller.save()
             AgeVerification.objects.get_or_create(
                 user=seller,
-                defaults={"provider": "idwall", "provider_reference_id": f"demo-age-{username}",
-                          "status": "approved", "document_validated": True,
-                          "validated_birth_date": seller.birth_date},
+                defaults={
+                    "provider": "idwall",
+                    "provider_reference_id": f"demo-age-{username}",
+                    "status": "approved",
+                    "document_validated": True,
+                    "validated_birth_date": seller.birth_date,
+                },
             )
             SellerKYC.objects.get_or_create(
                 user=seller,
-                defaults={"document_front": "kyc/documents/demo.jpg",
-                          "document_back": "kyc/documents/demo.jpg",
-                          "selfie_with_document": "kyc/selfies/demo.jpg",
-                          "status": "approved",
-                          "majority_and_image_consent_term_signed_at": timezone.now()},
+                defaults={
+                    "document_front": "kyc/documents/demo.jpg",
+                    "document_back": "kyc/documents/demo.jpg",
+                    "selfie_with_document": "kyc/selfies/demo.jpg",
+                    "status": "approved",
+                    "majority_and_image_consent_term_signed_at": timezone.now(),
+                },
             )
             store, _ = Store.objects.get_or_create(
                 owner=seller,
-                defaults={"slug": slug, "display_name": display_name, "bio": bio,
-                          "status": "active", "plan": None, "plan_expires_at": None,
-                          "pix_key": seller.cpf, "origin_cep": cep,
-                          "psp_subaccount_id": f"demo-sub-{username}"},
+                defaults={
+                    "slug": slug,
+                    "display_name": display_name,
+                    "bio": bio,
+                    "status": "active",
+                    "plan": None,
+                    "plan_expires_at": None,
+                    "pix_key": seller.cpf,
+                    "origin_cep": cep,
+                    "psp_subaccount_id": f"demo-sub-{username}",
+                },
             )
             stores.append(store)
         self.stdout.write(f"{len(stores)} lojas ok")
 
-        # --- produtos com imagens geradas ---
         product_count = 0
+        photo_ok = 0
+        # ~3 produtos por loja => 66+ itens; preços variam por loja
         for store_index, store in enumerate(stores):
-            # 4 produtos por loja, deslocados pra variar o catálogo entre lojas
-            for offset in range(4):
-                title, cat_name, payout, grams = PRODUCTS[(store_index * 2 + offset) % len(PRODUCTS)]
+            for offset in range(3):
+                template = PRODUCT_TEMPLATES[(store_index * 3 + offset) % len(PRODUCT_TEMPLATES)]
+                title_tpl, cat_name, kind, payout_base, grams = template
+                days = 1 + ((store_index + offset) % 4)
+                title = title_tpl.format(days=days)
+                # Variação de preço por loja (±30%)
+                payout = (Decimal(payout_base) * Decimal(str(0.85 + (store_index % 7) * 0.05))).quantize(
+                    Decimal("0.01")
+                )
                 slug = f"{store.slug}-item-{offset + 1}"
-                idx = store_index * 4 + offset
+                idx = store_index * 3 + offset
+                defaults = {
+                    "category": categories[cat_name],
+                    "title": title,
+                    "description": build_description(title, cat_name, idx, kind),
+                    "payout_amount": payout,
+                    "weight_grams": grams,
+                    "status": "published",
+                    "stock": 5 if kind == "digital" else 1,
+                    "kind": kind,
+                }
                 product, created = Product.objects.get_or_create(
-                    store=store, slug=slug,
-                    defaults={
-                        "category": categories[cat_name], "title": title,
-                        "description": build_description(title, cat_name, idx),
-                        "payout_amount": Decimal(payout), "weight_grams": grams,
-                        "status": "published", "stock": 1,
-                    },
+                    store=store, slug=slug, defaults=defaults,
                 )
                 if created:
-                    for image_index in range(2):
-                        data = make_product_image(cat_name, title, image_index)
+                    urls = pick_photos(cat_name, idx, 2)
+                    for image_index, url in enumerate(urls):
+                        data = fetch_photo(url, cat_name, title, image_index)
+                        if url in _IMAGE_CACHE and not data.startswith(b"\xff\xd8"):
+                            pass  # fallback ok
+                        else:
+                            photo_ok += 1
+                        ext = "jpg"
                         ProductImage.objects.create(
                             product=product,
-                            file=ContentFile(data, name=f"{slug}-{image_index}.jpg"),
-                            is_cover=(image_index == 0), order=image_index,
+                            file=ContentFile(data, name=f"{slug}-{image_index}.{ext}"),
+                            is_cover=(image_index == 0),
+                            order=image_index,
                         )
                     product_count += 1
-        self.stdout.write(f"{product_count} produtos novos com imagens ok")
+        self.stdout.write(f"{product_count} produtos novos · {photo_ok} fotos baixadas/geradas ok")
 
-        # --- compradores ---
         buyers = []
         for index, (username, alias) in enumerate(BUYERS):
             buyer, created = User.objects.get_or_create(
                 username=username,
-                defaults={"email": f"{username}@demo.local", "cpf": f"9{index}988877766"[:11].ljust(11, "0"),
-                          "birth_date": datetime.date(1995 + index, 7, 20),
-                          "is_age_verified": True, "is_phone_verified": True,
-                          "role": "buyer", "public_alias": alias},
+                defaults={
+                    "email": f"{username}@demo.local",
+                    "cpf": f"9{index:02d}{8000000 + index * 91:07d}"[:11],
+                    "birth_date": datetime.date(1992 + index, 7, 20),
+                    "is_age_verified": True,
+                    "is_phone_verified": True,
+                    "role": "buyer",
+                    "public_alias": alias,
+                },
             )
             if created:
                 buyer.set_password(PASSWORD)
@@ -437,66 +387,100 @@ class Command(BaseCommand):
             buyers.append(buyer)
         self.stdout.write(f"{len(buyers)} compradores ok")
 
-        # --- pedidos entregues + avaliações (alimentam ranking e carteira) ---
+        # Seguidores de loja (interação)
+        follows = 0
+        for bi, buyer in enumerate(buyers):
+            for store in stores[bi : bi + 4]:
+                _, created = StoreFollow.objects.get_or_create(store=store, user=buyer)
+                if created:
+                    follows += 1
+        self.stdout.write(f"{follows} follows novos ok")
+
         if not Review.objects.exists():
             review_count = 0
-            for store_index, store in enumerate(stores):
-                # Lojas diferentes recebem volumes diferentes -> ranking com variação real
-                orders_for_store = 2 + (store_index % 3) * 2  # 2, 4 ou 6 pedidos
-                products = list(store.products.all())
+            for store_index, store in enumerate(stores[:12]):
+                orders_for_store = 2 + (store_index % 3)
+                products = list(store.products.filter(status="published"))
+                if not products:
+                    continue
                 for order_index in range(orders_for_store):
                     buyer = buyers[(store_index + order_index) % len(buyers)]
                     product = products[order_index % len(products)]
                     order = Order.objects.create(
-                        buyer=buyer, store=store, status="delivered",
-                        items_total=product.price, shipping_total=Decimal("21.40"),
-                        packaging_fee=Decimal("3.90"),
-                        shipping_address={"cep": "01001000", "street": "Rua Exemplo",
-                                          "number": "100", "neighborhood": "Centro",
-                                          "city": "São Paulo", "state": "SP"},
+                        buyer=buyer,
+                        store=store,
+                        status="delivered",
+                        items_total=product.price,
+                        shipping_total=Decimal("0.00") if product.kind == "digital" else Decimal("21.40"),
+                        packaging_fee=Decimal("0.00") if product.kind == "digital" else Decimal("3.90"),
+                        shipping_address={
+                            "cep": "01001000",
+                            "street": "Rua Exemplo",
+                            "number": "100",
+                            "neighborhood": "Centro",
+                            "city": "São Paulo",
+                            "state": "SP",
+                        },
                         paid_at=timezone.now() - datetime.timedelta(days=10 - order_index),
+                        access_token=secrets.token_urlsafe(32),
                     )
                     OrderItem.objects.create(
-                        order=order, product=product, unit_price=product.price,
-                        unit_payout_amount=product.payout_amount, quantity=1,
+                        order=order,
+                        product=product,
+                        unit_price=product.price,
+                        unit_payout_amount=product.payout_amount,
+                        quantity=1,
                     )
-                    Shipment.objects.create(
-                        order=order, service="me-1", estimated_delivery_days=4,
-                        status="delivered",
-                        posted_at=timezone.now() - datetime.timedelta(days=8 - order_index),
-                        delivered_at=timezone.now() - datetime.timedelta(days=5 - order_index),
-                        tracking_code=f"DM{store_index}{order_index:02d}45678BR",
-                        buyer_confirmed_at=timezone.now() - datetime.timedelta(days=4),
-                    )
+                    if product.kind != "digital":
+                        Shipment.objects.create(
+                            order=order,
+                            service="me-1",
+                            estimated_delivery_days=4,
+                            status="delivered",
+                            posted_at=timezone.now() - datetime.timedelta(days=8 - order_index),
+                            delivered_at=timezone.now() - datetime.timedelta(days=5 - order_index),
+                            tracking_code=f"DM{store_index}{order_index:02d}45678BR",
+                            buyer_confirmed_at=timezone.now() - datetime.timedelta(days=4),
+                        )
                     credit_sale(order)
                     release_sale(order)
                     increment_sales_count(store)
-
                     rating = rng.choice([5, 5, 5, 4, 4, 3])
-                    create_review(buyer=buyer, order=order, rating=rating,
-                                  comment=rng.choice(REVIEW_COMMENTS))
+                    create_review(
+                        buyer=buyer,
+                        order=order,
+                        rating=rating,
+                        comment=rng.choice(REVIEW_COMMENTS),
+                    )
                     review_count += 1
             self.stdout.write(f"{review_count} pedidos entregues + avaliações ok")
 
-        # --- pedidos personalizados de exemplo ---
-        if not stores[0].custom_order_requests.exists():
+        if stores and buyers and not stores[0].custom_order_requests.exists():
             create_custom_request(
-                buyer=buyers[0], store=stores[0],
+                buyer=buyers[0],
+                store=stores[0],
                 title="Calcinha de renda vinho, 3 dias de uso",
                 description="Tamanho M, com embalagem lacrada. Pode ser com lacinho lateral?",
                 offered_price=Decimal("85.00"),
             )
             countered = create_custom_request(
-                buyer=buyers[1], store=stores[1],
+                buyer=buyers[1],
+                store=stores[1],
                 title="Meia 7/8 usada em treino",
                 description="Par de meias 7/8 pretas, usadas em dois treinos.",
                 offered_price=Decimal("60.00"),
             )
-            counter_request(countered, counter_price=Decimal("80.00"),
-                            counter_message="Consigo por esse valor, com fotos extras do item.")
+            counter_request(
+                countered,
+                counter_price=Decimal("80.00"),
+                counter_message="Consigo por esse valor, com fotos extras do item.",
+            )
             self.stdout.write("pedidos personalizados ok")
 
-        self.stdout.write(self.style.SUCCESS(
-            "Seed completo. Credenciais de demonstração documentadas em login.md "
-            f"(senha padrão: {PASSWORD})"
-        ))
+        total_products = Product.objects.filter(status="published").count()
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Seed completo: {len(stores)} lojas, {total_products} produtos publicados. "
+                f"Senha padrão: {PASSWORD} (ver login.md)"
+            )
+        )

@@ -296,6 +296,33 @@ function buyButton(productId, storeSlug) {
   };
 }
 
+/* Seguir / deixar de seguir loja (POST toggle). */
+function storeFollow(slug, initialFollowing, initialCount) {
+  return {
+    following: !!initialFollowing,
+    count: Number(initialCount || 0),
+    loading: false,
+    error: "",
+    async toggle() {
+      if (this.loading) return;
+      this.loading = true;
+      this.error = "";
+      try {
+        const { ok, data } = await postJSON(`/api/loja/${slug}/seguir/`, {});
+        if (!ok) {
+          this.error = errorMessage(data, "Não foi possível atualizar.");
+          return;
+        }
+        this.following = !!data.following;
+        this.count = Number(data.follower_count || 0);
+      } finally {
+        this.loading = false;
+      }
+    },
+  };
+}
+window.storeFollow = storeFollow;
+
 /* Caixa de compra da pagina do anuncio: adicionais + total ao vivo. */
 function productBuyBox(config) {
   const cfg = config || {};

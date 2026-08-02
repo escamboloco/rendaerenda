@@ -16,7 +16,7 @@ O login no site é feito pelo **e-mail**. O admin (`/admin/`) usa o username.
 |---|---|---|---|
 | Superusuário | `admin` | admin@demo.local | `/admin/` (moderação, pedidos, tudo) |
 
-## Vendedoras (lojas ativas, KYC aprovado)
+## Vendedoras (22 lojas ativas, KYC aprovado)
 
 | Loja | E-mail (login) | URL da loja |
 |---|---|---|
@@ -25,24 +25,41 @@ O login no site é feito pelo **e-mail**. O admin (`/admin/`) usa o username.
 | Morena Misteriosa | morena@demo.local | `/loja/morena-misteriosa/` |
 | Ruiva do Sul | ruiva@demo.local | `/loja/ruiva-do-sul/` |
 | Gata Paulista | gata@demo.local | `/loja/gata-paulista/` |
+| Bella Íntima | bella@demo.local | `/loja/bella-intima/` |
+| Nina da Noite | nina@demo.local | `/loja/nina-da-noite/` |
+| Clara Sedução | clara@demo.local | `/loja/clara-seducao/` |
+| Maya Velvet | maya@demo.local | `/loja/maya-velvet/` |
+| Sofia Lace | sofia@demo.local | `/loja/sofia-lace/` |
+| Iara do Centro | iara@demo.local | `/loja/iara-do-centro/` |
+| Priscila Pink | priscila@demo.local | `/loja/priscila-pink/` |
+| Helena Silk | helena@demo.local | `/loja/helena-silk/` |
+| Bruna Fitness | bruna@demo.local | `/loja/bruna-fitness/` |
+| Camila Closet | camila@demo.local | `/loja/camila-closet/` |
+| Duda Secret | duda@demo.local | `/loja/duda-secret/` |
+| Fernanda Rouge | fernanda@demo.local | `/loja/fernanda-rouge/` |
+| Giovana Soft | giovana@demo.local | `/loja/giovana-soft/` |
+| Isabela Night | isabela@demo.local | `/loja/isabela-night/` |
+| Juliana Bloom | juliana@demo.local | `/loja/juliana-bloom/` |
+| Karina Heat | karina@demo.local | `/loja/karina-heat/` |
+| Lara Privê | lara@demo.local | `/loja/lara-prive/` |
 
-Cada vendedora tem: 4 produtos publicados (com fotos ilustrativas geradas),
-vendas entregues com saldo já liberado na carteira (`/carteira/`) e
-avaliações reais alimentando o ranking (`/ranking/`).
+Cada vendedora tem: ~3 produtos publicados (fotos públicas Unsplash ou fallback),
+painel em `/vendedora/`, vendas/avaliações nas primeiras lojas e follows de compradores.
 
-## Compradores (idade e telefone verificados)
+## Compradores
 
 | Apelido público | E-mail (login) | Observação |
 |---|---|---|
-| Gato Misterioso | comprador1@demo.local | Tem compras entregues + 1 pedido personalizado pendente |
-| Admirador Secreto | comprador2@demo.local | Tem 1 pedido personalizado com contra-proposta pra decidir |
-| (sem apelido) | comprador3@demo.local | Testa o identificador neutro na interação |
+| Gato Misterioso | comprador1@demo.local | Compras + pedido personalizado |
+| Admirador Secreto | comprador2@demo.local | Contra-proposta pendente |
+| (sem apelido) | comprador3@demo.local | Identificador neutro |
+| Colecionador Quiet | comprador4@demo.local | Segue várias lojas |
+| Fã Discreto | comprador5@demo.local | Segue várias lojas |
 
-## Como recriar tudo do zero
+## Como popular
 
 ```bash
 cd backend
-rm -f db.sqlite3 && rm -rf media
-DJANGO_DEBUG=True DATABASE_URL=sqlite:///db.sqlite3 USE_LOCMEM_CACHE=True \
-  python manage.py migrate && python manage.py seed_demo
+python manage.py migrate
+python manage.py seed_demo
 ```

@@ -9,6 +9,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_http_methods
+from django_ratelimit.decorators import ratelimit
 
 from .middleware import AGE_GATE_SESSION_KEY
 
@@ -20,6 +21,7 @@ LEGAL_DOCS = {
 }
 
 
+@ratelimit(key="ip", rate="30/m", method="POST", block=True)
 @require_http_methods(["GET", "POST"])
 def age_gate(request):
     next_url = request.GET.get("next") or request.POST.get("next") or "/"

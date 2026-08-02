@@ -11,6 +11,7 @@ urlpatterns = [
     path("como-funciona/", views.how_it_works, name="how_it_works"),
     path("vender/", views.sell_landing, name="sell"),
     path("ranking/", views.ranking_page, name="ranking"),
+    path("vendedora/", views.seller_hub, name="seller_hub"),
     path("vendedora/abrir-loja/", views.onboard_page, name="onboard_page"),
     path("loja/<slug:slug>/", views.store_detail, name="detail"),
 ]
@@ -19,4 +20,5 @@ api_urlpatterns = [
     path("vendedora/loja/", views.StoreOnboardView.as_view(), name="onboard"),
     path("vendedora/loja/plano/checkout/", views.StorePlanCheckoutView.as_view(), name="plan_checkout"),
     path("vendedora/loja/boost/", views.StoreBoostPurchaseView.as_view(), name="boost_purchase"),
+    path("loja/<slug:slug>/seguir/", views.StoreFollowToggleView.as_view(), name="follow_toggle"),
 ]

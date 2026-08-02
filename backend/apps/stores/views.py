@@ -19,7 +19,7 @@ from apps.moderation.models import ModerationQueueItem
 from apps.moderation.services import run_automated_filters
 from apps.payments.services import get_payment_provider
 
-from .models import BoostPackage, Store, StoreBoost, StorePlan
+from .models import BoostPackage, Store, StoreBoost, StoreFollow, StorePlan
 from .serializers import StoreBoostPurchaseSerializer, StoreOnboardSerializer, StorePlanCheckoutSerializer
 
 
@@ -353,6 +353,21 @@ def store_detail(request, slug):
                 {"score": score, "total": total, "percent": round(total * 100 / store.review_count)}
             )
 
+    is_owner = request.user.is_authenticated and getattr(request.user, "store", None) == store
+    is_following = False
+    if request.user.is_authenticated and not is_owner:
+        is_following = StoreFollow.objects.filter(store=store, user=request.user).exists()
+
+    pending_products = 0
+    open_questions = 0
+    if is_owner:
+        pending_products = store.products.filter(status=Product.Status.PENDING_MODERATION).count()
+        from apps.catalog.models import ProductQuestion
+
+        open_questions = ProductQuestion.objects.filter(
+            product__store=store, answer="", answered_at__isnull=True
+        ).count()
+
     return render(
         request,
         "stores/detail.html",
@@ -363,6 +378,62 @@ def store_detail(request, slug):
             "product_count": products.count(),
             "rating_breakdown": breakdown,
             "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
+            "is_owner": is_owner,
+            "is_following": is_following,
+            "follower_count": store.followers.count(),
+            "pending_products": pending_products,
+            "open_questions": open_questions,
+        },
+    )
+
+
+@login_required
+def seller_hub(request):
+    """Painel único da vendedora: atalhos, pedidos e saúde da loja."""
+    store = getattr(request.user, "store", None)
+    if not store:
+        return render(request, "wallet/no_store.html")
+
+    from apps.catalog.models import ProductQuestion
+    from apps.offers.models import CustomOrderRequest
+    from apps.payments.models import Order
+
+    published = store.products.filter(status=Product.Status.PUBLISHED, stock__gt=0).count()
+    pending = store.products.filter(status=Product.Status.PENDING_MODERATION).count()
+    open_questions = ProductQuestion.objects.filter(
+        product__store=store, answer="", answered_at__isnull=True
+    ).count()
+    open_customs = CustomOrderRequest.objects.filter(
+        store=store,
+        status__in=[
+            CustomOrderRequest.Status.PENDING,
+            CustomOrderRequest.Status.COUNTERED,
+        ],
+    ).count()
+    active_orders = Order.objects.filter(
+        store=store,
+        status__in=[Order.Status.PAID, Order.Status.SHIPPED],
+    ).count()
+    recent_orders = (
+        Order.objects.filter(store=store)
+        .exclude(status=Order.Status.AWAITING_PAYMENT)
+        .select_related("buyer")
+        .order_by("-created_at")[:8]
+    )
+
+    return render(
+        request,
+        "stores/seller_hub.html",
+        {
+            "store": store,
+            "published": published,
+            "pending": pending,
+            "open_questions": open_questions,
+            "open_customs": open_customs,
+            "active_orders": active_orders,
+            "recent_orders": recent_orders,
+            "follower_count": store.followers.count(),
+            "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
         },
     )
 
@@ -538,3 +609,30 @@ class StoreBoostPurchaseView(APIView):
             paid=False,
         )
         return Response({"id": boost.id, "status": "awaiting_payment"}, status=status.HTTP_201_CREATED)
+
+
+class StoreFollowToggleView(APIView):
+    """POST /api/loja/<slug>/seguir/ — segue ou deixa de seguir a loja."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "cart"
+
+    def post(self, request, slug):
+        store = get_object_or_404(Store, slug=slug, status=Store.Status.ACTIVE)
+        if getattr(request.user, "store", None) == store:
+            return Response(
+                {"detail": "Você não pode seguir a própria loja."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        follow, created = StoreFollow.objects.get_or_create(store=store, user=request.user)
+        if not created:
+            follow.delete()
+            following = False
+        else:
+            following = True
+        return Response(
+            {
+                "following": following,
+                "follower_count": store.followers.count(),
+            }
+        )

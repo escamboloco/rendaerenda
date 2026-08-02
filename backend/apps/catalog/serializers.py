@@ -5,6 +5,8 @@ from rest_framework import serializers
 from .models import Category, Product, price_from_payout
 
 MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
+MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024  # 8MB
+MAX_ASSET_SIZE_BYTES = 200 * 1024 * 1024  # 200MB por arquivo digital
 
 
 def validate_video_file(file):
@@ -23,7 +25,20 @@ def validate_video_file(file):
         raise serializers.ValidationError("Vídeo muito grande (máximo 50MB).")
 
 
-MAX_ASSET_SIZE_BYTES = 200 * 1024 * 1024  # 200MB por arquivo digital
+def validate_image_file(file):
+    """Magic bytes de JPEG/PNG/WebP/GIF + limite de tamanho (não confiar no MIME do browser)."""
+    head = file.read(12)
+    file.seek(0)
+    is_jpeg = head[:3] == b"\xff\xd8\xff"
+    is_png = head[:8] == b"\x89PNG\r\n\x1a\n"
+    is_webp = head[:4] == b"RIFF" and head[8:12] == b"WEBP"
+    is_gif = head[:6] in (b"GIF87a", b"GIF89a")
+    if not (is_jpeg or is_png or is_webp or is_gif):
+        raise serializers.ValidationError(
+            "Arquivo não parece ser uma imagem válida (use JPEG, PNG, WebP ou GIF)."
+        )
+    if file.size > MAX_IMAGE_SIZE_BYTES:
+        raise serializers.ValidationError("Imagem muito grande (máximo 8MB).")
 
 
 def validate_asset_file(file):
@@ -62,7 +77,10 @@ class ProductCreateSerializer(serializers.Serializer):
     production_days = serializers.IntegerField(min_value=0, max_value=90, required=False, default=0)
     stock = serializers.IntegerField(min_value=1, max_value=1000, default=1)
     images = serializers.ListField(
-        child=serializers.ImageField(), min_length=1, max_length=5, write_only=True
+        child=serializers.ImageField(validators=[validate_image_file]),
+        min_length=1,
+        max_length=5,
+        write_only=True,
     )
     # Vídeo do PRODUTO (mostrando/descrevendo o item, sem nudez/sexual) -
     # opcional, no máximo 2 por anúncio.

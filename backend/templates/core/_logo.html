@@ -1,26 +1,19 @@
 {% comment %}
 Marca do Renda & Renda.
 
-Monograma "RR" em espelho formando um laço — referência a renda/fita, que é
-o produto, sem cair no clichê de coração ou lábios.
+Monograma "RR" em espelho formando um laço — referência a renda/fita.
+Três camadas SVG com translateZ distinto = paralaxe 3D suave em CSS
+puro (sem WebGL, CSP fechada).
 
-O 3D é CSS puro (perspective + rotateY em camadas com profundidade
-diferente): nenhuma biblioteca, nada de WebGL, e a CSP continua fechada.
-Duas cópias deslocadas no eixo Z criam paralaxe real quando o bloco gira.
-
-Acessibilidade: a animação só roda em ponteiro fino (mouse) e é desligada
-inteira em prefers-reduced-motion — movimento contínuo em logo é gatilho
-comum de enjoo vestibular.
-
-Parâmetros: `size` (classe de altura, padrão h-9), `with_text` (bool).
+Acessibilidade: animação desligada em prefers-reduced-motion.
+Parâmetros: `with_text`, `compact`.
 {% endcomment %}
 <span class="logo3d {% if compact %}logo3d--sm{% endif %}" aria-hidden="true">
   <span class="logo3d__stage">
-    {# camada de trás: sombra colorida que cria a profundidade #}
     <svg class="logo3d__layer logo3d__layer--back" viewBox="0 0 48 48" fill="none">
-      <path d="M14 34V14h9a6 6 0 0 1 0 12h-9m9 0 7 8" stroke="url(#lg-back)" stroke-width="4.5"
+      <path d="M14 34V14h9a6 6 0 0 1 0 12h-9m9 0 7 8" stroke="url(#lg-back)" stroke-width="4.8"
             stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M34 34V14h-9a6 6 0 0 0 0 12h9m-9 0-7 8" stroke="url(#lg-back)" stroke-width="4.5"
+      <path d="M34 34V14h-9a6 6 0 0 0 0 12h9m-9 0-7 8" stroke="url(#lg-back)" stroke-width="4.8"
             stroke-linecap="round" stroke-linejoin="round" opacity=".55"/>
       <defs>
         <linearGradient id="lg-back" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
@@ -29,12 +22,23 @@ Parâmetros: `size` (classe de altura, padrão h-9), `with_text` (bool).
       </defs>
     </svg>
 
-    {# camada da frente: o traço principal #}
+    <svg class="logo3d__layer logo3d__layer--mid" viewBox="0 0 48 48" fill="none">
+      <path d="M14 34V14h9a6 6 0 0 1 0 12h-9m9 0 7 8" stroke="url(#lg-mid)" stroke-width="3.8"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M34 34V14h-9a6 6 0 0 0 0 12h9m-9 0-7 8" stroke="url(#lg-mid)" stroke-width="3.8"
+            stroke-linecap="round" stroke-linejoin="round" opacity=".65"/>
+      <defs>
+        <linearGradient id="lg-mid" x1="6" y1="8" x2="42" y2="40" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#e0295c"/><stop offset="1" stop-color="#8a3fa8"/>
+        </linearGradient>
+      </defs>
+    </svg>
+
     <svg class="logo3d__layer logo3d__layer--front" viewBox="0 0 48 48" fill="none">
       <path d="M14 34V14h9a6 6 0 0 1 0 12h-9m9 0 7 8" stroke="url(#lg-front)" stroke-width="3.4"
             stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M34 34V14h-9a6 6 0 0 0 0 12h9m-9 0-7 8" stroke="url(#lg-front)" stroke-width="3.4"
-            stroke-linecap="round" stroke-linejoin="round" opacity=".7"/>
+            stroke-linecap="round" stroke-linejoin="round" opacity=".75"/>
       <circle cx="24" cy="26" r="2.1" fill="#f4d3dc"/>
       <defs>
         <linearGradient id="lg-front" x1="8" y1="10" x2="40" y2="38" gradientUnits="userSpaceOnUse">
