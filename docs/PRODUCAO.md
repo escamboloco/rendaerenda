@@ -186,3 +186,83 @@ O token precisa existir **também** no cron `rendaerenda-poll-shipments`
 - Token de sandbox **não** funciona em `api.superfrete.com`.
 - Com `SUPERFRETE_SANDBOX=True` as etiquetas **não** são válidas para postagem.
 - Remova qualquer `MELHOR_ENVIO_*` antigo do painel — não é mais lido.
+
+## 9. Envs pendentes — o que preencher e como
+
+Onde: Render → Environment Group `rendaerenda-shared` (a maioria) e
+serviço `rendaerenda-web` (Asaas/token). Depois de salvar → **Manual Deploy**.
+
+### Já pode ligar sem CNPJ
+
+| Variável | Onde | Valor / como gerar | Se ficar vazio |
+|---|---|---|---|
+| `ASAAS_WEBHOOK_TOKEN` | Web | Gere um segredo: `openssl rand -hex 32` | Webhook responde **503** — Pix pago **não** confirma sozinho |
+| `CHECKOUT_FREE_SHIPPING` | Shared | `False` (já no blueprint) | Se `True`, frete R$ 0 e sem cotação |
+| `MODERATION_ALERT_EMAIL` | Shared | Caixa que **você** lê (ex.: `moderacao@rendaerenda.com.br` ou Gmail pessoal) | Contestação só vai pro log — ninguém é avisado |
+| `STATEMENT_DESCRIPTOR` | Shared | Nome neutro curto, até ~22 chars (ex.: `RR COMERCIO` ou a razão social) | Checkout não mostra a linha “no extrato aparece …” |
+
+#### `ASAAS_WEBHOOK_TOKEN` — passo a passo
+1. No seu computador:
+   ```bash
+   openssl rand -hex 32
+   ```
+2. Cole o resultado em Render → `rendaerenda-web` → `ASAAS_WEBHOOK_TOKEN`.
+3. Asaas → Integrações → Webhooks (ou criar webhook):
+   - URL: `https://rendaerenda.com.br/webhooks/asaas/`
+   - Token / `asaas-access-token`: **o mesmo valor**
+   - Eventos: `PAYMENT_RECEIVED`, `PAYMENT_CONFIRMED`, `PAYMENT_REFUNDED`,
+     `PAYMENT_CHARGEBACK_REQUESTED`, `PAYMENT_OVERDUE`
+4. Conferir:
+   ```bash
+   curl -s https://rendaerenda.com.br/webhooks/asaas/
+   # {"ok": true, "service": "asaas-webhook", ...}
+   ```
+5. Redeploy do web. Sem o token no Render **e** no painel Asaas, o pedido
+   fica `awaiting_payment` mesmo depois do Pix.
+
+#### `CHECKOUT_FREE_SHIPPING`
+Confirme no painel que está `False` (string). Blueprint já manda isso; se o
+serviço foi criado antes, o valor antigo pode ter ficado — edite à mão.
+
+#### `MODERATION_ALERT_EMAIL`
+Use um e-mail que chega no celular. SMTP (`EMAIL_HOST` / USER / PASSWORD)
+precisa estar ok, senão o alerta também não sai.
+
+#### `STATEMENT_DESCRIPTOR`
+É **só copy no checkout**. O nome que aparece no extrato do cartão/Pix é o
+da **conta Asaas** (e, com CNPJ, a razão social neutra). Escolha algo genérico
+tipo comércio/marketplace — nunca o nicho adulto.
+
+### Depende do CNPJ (etiqueta + identidade legal)
+
+Sem CNPJ a plataforma ainda vende (Asaas `pf` + SuperFrete), mas a etiqueta
+fica frágil e a cobrança discreta no extrato não fecha de verdade.
+
+| Variável | Valor quando o CNPJ existir |
+|---|---|
+| `PLATFORM_LEGAL_NAME` | Razão social **neutra** do cartão CNPJ |
+| `PLATFORM_CNPJ` | Só dígitos, 14 chars (ex.: `12345678000199`) |
+| `SHIPPING_SENDER_NAME` | Mesma razão social (ou nome fantasia neutro) — **não** “Renda & Renda” se for explícito demais no pacote |
+| `SHIPPING_SENDER_DOCUMENT` | Mesmo CNPJ (só dígitos) |
+| `SHIPPING_SENDER_EMAIL` | `suporte@rendaerenda.com.br` (já no blueprint) |
+| `SHIPPING_SENDER_PHONE` | Celular/WhatsApp com DDD, só dígitos (ex.: `11999998888`) |
+
+**Não precisa** preencher `SHIPPING_SENDER_STREET/NUMBER/DISTRICT/CITY/STATE`
+se cada loja tiver o endereço de postagem (`origin_*`) — a etiqueta usa o
+endereço da vendedora e o **nome/CNPJ da plataforma**.
+
+#### Enquanto o CNPJ não sai
+1. Deixe `SHIPPING_SENDER_*` / `PLATFORM_CNPJ` vazios **ou**
+2. Temporário (só para testar etiqueta): `SHIPPING_SENDER_NAME` = nome civil
+   completo do titular PF + `SHIPPING_SENDER_DOCUMENT` = CPF (11 dígitos) +
+   telefone. A SuperFrete aceita documento; o remetente deixa de ser neutro.
+3. Priorize abrir o CNPJ com razão social neutra (`docs/BASE_JURIDICA.md`)
+   e aí troque para CNPJ + `ASAAS_ACCOUNT_TYPE=pj` quando for usar split.
+
+### Checklist rápido no Render depois de preencher
+- [ ] `ASAAS_WEBHOOK_TOKEN` no web **igual** ao token do webhook Asaas  
+- [ ] `CHECKOUT_FREE_SHIPPING=False`  
+- [ ] `MODERATION_ALERT_EMAIL` com caixa real  
+- [ ] `STATEMENT_DESCRIPTOR` neutro  
+- [ ] Com CNPJ: `PLATFORM_*` + `SHIPPING_SENDER_NAME/DOCUMENT/PHONE`  
+- [ ] Manual Deploy → `curl` no webhook → `python manage.py check_superfrete`
