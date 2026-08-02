@@ -1,0 +1,140 @@
+{% extends "core/base.html" %}
+{% load seo %}
+{% block title %}{{ category.name }} — anúncios +18 | Renda &amp; Renda{% endblock %}
+{% block description %}{% if category.description %}{{ category.description|meta_text:155 }}{% else %}{{ total_count }} anúncio{{ total_count|pluralize }} de {{ category.name }} entre adultos verificados, com pagamento em custódia e embalagem neutra.{% endif %}{% endblock %}
+{% block robots %}index, follow{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ canonical_url }}">{% endblock %}
+{% block og_title %}{{ category.name }} — Renda &amp; Renda{% endblock %}
+{% block og_description %}{% if category.description %}{{ category.description|meta_text:155 }}{% else %}Anúncios de {{ category.name }} entre adultos verificados, com pagamento em custódia.{% endif %}{% endblock %}
+{% block body_class %}storefront-light{% endblock %}
+
+{% block extra_head %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "{{ category.name|escapejs }}",
+  "description": "{{ category.description|default:''|meta_text:300|escapejs }}",
+  "url": "{{ canonical_url|escapejs }}",
+  "isPartOf": {"@type": "WebSite", "name": "Renda & Renda", "url": "{{ request.scheme }}://{{ request.get_host }}/"},
+  "mainEntity": {
+    "@type": "ItemList",
+    "numberOfItems": {{ total_count }},
+    "itemListElement": [
+      {% for product in products %}{
+        "@type": "ListItem",
+        "position": {{ forloop.counter }},
+        "name": "{{ product.title|escapejs }}",
+        "url": "{{ request.scheme }}://{{ request.get_host }}{% url 'catalog:detail' product.store.slug product.slug %}"
+      }{% if not forloop.last %},{% endif %}{% endfor %}
+    ]
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Início", "item": "{{ request.scheme }}://{{ request.get_host }}/"},
+    {"@type": "ListItem", "position": 2, "name": "Categorias", "item": "{{ request.scheme }}://{{ request.get_host }}{% url 'stores:categories' %}"},
+    {"@type": "ListItem", "position": 3, "name": "{{ category.name|escapejs }}"}
+  ]
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<nav class="text-xs text-gray-500 mb-4 flex items-center gap-1.5 flex-wrap">
+  <a href="{% url 'stores:home' %}" class="hover:text-gray-300">Início</a>
+  <span>/</span>
+  <a href="{% url 'stores:categories' %}" class="hover:text-gray-300">Categorias</a>
+  <span>/</span>
+  <span class="text-gray-400">{{ category.name }}</span>
+</nav>
+
+<header class="mb-6">
+  <span class="eyebrow">Categoria</span>
+  <h1 class="text-3xl sm:text-4xl font-bold mt-1">{{ category.name }}</h1>
+  <p class="text-sm text-gray-500 mt-1">
+    <span class="text-gray-300">{{ total_count }}</span> anúncio{{ total_count|pluralize }} disponíve{{ total_count|pluralize:"l,is" }}
+    · compra protegida e discreta
+  </p>
+  <p class="text-sm text-gray-400 mt-3 max-w-2xl leading-relaxed">
+    {% if category.description %}{{ category.description }}{% else %}
+    Anúncios de {{ category.name|lower }} publicados por vendedoras com identidade
+    conferida. O pagamento fica em custódia até você confirmar o recebimento, a
+    caixa chega sem logo nem remetente que entregue o conteúdo e a cobrança
+    aparece no extrato com nome neutro.
+    {% endif %}
+  </p>
+</header>
+
+<div class="filter-bar mb-5">
+  <a href="{% url 'stores:category_detail' category.slug %}"
+     class="filter-pill {% if not active_kind %}filter-pill--active{% endif %}">Todos</a>
+  {% for key, kind in kind_filters.items %}
+  <a href="?tipo={{ key }}" class="filter-pill {% if active_kind == key %}filter-pill--active{% endif %}">{{ kind.1 }}</a>
+  {% endfor %}
+  <form method="get" class="shrink-0">
+    {% if active_kind %}<input type="hidden" name="tipo" value="{{ active_kind }}">{% endif %}
+    <select name="ordem" onchange="this.form.submit()" class="filter-pill appearance-none">
+      {% for key, option in sort_options.items %}
+      <option value="{{ key }}" {% if active_sort == key %}selected{% endif %}>{{ option.1 }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+  {% for product in products %}
+    {% include "catalog/_product_card.html" with product=product show_store=True %}
+  {% empty %}
+  <div class="col-span-full card p-10 text-center space-y-3">
+    <div class="w-14 h-14 mx-auto rounded-2xl bg-white/5 grid place-items-center text-2xl">⌕</div>
+    <p class="text-gray-200 font-semibold">Nenhum anúncio nesta categoria ainda</p>
+    <p class="text-gray-500 text-sm">Veja o catálogo completo ou escolha outra categoria.</p>
+    <a href="{% url 'stores:listing' %}" class="btn-secondary text-sm">Ver todos os anúncios</a>
+  </div>
+  {% endfor %}
+</div>
+
+{% if page_obj.has_other_pages %}
+<nav class="flex items-center justify-center gap-2 mt-10 text-sm">
+  {% if page_obj.has_previous %}
+  <a class="btn-secondary !py-2 !min-h-0" rel="prev" href="?pagina={{ page_obj.previous_page_number }}{% if active_kind %}&tipo={{ active_kind }}{% endif %}&ordem={{ active_sort }}">Anterior</a>
+  {% endif %}
+  <span class="text-gray-500">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}
+  <a class="btn-secondary !py-2 !min-h-0" rel="next" href="?pagina={{ page_obj.next_page_number }}{% if active_kind %}&tipo={{ active_kind }}{% endif %}&ordem={{ active_sort }}">Próxima</a>
+  {% endif %}
+</nav>
+{% endif %}
+
+{% if sibling_categories %}
+<section class="mt-12 border-t border-surface-border pt-8">
+  <h2 class="text-lg font-bold mb-3">Outras categorias</h2>
+  <div class="filter-bar">
+    {% for sibling in sibling_categories %}
+    <a href="{% url 'stores:category_detail' sibling.slug %}" class="filter-pill">
+      {{ sibling.name }} <span class="text-gray-500">{{ sibling.active_count }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="mt-10 card p-6 sm:p-8 grid md:grid-cols-[1fr_auto] gap-5 items-center">
+  <div>
+    <h2 class="text-lg font-bold">Como a compra funciona nesta categoria</h2>
+    <p class="text-sm text-gray-400 mt-2 leading-relaxed">
+      O valor pago fica retido na plataforma e só é liberado para a vendedora
+      depois que você confirma o recebimento. Se algo der errado, você tem
+      {{ dispute_window_days }} dias para contestar e o valor trava até a moderação decidir.
+      Anúncio que ofereça encontro, programa ou qualquer serviço presencial é
+      removido antes de ficar público.
+    </p>
+  </div>
+  <a href="{% url 'stores:how_it_works' %}" class="btn-secondary">Entender a proteção</a>
+</section>
+{% endblock %}

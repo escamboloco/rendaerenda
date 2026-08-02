@@ -1,0 +1,72 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-br" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Gestão{% endblock %} — Renda &amp; Renda</title>
+  {% comment %}
+  Painel interno: nunca indexado e fora do sitemap. Não herda o base
+  público de propósito — nada de carrinho, age gate ou saída rápida aqui.
+  {% endcomment %}
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
+</head>
+<body class="bg-surface text-gray-100 font-sans min-h-screen">
+
+  <header class="border-b border-surface-border bg-surface-alt sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4 flex-wrap">
+      <a href="{% url 'backoffice:dashboard' %}" class="font-display text-lg font-bold shrink-0">
+        Gestão<span class="text-gradient-brand">.</span>
+      </a>
+      <nav class="flex items-center gap-1 text-sm overflow-x-auto">
+        {% url 'backoffice:dashboard' as u_dash %}
+        {% url 'backoffice:kyc_queue' as u_kyc %}
+        {% url 'backoffice:moderation' as u_mod %}
+        {% url 'backoffice:disputes' as u_dis %}
+        {% url 'backoffice:orders' as u_ord %}
+        {% url 'backoffice:finance' as u_fin %}
+        {% url 'backoffice:stores' as u_sto %}
+        {% url 'backoffice:people' as u_peo %}
+        <a href="{{ u_dash }}" class="bo-tab {% if request.path == u_dash %}bo-tab--on{% endif %}">Visão geral</a>
+        <a href="{{ u_kyc }}" class="bo-tab {% if request.path == u_kyc %}bo-tab--on{% endif %}">
+          Identidade
+          {% if pendentes %}<span class="bo-pill">{{ pendentes }}</span>{% endif %}
+        </a>
+        <a href="{{ u_mod }}" class="bo-tab {% if request.path == u_mod %}bo-tab--on{% endif %}">Moderação</a>
+        <a href="{{ u_dis }}" class="bo-tab {% if request.path == u_dis %}bo-tab--on{% endif %}">Disputas</a>
+        <a href="{{ u_ord }}" class="bo-tab {% if request.path == u_ord %}bo-tab--on{% endif %}">Pedidos</a>
+        <a href="{{ u_fin }}" class="bo-tab {% if request.path == u_fin %}bo-tab--on{% endif %}">Financeiro</a>
+        <a href="{{ u_sto }}" class="bo-tab {% if request.path == u_sto %}bo-tab--on{% endif %}">Lojas</a>
+        <a href="{{ u_peo }}" class="bo-tab {% if request.path == u_peo %}bo-tab--on{% endif %}">Contas</a>
+      </nav>
+      <div class="ml-auto flex items-center gap-3 text-xs text-gray-500 shrink-0">
+        <span>{{ request.user.email }}</span>
+        <a href="/admin/" class="hover:text-white" title="Admin do Django">admin</a>
+        <a href="/" class="hover:text-white">site</a>
+        <form method="post" action="{% url 'backoffice:logout' %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="hover:text-white">sair</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  {% if messages %}
+  <div class="max-w-7xl mx-auto px-4 pt-4 space-y-2">
+    {% for message in messages %}
+    <div class="card px-4 py-3 text-sm {% if message.tags == 'error' %}border-red-900 text-red-300{% elif message.tags == 'success' %}border-emerald-900/50 text-emerald-300{% else %}text-gray-300{% endif %}">
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{% static 'js/app.js' %}" defer></script>
+  <script src="{% static 'vendor/alpine.min.js' %}" defer></script>
+</body>
+</html>

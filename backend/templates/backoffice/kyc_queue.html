@@ -1,0 +1,102 @@
+{% extends "backoffice/_base.html" %}
+{% block title %}Identidade{% endblock %}
+
+{% block content %}
+<div class="flex items-end justify-between gap-3 mb-4 flex-wrap">
+  <div>
+    <h1 class="text-lg font-bold">Conferência de identidade</h1>
+    <p class="text-xs text-gray-500 mt-1">
+      Confira as três fotos juntas: o rosto bate com o documento, o código no papel é o
+      desta conta, e a data de nascimento está legível.
+    </p>
+  </div>
+  <div class="flex gap-1">
+    {% for valor, rotulo in status_choices %}
+    <a href="?status={{ valor }}" class="bo-tab {% if status_atual == valor %}bo-tab--on{% endif %}">{{ rotulo }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="space-y-4">
+  {% for kyc in itens %}
+  <article class="card p-5" x-data="{ recusando: false }">
+    <div class="flex items-start justify-between gap-4 flex-wrap mb-4">
+      <div>
+        <p class="font-semibold">{{ kyc.user.get_full_name|default:kyc.user.email }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">
+          {{ kyc.user.email }} · CPF do cadastro <span class="font-mono">{{ kyc.user.cpf }}</span>
+          {% if kyc.submitted_at %}· enviado {{ kyc.submitted_at|date:"d/m/Y H:i" }}{% endif %}
+        </p>
+      </div>
+      <div class="text-right shrink-0">
+        <p class="text-[11px] text-gray-500 uppercase tracking-wide">Código na selfie</p>
+        <p class="font-display text-2xl tracking-[0.18em] text-accent-blush">{{ kyc.verification_code }}</p>
+      </div>
+    </div>
+
+    {% comment %}
+    Fotos lado a lado e ampliáveis. Decisão de identidade tomada em
+    miniatura é decisão ruim — precisa dar para ler o documento.
+    {% endcomment %}
+    <div class="grid sm:grid-cols-3 gap-3 mb-4">
+      {% for rotulo, arquivo in kyc.review_files %}
+      <figure>
+        <figcaption class="text-[11px] text-gray-500 mb-1">{{ rotulo }}</figcaption>
+        {% if arquivo %}
+        <a href="{{ arquivo.url }}" target="_blank" rel="noopener"
+           class="block aspect-[4/3] rounded-xl overflow-hidden border border-surface-border bg-surface-alt hover:border-brand/60 transition">
+          <img src="{{ arquivo.url }}" alt="{{ rotulo }}" class="w-full h-full object-cover">
+        </a>
+        {% else %}
+        <div class="aspect-[4/3] rounded-xl border border-surface-border bg-surface-alt grid place-items-center text-xs text-gray-600">
+          não enviado
+        </div>
+        {% endif %}
+      </figure>
+      {% endfor %}
+    </div>
+
+    {% if kyc.status == 'pending' %}
+    <form method="post" action="{% url 'backoffice:kyc_decide' kyc.id %}"
+          class="border-t border-surface-border pt-4 flex flex-wrap items-end gap-3">
+      {% csrf_token %}
+      <div>
+        <label class="input-label" for="nasc-{{ kyc.id }}">Nascimento no documento</label>
+        <input id="nasc-{{ kyc.id }}" type="date" name="document_birth_date" class="input-field !py-2">
+        <p class="input-help">Vira a idade oficial da conta.</p>
+      </div>
+
+      <button type="submit" name="acao" value="aprovar" class="btn-primary !py-2 !min-h-0">
+        Aprovar e liberar a loja
+      </button>
+
+      <button type="button" class="btn-secondary !py-2 !min-h-0 !text-red-300" @click="recusando = !recusando">
+        Reprovar
+      </button>
+
+      <div x-show="recusando" x-cloak class="w-full flex flex-wrap items-end gap-2 pt-2">
+        <div class="flex-1 min-w-[16rem]">
+          <label class="input-label" for="motivo-{{ kyc.id }}">Motivo (ela vê este texto)</label>
+          <input id="motivo-{{ kyc.id }}" type="text" name="motivo" maxlength="300" class="input-field !py-2"
+                 placeholder="Ex.: a data de nascimento do documento está ilegível.">
+        </div>
+        <button type="submit" name="acao" value="reprovar" class="btn-secondary !py-2 !min-h-0 !text-red-300">
+          Confirmar reprovação
+        </button>
+      </div>
+    </form>
+    {% else %}
+    <div class="border-t border-surface-border pt-3 text-xs text-gray-500 flex flex-wrap gap-x-5 gap-y-1">
+      <span>Situação: <strong class="text-gray-300">{{ kyc.get_status_display }}</strong></span>
+      {% if kyc.reviewed_by %}<span>Por {{ kyc.reviewed_by.email }}</span>{% endif %}
+      {% if kyc.reviewed_at %}<span>{{ kyc.reviewed_at|date:"d/m/Y H:i" }}</span>{% endif %}
+      {% if kyc.document_birth_date %}<span>Nascimento: {{ kyc.document_birth_date|date:"d/m/Y" }}</span>{% endif %}
+      {% if kyc.rejection_reason %}<span class="w-full text-red-300">{{ kyc.rejection_reason }}</span>{% endif %}
+    </div>
+    {% endif %}
+  </article>
+  {% empty %}
+  <p class="card p-10 text-center text-gray-500">Nada nesta fila.</p>
+  {% endfor %}
+</div>
+{% endblock %}

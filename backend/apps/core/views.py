@@ -1,3 +1,4 @@
+import io
 import logging
 import re
 
@@ -7,6 +8,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.templatetags.static import static
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_http_methods
 from django_ratelimit.decorators import ratelimit
@@ -92,10 +94,121 @@ def cep_lookup(request, cep: str):
     return JsonResponse(result)
 
 
+# ---------------------------------------------------------------- og:image
+#
+# A midia dos anuncios fica em bucket privado e e servida por URL assinada
+# de curta duracao (AWS_QUERYSTRING_EXPIRE, 5min). Crawler de card de link
+# (X, WhatsApp, Telegram) e do Google buscam a imagem MUITO depois de ler o
+# HTML - a URL assinada ja expirou e o card sai sem imagem. Por isso a
+# prévia tem endereco proprio, estavel e cacheavel, que so expoe anuncio
+# publicado e publico.
+OG_WIDTH, OG_HEIGHT = 1200, 630
+OG_BACKGROUND = (11, 7, 9)  # mesmo #0b0709 do tema
+OG_CACHE_SECONDS = 60 * 60 * 24 * 7
+
+
+def _render_og_card(image_field) -> bytes:
+    """Encaixa a foto num quadro 1200x630 sobre o fundo da marca."""
+    from PIL import Image, ImageOps
+
+    with image_field.open("rb") as handle:
+        source = Image.open(handle)
+        source.load()
+
+    # Foto de celular guarda a rotacao no EXIF em vez de girar os pixels -
+    # sem isso o card sai deitado.
+    source = ImageOps.exif_transpose(source)
+
+    # "Contain" e nao "cover": foto de anuncio e vertical, e cortar para
+    # preencher decepa justamente a peca anunciada.
+    fitted = ImageOps.contain(source.convert("RGB"), (OG_WIDTH, OG_HEIGHT), Image.LANCZOS)
+    canvas = Image.new("RGB", (OG_WIDTH, OG_HEIGHT), OG_BACKGROUND)
+    canvas.paste(fitted, ((OG_WIDTH - fitted.width) // 2, (OG_HEIGHT - fitted.height) // 2))
+
+    buffer = io.BytesIO()
+    canvas.save(buffer, "JPEG", quality=82, optimize=True, progressive=True)
+    return buffer.getvalue()
+
+
+def _og_response(cache_key: str, image_field) -> HttpResponse:
+    """Serve o card renderizado, com cache — nunca gera duas vezes a mesma foto."""
+    payload = cache.get(cache_key)
+    if payload is None:
+        try:
+            payload = _render_og_card(image_field)
+        except Exception:
+            # Arquivo corrompido ou storage fora do ar nao pode derrubar a
+            # pagina que aponta para ca: cai na imagem de marca.
+            logger.info("Falha ao gerar og:image para %s", cache_key)
+            return redirect(static("img/og-brand.png"))
+        cache.set(cache_key, payload, OG_CACHE_SECONDS)
+
+    response = HttpResponse(payload, content_type="image/jpeg")
+    response["Cache-Control"] = f"public, max-age={OG_CACHE_SECONDS}"
+    return response
+
+
+def _public_cover(product):
+    return product.images.filter(is_cover=True).first() or product.images.first()
+
+
+@require_GET
+def og_product_image(request, store_slug: str, product_slug: str):
+    """GET /og/anuncio/<loja>/<anuncio>.jpg — prévia de link do anúncio."""
+    from apps.catalog.models import Product
+    from apps.stores.views import public_store_filter
+
+    product = (
+        Product.objects.filter(
+            public_store_filter("store__"),
+            store__slug=store_slug,
+            slug=product_slug,
+            status=Product.Status.PUBLISHED,
+            visibility=Product.Visibility.PUBLIC,
+        )
+        .prefetch_related("images")
+        .first()
+    )
+    if product is None:
+        raise Http404
+    cover = _public_cover(product)
+    if cover is None:
+        return redirect(static("img/og-brand.png"))
+    return _og_response(f"og:product:{product.pk}:{cover.pk}", cover.file)
+
+
+@require_GET
+def og_store_image(request, slug: str):
+    """GET /og/loja/<loja>.jpg — prévia de link da loja (capa do item em destaque)."""
+    from apps.catalog.models import Product
+    from apps.stores.models import Store
+    from apps.stores.views import public_store_filter
+
+    store = Store.objects.filter(public_store_filter(), slug=slug).first()
+    if store is None:
+        raise Http404
+    product = (
+        Product.objects.filter(
+            store=store,
+            status=Product.Status.PUBLISHED,
+            visibility=Product.Visibility.PUBLIC,
+            stock__gt=0,
+        )
+        .prefetch_related("images")
+        .order_by("-sold_count", "-created_at")
+        .first()
+    )
+    cover = _public_cover(product) if product else None
+    if cover is None:
+        return redirect(static("img/og-brand.png"))
+    return _og_response(f"og:store:{store.pk}:{cover.pk}", cover.file)
+
+
 def robots_txt(request):
     lines = [
         "User-agent: *",
         "Disallow: /admin/",
+        "Disallow: /gestao/",
         "Disallow: /api/",
         "Disallow: /webhooks/",
         "Disallow: /entrada/",

@@ -80,7 +80,7 @@ Marketplace +18 de **itens** e **conteúdo** — nunca de serviço presencial.
 
 | Peça | Como funciona |
 |---|---|
-| Comissão | `PLATFORM_COMMISSION_PERCENT` (15% por padrão) **por cima** do valor que a vendedora pediu. Ela recebe o líquido inteiro; quem compra paga a diferença |
+| Comissão | `PLATFORM_COMMISSION_PERCENT` (20% por padrão) **por cima** do valor que a vendedora pediu. Ela recebe o líquido inteiro; quem compra paga a diferença |
 | Custódia | O Pix fica com a plataforma. A vendedora só saca depois que o comprador confirma o recebimento (ou depois do prazo) |
 | Disputa | `DISPUTE_WINDOW_DAYS` (7) para contestar. Contestou, o valor trava até a moderação decidir |
 | Mensalidade | Nenhuma. Abrir loja e anunciar é grátis |
@@ -119,6 +119,9 @@ Tudo idempotente: webhook repetido não credita duas vezes e
 | `/` | Vitrine: destaques, mais vendidos, categorias, provas de segurança |
 | `/anuncios/` | Catálogo completo com filtros (tipo, categoria, ordenação) |
 | `/categorias/` | Índice de categorias + o que não é permitido |
+| `/categorias/<slug>/` | Página da categoria — URL de cauda longa, com texto próprio e `ItemList` |
+| `/og/anuncio/<loja>/<item>.jpg` | Prévia de link do anúncio (1200×630) |
+| `/og/loja/<loja>.jpg` | Prévia de link da loja |
 | `/como-funciona/` | Explicação da custódia, prazos e privacidade |
 | `/vender/` | Landing de captação de vendedoras |
 | `/loja/<slug>/` | Loja da vendedora |
@@ -155,6 +158,31 @@ R$ 5 (`manage.py seed_payment_test`).
 - **Saque/repasse**: para a chave Pix cadastrada pela dona da loja.
 - **Apelido** (`User.public_alias`): só na interação comprador↔vendedora. Pagamento, NF, KYC e admin usam identidade civil.
 - **CEP**: a consulta ao ViaCEP sai do servidor (`/api/cep/<cep>/`), nunca do navegador — mantém a CSP fechada e não expõe o IP da compradora.
+
+## Age gate e descoberta
+
+O `AgeGateMiddleware` **não redireciona**: ele marca `request.age_gate_pending` e
+o `core/base.html` cobre a página com `core/_age_gate_overlay.html` (fundo opaco,
+`z-[100]`, scroll travado). A resposta é a da própria página, com status 200.
+
+O motivo é de aquisição. Google Ads e Meta não aceitam o nicho
+(`docs/BASE_JURIDICA.md` § 6), então busca orgânica e link compartilhado no X são
+a divulgação — e crawler não guarda sessão. Com redirect, Googlebot e os robôs de
+card do X/WhatsApp/Telegram levavam 302 para `/entrada/` (que é `noindex`) em toda
+URL: o site inteiro ficava fora do índice e nenhum link montava prévia, apesar de
+cada página pública declarar `index, follow`. Servindo o mesmo HTML para todo
+mundo não há cloaking, e a classificação adulta continua no cabeçalho (meta RTA +
+`rating: adult`).
+
+Isso continua sendo só a barreira visual de entrada — a verificação de idade real
+(CPF + biometria, Lei 15.211/2025) está em `apps/accounts` e é exigida para
+cadastrar, comprar e vender. **Nunca colocar conteúdo explícito em página
+indexável**: o portão é opaco justamente porque a página agora existe no HTML.
+
+A prévia de link (`/og/...`) é gerada com Pillow em 1200×630 e cacheada por 7
+dias. Ela existe porque a mídia fica em bucket privado com URL assinada de 5
+minutos — a URL do bucket expira antes de o Google buscar a imagem. É o único
+caminho fora do age gate que serve mídia, e só de anúncio publicado e público.
 
 ## Front-end
 

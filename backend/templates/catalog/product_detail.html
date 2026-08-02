@@ -1,25 +1,47 @@
 {% extends "core/base.html" %}
-{% load l10n %}
+{% load l10n seo %}
 {% block title %}{{ product.title }} — {{ store.display_name }} | Renda &amp; Renda{% endblock %}
-{% block description %}{{ product.description|truncatechars:150 }}{% endblock %}
-{% block robots %}index, follow{% endblock %}
+{% block description %}{{ product.description|meta_text:155 }}{% endblock %}
+{# Item de pedido personalizado nao e vitrine: so quem tem o link ve, entao
+   nunca entra em indice nem em previa de link. #}
+{% block robots %}{% if og_image_url %}index, follow{% else %}noindex, nofollow{% endif %}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+{% block og_type %}product{% endblock %}
+{% block og_title %}{{ product.title }} — {{ store.display_name }}{% endblock %}
+{% block og_description %}{{ product.description|meta_text:160 }}{% endblock %}
+{% block og_image %}{% if og_image_url %}{{ og_image_url }}{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block og_image_type %}{% if og_image_url %}image/jpeg{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block og_image_alt %}{{ product.title }}{% endblock %}
 {% block body_class %}storefront-light{% endblock %}
 
 {% block extra_head %}
+{% comment %}
+Sem `aggregateRating` no Product de propósito: a avaliação é da LOJA, não
+deste item. Reaproveitar a nota da loja aqui é marcação enganosa e o Google
+trata como violação — a nota fica na página da loja, onde é verdadeira.
+
+E nada de `{#` de várias linhas dentro do <script>: o Django só reconhece
+essa forma de comentário numa linha só, então um comentário quebrado em
+duas vaza literal para dentro do JSON e invalida o bloco inteiro.
+{% endcomment %}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "Product",
   "name": "{{ product.title|escapejs }}",
-  "description": "{{ product.description|truncatechars:300|escapejs }}",
-  {% with cover=product.images.first %}{% if cover %}"image": ["{{ cover.file.url }}"],{% endif %}{% endwith %}
+  "description": "{{ product.description|meta_text:300|escapejs }}",
+  {# URL estavel: a do bucket e assinada e expira antes de o Google buscar. #}
+  {% if og_image_url %}"image": ["{{ og_image_url|escapejs }}"],{% endif %}
   "brand": {"@type": "Brand", "name": "{{ store.display_name|escapejs }}"},
+  "category": "{{ product.category.name|escapejs }}",
+  "itemCondition": "https://schema.org/UsedCondition",
   "offers": {
     "@type": "Offer",
     "priceCurrency": "BRL",
     "price": "{{ product.price|unlocalize }}",
+    "itemCondition": "https://schema.org/UsedCondition",
     "availability": "{% if product.is_available %}https://schema.org/InStock{% else %}https://schema.org/OutOfStock{% endif %}",
+    "seller": {"@type": "Organization", "name": "{{ store.display_name|escapejs }}"},
     "url": "{{ request.build_absolute_uri }}"
   }
 }

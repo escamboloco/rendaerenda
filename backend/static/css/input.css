@@ -837,6 +837,51 @@
     50% { transform: rotateX(-8deg) rotateY(15deg) translateY(-10px); }
   }
 
+  /* As vantagens orbitam o objeto: um caminho só, quatro rótulos igualmente
+     espaçados (delay negativo de 1/4 da volta cada) e sempre na horizontal —
+     o rótulo é levado pela órbita, nunca girado. A elipse é achatada de
+     propósito: o raio horizontal precisa caber na coluna do hero. */
+  .hero-orbit__satellites {
+    @apply absolute inset-0 pointer-events-none;
+    --orbit-rx: 7rem;
+    --orbit-ry: 6.25rem;
+  }
+  .hero-orbit__satellite {
+    @apply absolute left-1/2 top-1/2 whitespace-nowrap;
+    animation: orbit-satellite 40s linear infinite;
+  }
+  .hero-orbit__satellite:nth-child(2) { animation-delay: -10s; }
+  .hero-orbit__satellite:nth-child(3) { animation-delay: -20s; }
+  .hero-orbit__satellite:nth-child(4) { animation-delay: -30s; }
+  @keyframes orbit-satellite {
+    0%     { transform: translate(-50%,-50%) translate(0, calc(var(--orbit-ry) * -1)); }
+    12.5%  { transform: translate(-50%,-50%) translate(calc(var(--orbit-rx) * .707), calc(var(--orbit-ry) * -.707)); }
+    25%    { transform: translate(-50%,-50%) translate(var(--orbit-rx), 0); }
+    37.5%  { transform: translate(-50%,-50%) translate(calc(var(--orbit-rx) * .707), calc(var(--orbit-ry) * .707)); }
+    50%    { transform: translate(-50%,-50%) translate(0, var(--orbit-ry)); }
+    62.5%  { transform: translate(-50%,-50%) translate(calc(var(--orbit-rx) * -.707), calc(var(--orbit-ry) * .707)); }
+    75%    { transform: translate(-50%,-50%) translate(calc(var(--orbit-rx) * -1), 0); }
+    87.5%  { transform: translate(-50%,-50%) translate(calc(var(--orbit-rx) * -.707), calc(var(--orbit-ry) * -.707)); }
+    100%   { transform: translate(-50%,-50%) translate(0, calc(var(--orbit-ry) * -1)); }
+  }
+  @media (min-width: 1280px) {
+    .hero-orbit__satellites {
+      --orbit-rx: 9.5rem;
+      --orbit-ry: 7.5rem;
+    }
+  }
+
+  /* Portao de idade por cima da pagina (o header e z-40, o drawer da
+     sacola z-50). Fundo opaco: a pagina existe no HTML - e o que faz o
+     crawler enxergar o site - mas ninguem ve nada antes de confirmar. */
+  .age-gate-overlay {
+    @apply fixed inset-0 z-[100] flex items-center justify-center
+      px-4 py-10 overflow-y-auto bg-surface text-gray-100;
+  }
+  .age-gate-locked {
+    @apply overflow-hidden;
+  }
+
   .quick-category {
     @apply relative min-w-[8.5rem] sm:min-w-0 min-h-[7.5rem] p-4 rounded-2xl border
       border-white/[0.08] bg-surface-card overflow-hidden transition duration-300
@@ -1040,6 +1085,24 @@
     .hero-orbit__core {
       animation: none;
     }
+    /* Sem movimento os quatro rotulos empilhariam no mesmo ponto (o reset
+       global zera a duracao da animacao). Aqui cada um fica parado na sua
+       posicao da orbita - a leitura continua sendo "em volta do objeto". */
+    .hero-orbit__satellite {
+      animation: none !important;
+    }
+    .hero-orbit__satellite:nth-child(1) {
+      transform: translate(-50%,-50%) translate(0, calc(var(--orbit-ry) * -1));
+    }
+    .hero-orbit__satellite:nth-child(2) {
+      transform: translate(-50%,-50%) translate(var(--orbit-rx), 0);
+    }
+    .hero-orbit__satellite:nth-child(3) {
+      transform: translate(-50%,-50%) translate(0, var(--orbit-ry));
+    }
+    .hero-orbit__satellite:nth-child(4) {
+      transform: translate(-50%,-50%) translate(calc(var(--orbit-rx) * -1), 0);
+    }
     *,
     *::before,
     *::after {
@@ -1096,6 +1159,60 @@
   .bento-item--tall {
     @apply sm:row-span-2;
   }
+
+  /* ------------------------------------------------------- backoffice ---
+     Painel interno. Densidade alta de propósito: quem opera precisa ver
+     muita linha por tela, não respiro de landing page. */
+  .bo-tab {
+    @apply px-3 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/[0.06]
+      transition whitespace-nowrap flex items-center gap-1.5;
+  }
+  .bo-tab--on {
+    @apply bg-brand/15 text-white;
+  }
+  .bo-pill {
+    @apply inline-flex items-center justify-center min-w-[1.15rem] h-[1.15rem] px-1
+      rounded-full bg-brand text-white text-[10px] font-bold;
+  }
+
+  .bo-kpi {
+    @apply card p-4;
+  }
+  .bo-kpi__v {
+    @apply font-display text-2xl sm:text-3xl font-bold text-white leading-none;
+  }
+  .bo-kpi__l {
+    @apply text-[11px] text-gray-500 mt-1.5;
+  }
+
+  /* Cartão de fila: número grande porque a pergunta é "quantos me esperam?" */
+  .bo-alert {
+    @apply card p-4 flex flex-col gap-0.5 hover:border-brand/60 transition;
+  }
+  .bo-alert--urgent {
+    @apply border-amber-900/50;
+  }
+  .bo-alert__n {
+    @apply font-display text-3xl font-bold text-white leading-none;
+  }
+  .bo-alert__t {
+    @apply text-xs text-gray-300 mt-1;
+  }
+  .bo-alert__h {
+    @apply text-[11px] text-gray-600;
+  }
+
+  .bo-status {
+    @apply inline-block text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap;
+  }
+  .bo-status--awaiting_payment { @apply bg-amber-400/10 text-amber-300; }
+  .bo-status--paid            { @apply bg-sky-400/10 text-sky-300; }
+  .bo-status--shipped         { @apply bg-indigo-400/10 text-indigo-300; }
+  .bo-status--delivered       { @apply bg-emerald-400/10 text-emerald-300; }
+  .bo-status--disputed        { @apply bg-red-500/15 text-red-300; }
+  .bo-status--refunded        { @apply bg-red-500/10 text-red-300; }
+  .bo-status--canceled,
+  .bo-status--expired         { @apply bg-white/5 text-gray-500; }
 
   /* Grao sutil: tira o aspecto "chapado" do preto puro. */
   .grain::after {

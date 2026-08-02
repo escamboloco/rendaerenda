@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import render
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -45,6 +46,29 @@ def dashboard(request):
             "available_balance": WalletEntry.objects.available_balance(store),
             "pending_balance": WalletEntry.objects.pending_balance(store),
             "entries": WalletEntry.objects.filter(store=store).order_by("-created_at")[:50],
+            # "Retido ate quando": o saldo pendente sozinho nao responde a
+            # pergunta que a vendedora faz. Cada linha traz a data em que
+            # aquele valor vira sacavel, e a primeira delas vira o destaque.
+            "held_entries": (
+                WalletEntry.objects.filter(
+                    store=store,
+                    kind=WalletEntry.Kind.SALE_CREDIT,
+                    available_at__gt=timezone.now(),
+                )
+                .select_related("order")
+                .order_by("available_at")[:20]
+            ),
+            "next_release_at": (
+                WalletEntry.objects.filter(
+                    store=store,
+                    kind=WalletEntry.Kind.SALE_CREDIT,
+                    available_at__gt=timezone.now(),
+                )
+                .order_by("available_at")
+                .values_list("available_at", flat=True)
+                .first()
+            ),
+            "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
             "withdrawals": WithdrawalRequest.objects.filter(store=store).order_by("-requested_at")[:20],
             "release_days": settings.WALLET_RELEASE_DAYS_AFTER_SHIPPING,
             "orders": orders,

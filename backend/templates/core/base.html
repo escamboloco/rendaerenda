@@ -15,10 +15,22 @@
 
   {# --- Open Graph (nome de marca neutro, sem imagens explícitas na prévia) --- #}
   <meta property="og:site_name" content="Renda &amp; Renda">
-  <meta property="og:type" content="website">
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:url" content="{{ request.build_absolute_uri }}">
   <meta property="og:title" content="{% block og_title %}Renda &amp; Renda{% endblock %}">
   <meta property="og:description" content="{% block og_description %}Classificados +18 entre adultos verificados.{% endblock %}">
-  <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'img/og-brand.svg' %}{% endblock %}">
+  {# Prévia de link tem que ser bitmap: X/Twitter, WhatsApp e Telegram
+     descartam SVG e o card sai sem imagem. Sempre 1200x630 - a view de
+     og:image do anúncio/loja renderiza exatamente nessa medida. #}
+  <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'img/og-brand.png' %}{% endblock %}">
+  <meta property="og:image:type" content="{% block og_image_type %}image/png{% endblock %}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="{% block og_image_alt %}Renda &amp; Renda — marketplace +18 com compra protegida{% endblock %}">
+  {# X só monta o card grande com esta tag; título/descrição/imagem ele
+     lê do Open Graph acima. #}
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#0b0709">
   <meta name="csrf-token" content="{{ csrf_token }}">
 
@@ -41,7 +53,7 @@ x-data no body: o header e o drawer da sacola usam $store.cart, e o Alpine
 so processa diretivas dentro de uma arvore com x-data. Componentes
 aninhados (x-data proprio) continuam funcionando normalmente.
 {% endcomment %}
-<body x-data="{ navOpen: false }" class="bg-surface text-gray-100 font-sans min-h-screen flex flex-col {% block body_class %}{% endblock %}">
+<body x-data="{ navOpen: false }" class="bg-surface text-gray-100 font-sans min-h-screen flex flex-col {% if request.age_gate_pending %}age-gate-locked {% endif %}{% block body_class %}{% endblock %}">
 
   <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 bg-brand text-white px-3 py-2 rounded-lg text-sm">Pular para o conteúdo</a>
 
@@ -347,6 +359,10 @@ aninhados (x-data proprio) continuam funcionando normalmente.
     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
     Saída rápida
   </button>
+
+  {# Por ultimo no DOM e z-[100]: cobre header, drawer e o botao de saida
+     rapida enquanto a idade nao for confirmada. #}
+  {% if request.age_gate_pending %}{% include "core/_age_gate_overlay.html" %}{% endif %}
 
   <script>
     window.MODERATION_REPORT_URL = "{% url 'moderation_api:report_create' %}";

@@ -13,8 +13,17 @@ from .models import (
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug")
+    list_display = ("name", "slug", "has_page_text")
     prepopulated_fields = {"slug": ("name",)}
+
+    @admin.display(boolean=True, description="Texto próprio")
+    def has_page_text(self, obj):
+        """
+        Sem `description`, /categorias/<slug>/ cai num texto genérico igual
+        ao das outras — e categoria sem texto próprio não ranqueia. Esta
+        coluna é para enxergar de relance o que falta escrever.
+        """
+        return bool(obj.description)
 
 
 class ProductImageInline(admin.TabularInline):

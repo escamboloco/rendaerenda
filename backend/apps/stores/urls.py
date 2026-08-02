@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("anuncios/", views.listing, name="listing"),
     path("categorias/", views.categories_page, name="categories"),
+    path("categorias/<slug:slug>/", views.category_detail, name="category_detail"),
     path("como-funciona/", views.how_it_works, name="how_it_works"),
     path("vender/", views.sell_landing, name="sell"),
     path("ranking/", views.ranking_page, name="ranking"),

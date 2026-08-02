@@ -1,0 +1,37 @@
+{% comment %}
+Portão de idade sobre a página, no lugar do redirect que existia antes.
+
+Fundo OPACO de propósito: a exigência é não exibir conteúdo adulto antes da
+confirmação (docs/BASE_JURIDICA.md § 6). Translúcido deixaria a vitrine
+aparecer por baixo.
+{% endcomment %}
+<div class="age-gate-overlay" role="dialog" aria-modal="true" aria-labelledby="age-gate-title">
+  <div class="max-w-sm w-full text-center space-y-6">
+    <div class="flex justify-center items-center gap-2.5">
+      {% include "core/_logo.html" with with_text=True %}
+    </div>
+    <h1 id="age-gate-title" class="text-2xl font-bold">Conteúdo restrito a maiores de 18 anos</h1>
+    <p class="text-gray-400 text-sm leading-relaxed">
+      Conteúdo e produtos íntimos entre adultos. Ao entrar, você declara
+      ter 18 anos ou mais. Para <strong class="text-gray-300">vender</strong>,
+      exigimos documento com foto e selfie conferidos pela nossa equipe;
+      para <strong class="text-gray-300">comprar</strong>, o pagamento só é
+      aceito no CPF do titular do pedido.
+    </p>
+    <form method="post" action="{% url 'core:age_gate' %}" class="space-y-3">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <button type="submit" name="confirm_adult" value="yes" class="btn-primary w-full" autofocus>
+        Tenho 18 anos ou mais — entrar
+      </button>
+      <button type="submit" name="confirm_adult" value="no" class="btn-secondary w-full">
+        Sou menor de 18 anos — sair
+      </button>
+    </form>
+    <p class="text-[11px] text-gray-600">
+      <a href="{% url 'core_pages:terms' %}" class="hover:text-gray-400">Termos de Uso</a>
+      ·
+      <a href="{% url 'core_pages:privacy' %}" class="hover:text-gray-400">Privacidade</a>
+    </p>
+  </div>
+</div>

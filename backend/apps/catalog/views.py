@@ -6,6 +6,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import F
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import parsers, status
@@ -70,12 +71,22 @@ def product_detail(request, store_slug, product_slug):
     # disparar o save() do model (que recalcularia preco a toa).
     Product.objects.filter(pk=product.pk).update(views_count=F("views_count") + 1)
 
+    # Previa de link: endereco proprio e estavel (apps.core.views.og_product_image).
+    # A URL do bucket nao serve - e assinada e expira em minutos, e o robo do
+    # X/WhatsApp busca a imagem bem depois de ler o HTML.
+    og_image_url = (
+        request.build_absolute_uri(reverse("core_pages:og_product", args=[store.slug, product.slug]))
+        if product.visibility == Product.Visibility.PUBLIC
+        else ""
+    )
+
     return render(
         request,
         "catalog/product_detail.html",
         {
             "product": product,
             "store": store,
+            "og_image_url": og_image_url,
             "related_products": related_products,
             "can_buy": can_buy,
             "image_urls": image_urls,

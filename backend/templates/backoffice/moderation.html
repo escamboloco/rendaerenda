@@ -1,0 +1,77 @@
+{% extends "backoffice/_base.html" %}
+{% block title %}Moderação{% endblock %}
+
+{% block content %}
+<div class="flex items-end justify-between gap-3 mb-4 flex-wrap">
+  <div>
+    <h1 class="text-lg font-bold">Moderação de conteúdo</h1>
+    <p class="text-xs text-gray-500 mt-1">
+      Nada vai à vitrine sem passar por aqui. O que o filtro automático marcou aparece em destaque.
+    </p>
+  </div>
+  <div class="flex gap-1">
+    <a href="?" class="bo-tab {% if not decisao_atual %}bo-tab--on{% endif %}">Na fila</a>
+    {% for valor, rotulo in decisoes %}
+    <a href="?decisao={{ valor }}" class="bo-tab {% if decisao_atual == valor %}bo-tab--on{% endif %}">{{ rotulo }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="space-y-3">
+  {% for item in itens %}
+  <article class="card p-5 {% if item.automated_flags %}border-amber-900/50{% endif %}">
+    <div class="flex items-start gap-4 flex-wrap">
+      {% with capa=item.alvo.images.first %}
+      {% if capa %}
+      <a href="{{ capa.file.url }}" target="_blank" rel="noopener"
+         class="w-24 shrink-0 aspect-[4/5] rounded-xl overflow-hidden border border-surface-border bg-surface-alt">
+        <img src="{{ capa.file.url }}" alt="" class="w-full h-full object-cover">
+      </a>
+      {% endif %}
+      {% endwith %}
+
+      <div class="flex-1 min-w-[16rem]">
+        <div class="flex items-center gap-2 flex-wrap mb-1">
+          <span class="badge-neutral">{{ item.get_target_type_display }}</span>
+          {% if item.automated_flags %}
+          <span class="badge bg-amber-400/15 text-amber-300">filtro automático</span>
+          {% endif %}
+          <span class="text-[11px] text-gray-600">{{ item.created_at|date:"d/m/Y H:i" }}</span>
+        </div>
+
+        {% if item.alvo %}
+        <p class="font-semibold">{{ item.alvo.title|default:item.alvo.display_name }}</p>
+        <p class="text-xs text-gray-500 mt-0.5">
+          {% if item.alvo.store %}Loja: {{ item.alvo.store.display_name }}{% endif %}
+          {% if item.alvo.price %} · R$ {{ item.alvo.price }}{% endif %}
+        </p>
+        <p class="text-sm text-gray-400 mt-2 leading-relaxed line-clamp-3">
+          {{ item.alvo.description|default:item.alvo.bio|default:"—" }}
+        </p>
+        {% else %}
+        <p class="text-sm text-gray-500">Conteúdo removido ou inexistente ({{ item.object_id }}).</p>
+        {% endif %}
+
+        {% if item.automated_flags %}
+        <p class="text-xs text-amber-300 mt-2">Sinalizado: {{ item.automated_flags|join:", " }}</p>
+        {% endif %}
+      </div>
+
+      {% if item.decision == 'pending' or item.decision == 'auto_flagged' %}
+      <form method="post" action="{% url 'backoffice:moderation_decide' item.id %}" class="flex gap-2 shrink-0">
+        {% csrf_token %}
+        <button type="submit" name="acao" value="aprovar" class="btn-primary !py-2 !min-h-0 text-sm">Publicar</button>
+        <button type="submit" name="acao" value="rejeitar" class="btn-secondary !py-2 !min-h-0 text-sm !text-red-300">Recusar</button>
+      </form>
+      {% else %}
+      <span class="bo-status {% if item.decision == 'approved' %}bo-status--delivered{% else %}bo-status--canceled{% endif %} shrink-0">
+        {{ item.get_decision_display }}
+      </span>
+      {% endif %}
+    </div>
+  </article>
+  {% empty %}
+  <p class="card p-10 text-center text-gray-500">Nada na fila.</p>
+  {% endfor %}
+</div>
+{% endblock %}

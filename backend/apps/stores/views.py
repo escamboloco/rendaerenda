@@ -104,15 +104,16 @@ def public_store_filter(prefix: str = "") -> Q:
     return Q(**{field: Store.Status.ACTIVE}) & (Q(**{plan: True}) | Q(**{expires: now}))
 
 
-def _product_feed(request, *, default_sort="relevancia", per_page=24):
+def _product_feed(request, *, default_sort="relevancia", per_page=24, category=None):
     """
-    Feed de anúncios usado pela vitrine e pela listagem completa.
+    Feed de anúncios usado pela vitrine, pela listagem completa e pela
+    página de categoria (que passa `category` e ignora o filtro da query).
 
     A ordem padrão premia quem já vendeu (sold_count) — anúncio parado não
     ocupa o topo — e loja com impulsionamento pago entra na frente.
     """
     query = request.GET.get("q", "").strip()
-    category_slug = request.GET.get("categoria", "").strip()
+    category_slug = category.slug if category else request.GET.get("categoria", "").strip()
     kind_key = request.GET.get("tipo", "").strip()
     sort_key = request.GET.get("ordem", default_sort)
     order_by, _ = SORT_OPTIONS.get(sort_key, SORT_OPTIONS[default_sort])
@@ -158,6 +159,7 @@ def _product_feed(request, *, default_sort="relevancia", per_page=24):
         "page_obj": page,
         "products": page.object_list,
         "categories": Category.objects.order_by("name"),
+        "canonical_url": _feed_canonical(request, category_slug, query, kind_key, page),
         "active_category": category_slug,
         "active_kind": kind_key if kind_key in KIND_FILTERS else "",
         "kind_filters": KIND_FILTERS,
@@ -166,6 +168,21 @@ def _product_feed(request, *, default_sort="relevancia", per_page=24):
         "total_count": page.paginator.count,
         "query": query,
     }
+
+
+def _feed_canonical(request, category_slug, query, kind_key, page) -> str:
+    """
+    Canônica do feed.
+
+    `/anuncios/?categoria=x` e `/categorias/x/` mostram a mesma grade. Sem
+    canônica apontando para a segunda, as duas competem entre si e o Google
+    escolhe (normalmente a errada, sem texto próprio). Quando há mais de um
+    filtro na URL, cada combinação é página própria e aponta para si mesma.
+    """
+    if category_slug and not query and not kind_key and page.number == 1:
+        if Category.objects.filter(slug=category_slug).exists():
+            return request.build_absolute_uri(reverse("stores:category_detail", args=[category_slug]))
+    return request.build_absolute_uri()
 
 
 def home(request):
@@ -316,6 +333,40 @@ def categories_page(request):
         )
     ).order_by("-active_count", "name")
     return render(request, "stores/categories.html", {"categories": categories})
+
+
+def category_detail(request, slug):
+    """
+    Página própria da categoria — é o endereço de cauda longa do site.
+
+    Filtro em query string (`/anuncios/?categoria=x`) não ranqueia e não
+    entra no sitemap; esta página tem URL limpa, título, texto próprio e
+    ItemList. É por aqui que a busca orgânica chega ao catálogo.
+    """
+    category = get_object_or_404(Category, slug=slug)
+    context = _product_feed(request, per_page=24, category=category)
+    context.update(
+        {
+            "category": category,
+            "dispute_window_days": settings.DISPUTE_WINDOW_DAYS,
+            "sibling_categories": (
+                Category.objects.annotate(
+                    active_count=Count(
+                        "products",
+                        filter=Q(
+                            products__status=Product.Status.PUBLISHED,
+                            products__visibility=Product.Visibility.PUBLIC,
+                            products__stock__gt=0,
+                        ),
+                    )
+                )
+                .filter(active_count__gt=0)
+                .exclude(pk=category.pk)
+                .order_by("-active_count", "name")[:12]
+            ),
+        }
+    )
+    return render(request, "stores/category_detail.html", context)
 
 
 def sell_landing(request):
