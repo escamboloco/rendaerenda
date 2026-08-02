@@ -29,6 +29,15 @@ class StorefrontTests(ApiTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Corset preto")
         self.assertContains(response, "120,00")
+        self.assertContains(response, "Descubra")
+        self.assertContains(response, self.store.display_name)
+
+    def test_store_page_has_visual_shop_navigation(self):
+        response = self.client.get(reverse("stores:detail", args=[self.store.slug]))
+
+        self.assertContains(response, "Fotos da vitrine")
+        self.assertContains(response, 'href="#produtos"')
+        self.assertContains(response, "Compra protegida")
 
     def test_search_goes_to_the_catalog(self):
         """Busca na home redireciona: prateleira curada e resultado de busca

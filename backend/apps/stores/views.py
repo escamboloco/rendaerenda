@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import Paginator
-from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, Value, When
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -188,7 +188,26 @@ def home(request):
         {
             "featured_stores": (
                 Store.objects.filter(public_store_filter())
-                .filter(review_count__gt=0)
+                .filter(
+                    review_count__gt=0,
+                    products__status=Product.Status.PUBLISHED,
+                    products__visibility=Product.Visibility.PUBLIC,
+                    products__stock__gt=0,
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "products",
+                        queryset=Product.objects.filter(
+                            status=Product.Status.PUBLISHED,
+                            visibility=Product.Visibility.PUBLIC,
+                            stock__gt=0,
+                        )
+                        .prefetch_related("images")
+                        .order_by("-sold_count", "-created_at"),
+                        to_attr="showcase_products",
+                    )
+                )
+                .distinct()
                 .order_by("-bayesian_rating", "-sales_count")[:8]
             ),
             "top_sellers": (

@@ -147,6 +147,43 @@ aninhados (x-data proprio) continuam funcionando normalmente.
     </div>
   </header>
 
+  {% if header_stores %}
+  <aside class="store-discovery" aria-label="Descobrir lojas verificadas" x-data="carousel()">
+    <div class="container-page flex items-center gap-3">
+      <div class="store-discovery__label">
+        <span class="eyebrow">Lojas</span>
+        <strong>Descubra</strong>
+      </div>
+      <button type="button" class="carousel-btn hidden md:flex shrink-0" @click="scrollBy(-1)"
+              :disabled="!canPrev" aria-label="Lojas anteriores">‹</button>
+      <div class="store-discovery__track" x-ref="track" @scroll.passive="measure()">
+        {% for carousel_store in header_stores %}
+        {% with product=carousel_store.showcase_products.0 %}
+        {% with cover=product.images.all.0 %}
+        <a href="{% url 'stores:detail' carousel_store.slug %}" class="store-story group">
+          <span class="store-story__ring">
+            <span class="store-story__photo">
+              {% if cover %}
+              <img src="{{ cover.file.url }}" alt="" loading="lazy">
+              {% else %}
+              <span>{{ carousel_store.display_name|slice:":1" }}</span>
+              {% endif %}
+            </span>
+            <span class="store-story__verified" aria-label="Loja verificada">✓</span>
+          </span>
+          <span class="store-story__name">{{ carousel_store.display_name }}</span>
+        </a>
+        {% endwith %}
+        {% endwith %}
+        {% endfor %}
+      </div>
+      <button type="button" class="carousel-btn hidden md:flex shrink-0" @click="scrollBy(1)"
+              :disabled="!canNext" aria-label="Próximas lojas">›</button>
+      <a href="{% url 'stores:ranking' %}" class="store-discovery__all">Ver todas</a>
+    </div>
+  </aside>
+  {% endif %}
+
   {% if messages %}
   <div class="container-page pt-4 space-y-2">
     {% for message in messages %}

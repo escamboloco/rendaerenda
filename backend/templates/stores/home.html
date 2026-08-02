@@ -66,6 +66,36 @@
       </div>
     </div>
 
+    {% if header_stores %}
+    <div class="hero-shop-carousel" x-data="carousel()">
+      <div class="hero-shop-carousel__track" x-ref="track" @scroll.passive="measure()">
+        {% for hero_store in header_stores|slice:":6" %}
+        {% with product=hero_store.showcase_products.0 %}
+        {% with cover=product.images.all.0 %}
+        <a href="{% url 'stores:detail' hero_store.slug %}" class="hero-shop-slide group">
+          {% if cover %}
+          <img src="{{ cover.file.url }}" alt="Conheça a loja {{ hero_store.display_name }}" {% if not forloop.first %}loading="lazy"{% endif %}>
+          {% else %}
+          <span class="absolute inset-0 bg-gradient-brand grid place-items-center font-display text-8xl text-white/40">{{ hero_store.display_name|slice:":1" }}</span>
+          {% endif %}
+          <span class="hero-shop-slide__content">
+            <span class="badge-verified mb-2">✓ Loja verificada</span>
+            <strong>{{ hero_store.display_name }}</strong>
+            <small><span class="text-accent-gold">★</span> {{ hero_store.avg_rating }} · {{ hero_store.sales_count }} venda{{ hero_store.sales_count|pluralize }}</small>
+            <span class="hero-shop-slide__cta">Conhecer a loja <span aria-hidden="true">→</span></span>
+          </span>
+        </a>
+        {% endwith %}
+        {% endwith %}
+        {% endfor %}
+      </div>
+      <div class="hero-shop-carousel__controls">
+        <button type="button" class="carousel-btn !bg-surface/80" @click="scrollBy(-1)" :disabled="!canPrev" aria-label="Loja anterior">‹</button>
+        <div class="carousel-progress !m-0 flex-1"><div class="carousel-progress__bar" :style="'width: ' + Math.max(progress, 8) + '%'"></div></div>
+        <button type="button" class="carousel-btn !bg-surface/80" @click="scrollBy(1)" :disabled="!canNext" aria-label="Próxima loja">›</button>
+      </div>
+    </div>
+    {% else %}
     <div class="hero-orbit" aria-hidden="true">
       <div class="hero-orbit__core">
         <span class="hero-orbit__ring hero-orbit__ring--one"></span>
@@ -76,6 +106,7 @@
       <span class="absolute left-5 top-16 badge-verified shadow-lift">identidade verificada</span>
       <span class="absolute right-0 bottom-16 badge-neutral shadow-lift">embalagem neutra</span>
     </div>
+    {% endif %}
   </div>
 </section>
 
@@ -224,26 +255,51 @@ importante (a custódia) ocupar o espaço que ela merece.
 
 {# ============================================================ lojas ==== #}
 {% if featured_stores %}
-<section class="section">
+<section class="section" x-data="carousel()">
   <div class="rail-head">
     <div>
-      <h2 class="section-title">Vendedoras bem avaliadas</h2>
-      <p class="section-sub">Nota ajustada pelo volume de avaliações reais</p>
+      <span class="eyebrow">Perfis que vendem</span>
+      <h2 class="section-title mt-2">Entre nas lojas mais queridas</h2>
+      <p class="section-sub">Conheça o estilo, a reputação e os produtos de cada vendedora.</p>
     </div>
-    <a href="{% url 'stores:ranking' %}" class="rail-link">ranking →</a>
+    <div class="flex items-center gap-2">
+      <a href="{% url 'stores:ranking' %}" class="rail-link hidden sm:inline">ver ranking →</a>
+      <button type="button" class="carousel-btn hidden md:flex" @click="scrollBy(-1)" :disabled="!canPrev" aria-label="Loja anterior">‹</button>
+      <button type="button" class="carousel-btn hidden md:flex" @click="scrollBy(1)" :disabled="!canNext" aria-label="Próxima loja">›</button>
+    </div>
   </div>
-  <div class="rail">
+  <div class="rail !gap-4" x-ref="track" @scroll.passive="measure()">
     {% for store in featured_stores %}
-    <a href="{% url 'stores:detail' store.slug %}" class="card card-hover p-4 w-40 text-center">
-      <div class="w-14 h-14 rounded-full bg-accent-orchid/20 avatar-ring mx-auto flex items-center justify-center font-display text-xl text-accent-blush">
-        {{ store.display_name|slice:":1" }}
+    {% with product=store.showcase_products.0 %}
+    {% with cover=product.images.all.0 %}
+    <a href="{% url 'stores:detail' store.slug %}" class="store-photo-card group">
+      {% if cover %}
+      <img src="{{ cover.file.url }}" alt="Vitrine de {{ store.display_name }}" loading="lazy" class="store-photo-card__image">
+      {% else %}
+      <div class="store-photo-card__image bg-gradient-brand grid place-items-center font-display text-7xl text-white/70">{{ store.display_name|slice:":1" }}</div>
+      {% endif %}
+      <div class="absolute z-10 top-4 left-4 flex gap-2">
+        <span class="badge-verified backdrop-blur bg-surface/70">✓ Verificada</span>
+        {% if store.sales_count %}<span class="badge bg-surface/70 backdrop-blur text-white">{{ store.sales_count }} vendas</span>{% endif %}
       </div>
-      <p class="text-sm mt-3 truncate text-gray-100">{{ store.display_name }}</p>
-      <p class="text-[11px] text-gray-500 mt-0.5">
-        <span class="text-accent-gold">★</span> {{ store.avg_rating }} · {{ store.sales_count }} venda{{ store.sales_count|pluralize }}
-      </p>
+      <div class="store-photo-card__body">
+        <div class="flex items-center gap-2">
+          <span class="w-10 h-10 rounded-xl bg-gradient-brand border border-white/20 grid place-items-center font-display text-lg">{{ store.display_name|slice:":1" }}</span>
+          <div class="min-w-0">
+            <h3 class="font-display text-xl text-white truncate">{{ store.display_name }}</h3>
+            <p class="text-xs text-gray-400"><span class="text-accent-gold">★</span> {{ store.avg_rating }} · {{ store.review_count }} avaliações</p>
+          </div>
+        </div>
+        {% if store.bio %}<p class="text-xs text-gray-400 line-clamp-2 mt-3">{{ store.bio }}</p>{% endif %}
+        <span class="mt-4 min-h-[42px] rounded-xl bg-white text-surface font-bold text-xs flex items-center justify-center group-hover:bg-accent-blush transition">Entrar na loja</span>
+      </div>
     </a>
+    {% endwith %}
+    {% endwith %}
     {% endfor %}
+  </div>
+  <div class="carousel-progress" x-cloak x-show="canPrev || canNext">
+    <div class="carousel-progress__bar" :style="'width: ' + Math.max(progress, 6) + '%'"></div>
   </div>
 </section>
 {% endif %}

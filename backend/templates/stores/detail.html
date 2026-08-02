@@ -62,7 +62,23 @@
 {% endif %}
 
 <section class="hero-shell mb-8">
-  <div class="relative z-10 p-5 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-5">
+  <div class="store-cover" aria-label="Fotos da vitrine de {{ store.display_name }}">
+    {% for showcase_product in products|slice:":4" %}
+    {% with cover=showcase_product.images.first %}
+    <a href="{% url 'catalog:detail' store.slug showcase_product.slug %}" class="store-cover__item" aria-label="{{ showcase_product.title }}">
+      {% if cover %}
+      <img src="{{ cover.file.url }}" alt="{{ showcase_product.title }}" {% if not forloop.first %}loading="lazy"{% endif %}>
+      {% else %}
+      <span class="w-full h-full bg-gradient-brand grid place-items-center font-display text-4xl text-white/40">{{ store.display_name|slice:":1" }}</span>
+      {% endif %}
+    </a>
+    {% endwith %}
+    {% empty %}
+    <div class="store-cover__item col-span-4 bg-gradient-brand"></div>
+    {% endfor %}
+  </div>
+
+  <div class="relative z-20 mx-3 sm:mx-6 -mt-9 rounded-3xl border border-white/10 bg-surface-card/95 backdrop-blur-xl p-5 sm:p-7 flex flex-col sm:flex-row sm:items-center gap-5 shadow-float">
     <div class="relative w-20 h-20 rounded-3xl bg-gradient-brand shrink-0 flex items-center justify-center font-display text-3xl font-bold text-white shadow-glow rotate-[-3deg]">
       {{ store.display_name|slice:":1" }}
       <span class="absolute -right-1 -bottom-1 w-6 h-6 rounded-full bg-emerald-400 text-surface border-2 border-surface grid place-items-center text-xs">✓</span>
@@ -107,6 +123,12 @@
       {% include "moderation/_report_button.html" with target_type="store" object_id=store.id %}
     </div>
   </div>
+
+  <nav class="relative z-20 flex items-center gap-2 overflow-x-auto px-4 sm:px-8 py-4 border-b border-white/10" aria-label="Seções da loja">
+    <a href="#produtos" class="chip chip-active">Produtos</a>
+    <a href="#avaliacoes" class="chip">Avaliações{% if store.review_count %} ({{ store.review_count }}){% endif %}</a>
+    <a href="{% url 'stores:how_it_works' %}" class="chip">Compra protegida</a>
+  </nav>
 
   <div class="relative z-10 grid grid-cols-2 sm:grid-cols-4 border-t border-white/10">
     <div class="p-4 sm:p-5 text-center">
@@ -188,7 +210,7 @@
   {% endif %}
 </section>
 
-<div class="flex items-end justify-between gap-3 mb-4">
+<div id="produtos" class="flex items-end justify-between gap-3 mb-4 scroll-mt-44">
   <div>
     <span class="eyebrow">Disponíveis agora</span>
     <h2 class="text-2xl sm:text-3xl font-bold mt-1">Escolha sua peça</h2>
@@ -205,7 +227,7 @@
 </div>
 
 {% if reviews %}
-<section class="mt-14">
+<section id="avaliacoes" class="mt-14 scroll-mt-44">
   <h2 class="text-lg font-bold mb-4">Avaliações de quem comprou</h2>
 
   {% if rating_breakdown %}
