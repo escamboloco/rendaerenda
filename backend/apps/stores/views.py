@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from django.conf import settings
@@ -21,6 +22,8 @@ from apps.payments.services import get_payment_provider
 
 from .models import BoostPackage, Store, StoreBoost, StoreFollow, StorePlan
 from .serializers import StoreBoostPurchaseSerializer, StoreOnboardSerializer, StorePlanCheckoutSerializer
+
+logger = logging.getLogger(__name__)
 
 
 SORT_OPTIONS = {
@@ -537,18 +540,21 @@ def ranking_page(request):
 
 @login_required
 def onboard_page(request):
-    if hasattr(request.user, "store"):
+    store = Store.objects.filter(owner=request.user).first()
+    if store:
         return render(
             request,
             "stores/onboard.html",
             {
                 "already_has_store": True,
-                "store": request.user.store,
+                "store": store,
                 "commission_percent": settings.PLATFORM_COMMISSION_PERCENT,
             },
         )
 
-    seller_kyc = getattr(request.user, "seller_kyc", None)
+    from apps.accounts.models import SellerKYC
+
+    seller_kyc = SellerKYC.objects.filter(user=request.user).first()
     return render(
         request,
         "stores/onboard.html",
@@ -603,11 +609,23 @@ class StoreOnboardView(APIView):
 
         provider = get_payment_provider()
         # PF: create_seller_subaccount e no-op. PJ: cria walletId no Asaas.
-        subaccount = provider.create_seller_subaccount(
-            seller_name=payload["display_name"],
-            cpf=user.cpf,
-            email=user.email,
-        )
+        try:
+            subaccount = provider.create_seller_subaccount(
+                seller_name=payload["display_name"],
+                cpf=user.cpf,
+                email=user.email,
+            )
+        except Exception:
+            logger.exception("Falha ao criar subconta PSP para %s", user.email)
+            return Response(
+                {
+                    "detail": (
+                        "Não foi possível preparar o recebimento agora. "
+                        "Tente de novo em instantes; se continuar, fale com o suporte."
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         store = Store.objects.create(
             owner=user,
