@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 {% extends "backoffice/_base.html" %}
 {% block title %}Moderação{% endblock %}
 
@@ -75,42 +74,4 @@
   <p class="card p-10 text-center text-gray-500">Nada na fila.</p>
   {% endfor %}
 </div>
-=======
-{% extends "backoffice/base.html" %}
-{% block title %}Moderação — Gestão{% endblock %}
-{% block content %}
-<div class="top"><div><h1>Moderação</h1><div class="muted">Revisão humana obrigatória antes da publicação.</div></div></div>
-<section><h2>Fila de conteúdo ({{ queue|length }})</h2>
-  <div class="grid two">
-  {% for item in queue %}<article class="card">
-    <div><span class="badge">{{ item.get_target_type_display }}</span> <span class="{% if item.automated_flags %}danger{% endif %}">{{ item.get_decision_display }}</span></div>
-    <h3>{{ item.target.title|default:item.target.display_name|default:"Conteúdo removido" }}</h3>
-    {% if item.target.description %}<p>{{ item.target.description|truncatechars:300 }}</p>{% elif item.target.bio %}<p>{{ item.target.bio|truncatechars:300 }}</p>{% endif %}
-    {% if item.automated_flags %}<div class="danger">Sinais automáticos: {{ item.automated_flags|join:", " }}</div>{% endif %}
-    <div class="muted">Enviado {{ item.created_at|date:"d/m/Y H:i" }}</div>
-    <div class="actions" style="margin-top:12px">
-      <form method="post" action="{% url 'backoffice:moderate' item.id 'approve' %}">{% csrf_token %}<button class="btn ok-bg" type="submit">Publicar</button></form>
-      <form method="post" action="{% url 'backoffice:moderate' item.id 'reject' %}">{% csrf_token %}<button class="btn danger-bg" type="submit">Recusar</button></form>
-      {% if item.target_type == "product" %}<a class="btn" href="/admin/catalog/product/{{ item.object_id }}/change/">Detalhes</a>{% else %}<a class="btn" href="/admin/stores/store/{{ item.object_id }}/change/">Detalhes</a>{% endif %}
-    </div>
-  </article>{% empty %}<div class="card empty">Fila vazia.</div>{% endfor %}
-  </div>
-</section>
-<section class="section"><h2>Denúncias abertas ({{ reports|length }})</h2>
-  <table><thead><tr><th>Prioridade</th><th>Motivo</th><th>Alvo</th><th>Detalhes</th><th>Recebida</th><th>Ação</th></tr></thead><tbody>
-  {% for report in reports %}<tr>
-    <td>{% if report.requires_immediate_action %}<strong class="danger">IMEDIATA</strong>{% else %}<span class="warn">Normal</span>{% endif %}</td>
-    <td>{{ report.get_reason_display }}</td><td>{{ report.target|default:"Removido" }}</td><td>{{ report.details|default:"—"|truncatechars:180 }}</td><td>{{ report.created_at|date:"d/m/Y H:i" }}</td>
-    <td><form method="post" action="{% url 'backoffice:resolve_report' report.id %}">
-      {% csrf_token %}
-      {% if report.requires_immediate_action %}<input type="hidden" name="action" value="remove">{% endif %}
-      <input name="notes" maxlength="500" required placeholder="Ação tomada / justificativa">
-      <button class="btn {% if report.requires_immediate_action %}danger-bg{% endif %}" type="submit">
-        {% if report.requires_immediate_action %}Remover alvo e encerrar{% else %}Marcar tratada{% endif %}
-      </button>
-    </form></td>
-  </tr>{% empty %}<tr><td colspan="6" class="empty">Sem denúncias abertas.</td></tr>{% endfor %}
-  </tbody></table>
-</section>
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
 {% endblock %}
