@@ -40,24 +40,17 @@ PRODUCTS = [
 
 
 def _placeholder_image(label: str, accent: tuple[int, int, int]) -> bytes:
-    """Gera JPEG visível (gradiente + faixa) para a vitrine de smoke test."""
-    img = Image.new("RGB", (900, 900), (32, 28, 36))
+    """JPEG leve e rápido — evita OOM/timeout no build do Render."""
+    img = Image.new("RGB", (640, 640), (28, 24, 32))
     draw = ImageDraw.Draw(img)
-    for y in range(900):
-        mix = y / 900
-        color = (
-            int(32 + (accent[0] - 32) * mix * 0.55),
-            int(28 + (accent[1] - 28) * mix * 0.45),
-            int(36 + (accent[2] - 36) * mix * 0.5),
-        )
-        draw.line([(0, y), (900, y)], fill=color)
-    draw.rounded_rectangle([60, 60, 840, 840], radius=36, outline=accent, width=6)
-    draw.rounded_rectangle([140, 320, 760, 560], radius=24, fill=(18, 16, 22))
-    draw.text((180, 360), "SMOKE TEST", fill=(255, 255, 255))
-    draw.text((180, 420), "R$ 5,00", fill=accent)
-    draw.text((180, 480), (label or "Item teste")[:42], fill=(210, 200, 215))
+    draw.rectangle([0, 0, 640, 160], fill=accent)
+    draw.rectangle([40, 200, 600, 600], outline=accent, width=4)
+    draw.rectangle([80, 260, 560, 480], fill=(18, 16, 22))
+    draw.text((110, 290), "SMOKE TEST", fill=(255, 255, 255))
+    draw.text((110, 350), "R$ 5,00", fill=accent)
+    draw.text((110, 410), (label or "Item teste")[:36], fill=(210, 200, 215))
     buf = BytesIO()
-    img.save(buf, format="JPEG", quality=88)
+    img.save(buf, format="JPEG", quality=75, optimize=True)
     return buf.getvalue()
 
 
