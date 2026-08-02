@@ -20,10 +20,14 @@ para o público, e como conferir. O checklist **jurídico** é o da seção 7 de
 | 8 | Cron `expire-orders` rodando | Render → Cron → último run OK. Sem ele, carrinho abandonado tira peça única do ar para sempre |
 | 9 | Crons `release-deliveries` e `release-escrow` rodando | Sem eles o dinheiro fica preso na custódia e a vendedora nunca recebe |
 | 10 | `manage.py createcachetable` executado | Sem a tabela, o rate limit quebra |
-| 11 | `SEED_PAYMENT_TEST=False` depois do primeiro teste de pagamento | Senão a loja de teste com itens de R$ 5 fica pública |
+| 11 | `SEED_PAYMENT_TEST=False` (padrão no `render.yaml`) | Com False, cada deploy roda `purge_demo_and_test_data` e remove loja/produtos de smoke test e demo |
 | 12 | SuperFrete em produção (token + saldo + sandbox off) | Ver seção 8 abaixo; `manage.py check_superfrete` |
 
 ## 2. Teste de fumaça (fazer com dinheiro real, valor baixo)
+
+Antes: confirme `SEED_PAYMENT_TEST=False`. O deploy já remove a loja
+`loja-teste-pagamento` e qualquer conta `@demo.local`. Teste só com loja
+e anúncio **reais** (vendedora KYC aprovada).
 
 1. Abrir o site anônimo → confirmar age gate.
 2. Adicionar item à sacola (com um adicional, se houver) → `/finalizar/`.

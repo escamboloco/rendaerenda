@@ -76,6 +76,14 @@ class Command(BaseCommand):
                 "Em produção rode com --force. Ex.: "
                 "python manage.py seed_payment_test --force --pix-key=SEU_PIX"
             )
+        if not settings.DEBUG and options["force"]:
+            self.stdout.write(
+                self.style.WARNING(
+                    "ATENÇÃO: criando loja/produtos de smoke test em DEBUG=False. "
+                    "Desligue SEED_PAYMENT_TEST e rode purge_demo_and_test_data "
+                    "antes de abrir o site ao público."
+                )
+            )
 
         target_price = Decimal(options["price"]).quantize(Decimal("0.01"))
         if target_price < Decimal("1.00"):

@@ -2,9 +2,10 @@
 
 > ⚠️ **APENAS DESENVOLVIMENTO/DEMONSTRAÇÃO.** Estas contas são criadas
 > pelo comando `python manage.py seed_demo`, que **se recusa a rodar com
-> `DJANGO_DEBUG=False`** — elas nunca devem existir em produção. As senhas
-> abaixo são públicas de propósito (estão no código do seed); jamais
-> reutilize em ambiente real.
+> `DJANGO_DEBUG=False`**. Em produção (`SEED_PAYMENT_TEST=False`) o build
+> roda `purge_demo_and_test_data` e apaga lojas/produtos/contas de demo e
+> smoke test. As senhas abaixo são públicas de propósito; jamais reutilize
+> em ambiente real.
 
 **Senha de todas as contas:** `demo12345`
 

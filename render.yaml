@@ -134,7 +134,8 @@ envVarGroups:
         sync: false
       - key: MEDIA_ROOT
         value: "/var/data/media"
-      # Cria loja teste com 3 itens a R$ 5 em todo deploy (idempotente).
+      # False = produção limpa (build roda purge_demo_and_test_data).
+      # True só para smoke test interno — NUNCA com o site aberto ao público.
       - key: SEED_PAYMENT_TEST
         value: "False"
 
