@@ -440,7 +440,7 @@ ACCOUNT_RATE_LIMITS = {
     "login_failed": "10/5m/ip,10/5m/key",
 }
 
-# Chave Pix da loja de teste (seed_payment_test). Em producao preencha no Render.
+# Chave Pix opcional da antiga loja smoke (seed_payment_test).
 PIX_TEST_KEY = config("PIX_TEST_KEY", default="")
-# Se True no build/deploy, cria/atualiza a loja teste com 3 produtos a R$ 5.
+# Se True no build/deploy, roda seed_demo (20+ lojas / 70+ produtos / fotos).
 SEED_PAYMENT_TEST = config("SEED_PAYMENT_TEST", default=False, cast=bool)

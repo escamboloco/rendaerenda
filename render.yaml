@@ -133,9 +133,8 @@ envVarGroups:
         sync: false
       - key: MEDIA_ROOT
         value: "/var/data/media"
-      # True = garante loja/itens de smoke test (R$ 5) em todo deploy.
-      # Imagens só são geradas se o item ainda não tiver foto.
-      # Coloque False antes de abrir o site ao público amplo.
+      # True = povoa 20+ lojas / 70+ produtos com fotos públicas e CEPs distintos.
+      # Coloque False (+ purge) antes de abrir o site ao público amplo.
       - key: SEED_PAYMENT_TEST
         value: "True"
 

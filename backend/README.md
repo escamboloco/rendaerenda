@@ -144,11 +144,10 @@ Tudo idempotente: webhook repetido não credita duas vezes e
    subcontas existirem.
 6. Cada loja precisa de `pix_key` cadastrada — é para lá que vai o repasse.
 
-Smoke test: `SEED_PAYMENT_TEST=True` (ligado no `render.yaml` para testes)
-recria no deploy a loja `/loja/loja-teste-pagamento/` com 3 itens a R$ 5
-e imagens (`manage.py seed_payment_test --force --refresh-images`).
-Antes de abrir ao público amplo, mude para `False` — o build então roda
-`purge_demo_and_test_data` e limpa demo/smoke.
+Catálogo demo: `SEED_PAYMENT_TEST=True` (ligado no `render.yaml`) roda
+`seed_demo --force` no deploy — 20+ lojas, 70+ produtos, CEPs distintos e
+fotos públicas. Antes de abrir ao público amplo, mude para `False` — o
+build então roda `purge_demo_and_test_data` e limpa o demo.
 
 ## Identidade, CPF e privacidade
 
