@@ -133,10 +133,10 @@ envVarGroups:
         sync: false
       - key: MEDIA_ROOT
         value: "/var/data/media"
-      # True = povoa 20+ lojas / 70+ produtos com fotos públicas e CEPs distintos.
-      # Coloque False (+ purge) antes de abrir o site ao público amplo.
+      # Produção: nunca recriar catálogo/contas demo. O build limpa todos os
+      # registros reconhecidos como seed/smoke test antes de subir o web.
       - key: SEED_PAYMENT_TEST
-        value: "True"
+        value: "False"
 
 services:
   - type: web

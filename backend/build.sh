@@ -23,6 +23,7 @@ if [ "${SEED_PAYMENT_TEST:-}" = "True" ] || [ "${SEED_PAYMENT_TEST:-}" = "true" 
     || echo "AVISO: seed_demo falhou; deploy continua."
 else
   echo "SEED_PAYMENT_TEST desligado — removendo demo/smoke test."
-  python manage.py purge_demo_and_test_data --force \
-    || echo "AVISO: purge_demo_and_test_data falhou; deploy continua."
+  # Fail closed: produção não pode subir mantendo contas/lojas/produtos
+  # fictícios por causa de uma limpeza que falhou.
+  python manage.py purge_demo_and_test_data --force
 fi
