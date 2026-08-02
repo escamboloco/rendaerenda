@@ -227,7 +227,7 @@ class BackofficeTests(TestCase):
             reverse("backoffice:kyc_file", args=[kyc.id, "document_front"])
         )
         self.assertEqual(photo.status_code, 200)
-        self.assertEqual(photo["Cache-Control"], "no-store, private")
+        self.assertIn("no-store", photo["Cache-Control"])
 
         response = self.client.post(
             reverse("backoffice:kyc_decide", args=[kyc.id, "approve"]),

@@ -109,7 +109,9 @@ class FakeProvider:
     repasse não sai duas vezes para o mesmo pedido.
     """
 
-    def __init__(self, *, paid=False, payer_document=None, fail_charge=False, refunded=False):
+    def __init__(self, *, paid=False, payer_document=CPF_BUYER, fail_charge=False, refunded=False):
+        # CPF do comprador por padrão: com REQUIRE_PAYER_DOCUMENT=True o
+        # pagamento só confirma quando o PSP devolve o documento do pagador.
         self.paid = paid
         self.refunded = refunded
         self.payer_document = payer_document
