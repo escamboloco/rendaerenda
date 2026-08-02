@@ -76,7 +76,9 @@ def staff_login(request):
         {"form": form, "next": _safe_next(request)},
     )
     response["Cache-Control"] = "no-store, private"
-    response["Referrer-Policy"] = "no-referrer"
+    # same-origin: envia Referer no POST do formulário (exigido pelo CSRF
+    # em HTTPS). no-referrer quebrava /gestao/entrar/ com 403.
+    response["Referrer-Policy"] = "same-origin"
     return response
 
 

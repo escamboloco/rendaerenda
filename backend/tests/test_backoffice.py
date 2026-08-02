@@ -65,6 +65,13 @@ class BackofficeTests(TestCase):
             reverse("backoffice:login"),
         )
 
+    def test_login_page_keeps_referrer_for_csrf(self):
+        response = self.client.get(reverse("backoffice:login"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Referrer-Policy"], "same-origin")
+        self.assertNotContains(response, 'content="no-referrer"')
+        self.assertContains(response, "csrfmiddlewaretoken")
+
     def test_login_error_does_not_enumerate_staff_accounts(self):
         responses = []
         for email in ("missing@example.com", self.regular.email, self.staff.email):

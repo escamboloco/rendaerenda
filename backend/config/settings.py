@@ -12,7 +12,15 @@ ALLOWED_HOSTS = config("DJANGO_ALLOWED_HOSTS", default="", cast=Csv())
 # processo Django - sem isso, request.is_secure() sempre da False atras do
 # proxy, quebrando SECURE_SSL_REDIRECT (loop de redirect) e o cookie CSRF.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="https://*.onrender.com", cast=Csv())
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default=(
+        "https://rendaerenda.com.br,"
+        "https://www.rendaerenda.com.br,"
+        "https://*.onrender.com"
+    ),
+    cast=Csv(),
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",

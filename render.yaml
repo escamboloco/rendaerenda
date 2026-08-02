@@ -35,7 +35,7 @@ envVarGroups:
       - key: SITE_DOMAIN
         value: "rendaerenda.com.br"
       - key: CSRF_TRUSTED_ORIGINS
-        value: "https://rendaerenda.com.br,https://www.rendaerenda.com.br"
+        value: "https://rendaerenda.com.br,https://www.rendaerenda.com.br,https://*.onrender.com"
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT

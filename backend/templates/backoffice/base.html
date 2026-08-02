@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow,noarchive">
-  <meta name="referrer" content="no-referrer">
+  {# same-origin: POST do painel precisa enviar Referer pro CSRF no HTTPS. #}
+  <meta name="referrer" content="same-origin">
   <title>{% block title %}Gestão{% endblock %}</title>
   <style>
     :root{color-scheme:dark;--bg:#090b10;--panel:#121620;--line:#262d3a;--text:#f4f6fa;--muted:#9da7b7;--accent:#d84d79;--ok:#42c98a;--warn:#f2b84b;--danger:#ef6262}
