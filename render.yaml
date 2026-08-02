@@ -134,7 +134,8 @@ envVarGroups:
         sync: false
       - key: MEDIA_ROOT
         value: "/var/data/media"
-      # True = recria loja/itens de smoke test (R$ 5 + imagens) em todo deploy.
+      # True = garante loja/itens de smoke test (R$ 5) em todo deploy.
+      # Imagens só são geradas se o item ainda não tiver foto.
       # Coloque False antes de abrir o site ao público amplo.
       - key: SEED_PAYMENT_TEST
         value: "True"
@@ -147,7 +148,8 @@ services:
     plan: starter
     rootDir: backend
     buildCommand: "bash build.sh"
-    startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 60"
+    # 2 workers no starter: 3 costumava estourar memória e gerar 502 em /vender/.
+    startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60"
     healthCheckPath: /healthz/
     # Disco persistente pras fotos (sobrevive a redeploy). Cobra ~US$0.25/GB/mes.
     disk:

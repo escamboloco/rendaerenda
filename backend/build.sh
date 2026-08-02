@@ -11,14 +11,16 @@ pip install -r requirements.txt
 python manage.py collectstatic --noinput
 python manage.py migrate
 python manage.py createcachetable || true
-python manage.py create_admin
+# Admin/seed nunca podem derrubar o web — senão /vender/ e abrir-loja caem em 502.
+python manage.py create_admin \
+  || echo "AVISO: create_admin falhou; deploy continua."
 
 # Smoke test: loja + 3 itens R$ 5 com imagens (idempotente).
-# Nunca derruba o deploy se o seed falhar — o site precisa subir.
+# Sem --refresh-images no deploy: só gera JPEG se o produto nasceu sem foto.
 # Com SEED_PAYMENT_TEST=False, limpa demo/smoke e deixa a vitrine só com lojas reais.
 if [ "${SEED_PAYMENT_TEST:-}" = "True" ] || [ "${SEED_PAYMENT_TEST:-}" = "true" ] || [ "${SEED_PAYMENT_TEST:-}" = "1" ]; then
-  echo "SEED_PAYMENT_TEST ligado — recriando loja/itens de smoke test com imagens."
-  python manage.py seed_payment_test --force --refresh-images --pix-key="${PIX_TEST_KEY:-}" \
+  echo "SEED_PAYMENT_TEST ligado — garantindo loja/itens de smoke test."
+  python manage.py seed_payment_test --force --pix-key="${PIX_TEST_KEY:-}" \
     || echo "AVISO: seed_payment_test falhou; deploy continua."
 else
   echo "SEED_PAYMENT_TEST desligado — removendo demo/smoke test."
