@@ -1,0 +1,214 @@
+{% extends "core/base.html" %}
+{% load l10n %}
+{% block title %}Meus anúncios — Renda &amp; Renda{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold">Meus anúncios</h1>
+      <p class="text-gray-400 text-sm mt-1">
+        Corrigir preço ou estoque não tira o anúncio do ar. Mudar título ou descrição volta para moderação —
+        é conteúdo novo.
+      </p>
+    </div>
+    <a href="{% url 'catalog:create' %}" class="btn-primary !py-2 !min-h-0 text-sm shrink-0">Criar anúncio</a>
+  </div>
+
+  <div class="space-y-3">
+    {% for product in products %}
+    <div class="card p-4"
+         x-data="productRow({
+           id: '{{ product.id }}',
+           status: '{{ product.status }}',
+           statusLabel: '{{ product.get_status_display|escapejs }}',
+           title: '{{ product.title|escapejs }}',
+           description: `{{ product.description|escapejs }}`,
+           payout: {{ product.payout_amount|unlocalize }},
+           stock: {{ product.stock }},
+           commission: {{ commission_percent|floatformat:'-2' }}
+         })">
+
+      <div class="flex gap-3 items-start">
+        <div class="w-16 h-16 rounded-xl bg-white/5 overflow-hidden shrink-0">
+          {% with cover=product.images.first %}
+          {% if cover %}<img src="{{ cover.file.url }}" alt="" class="w-full h-full object-cover">{% endif %}
+          {% endwith %}
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <div class="flex items-start justify-between gap-2">
+            <a href="{% url 'catalog:detail' store.slug product.slug %}" class="text-sm font-medium hover:underline truncate">
+              {{ product.title }}
+            </a>
+            <span class="badge shrink-0
+              {% if product.status == 'published' %}badge-verified
+              {% elif product.status == 'pending' %}badge-pending
+              {% elif product.status == 'rejected' or product.status == 'removed' %}badge-boost
+              {% else %}badge-neutral{% endif %}" x-text="statusLabel"></span>
+          </div>
+          <p class="text-xs text-gray-500 mt-0.5">
+            <span x-text="'R$ ' + buyerPrice.toFixed(2)"></span> ·
+            <span x-text="stock + (stock === 1 ? ' unidade' : ' unidades')"></span> ·
+            {{ product.get_kind_display }} · {{ product.sold_count }} vendida{{ product.sold_count|pluralize }}
+          </p>
+
+          <div class="flex flex-wrap gap-2 mt-2">
+            <button type="button" class="text-xs text-brand hover:underline" @click="editing = !editing"
+                    x-text="editing ? 'Cancelar' : 'Editar'"></button>
+            <template x-if="status !== 'paused'">
+              <button type="button" class="text-xs text-gray-500 hover:text-amber-300" @click="pause()">
+                Tirar do ar
+              </button>
+            </template>
+            <template x-if="status === 'paused'">
+              <button type="button" class="text-xs text-emerald-400 hover:underline" @click="resume()">
+                Voltar ao ar
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <div x-show="editing" x-cloak class="mt-4 pt-4 border-t border-surface-border space-y-3">
+        <div>
+          <label class="input-label">Título</label>
+          <input type="text" x-model="title" maxlength="120" class="input-field">
+        </div>
+        <div>
+          <label class="input-label">Descrição</label>
+          <textarea x-model="description" rows="3" maxlength="2000" class="input-field"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="input-label">Você recebe (R$)</label>
+            <input type="number" x-model="payout" step="0.01" min="1" class="input-field">
+            <p class="input-help" x-text="'Comprador paga R$ ' + buyerPrice.toFixed(2)"></p>
+          </div>
+          <div>
+            <label class="input-label">Estoque</label>
+            <input type="number" x-model="stock" min="0" max="1000" class="input-field">
+          </div>
+        </div>
+
+        <p x-show="warning" x-text="warning" class="text-xs text-amber-300"></p>
+        <p x-show="error" x-text="error" class="input-error"></p>
+        <p x-show="saved" x-cloak class="text-xs text-emerald-400">Alterações salvas.</p>
+
+        <button type="button" class="btn-primary !py-2 !min-h-0 text-sm" @click="save()" :disabled="loading">
+          <span x-show="!loading">Salvar</span>
+          <span x-show="loading">Salvando…</span>
+        </button>
+      </div>
+    </div>
+    {% empty %}
+    <div class="card p-10 text-center space-y-3">
+      <p class="text-gray-400">Você ainda não tem anúncios.</p>
+      <a href="{% url 'catalog:create' %}" class="btn-primary">Criar o primeiro</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+function productRow(config) {
+  return {
+    id: config.id,
+    status: config.status,
+    statusLabel: config.statusLabel,
+    title: config.title,
+    description: config.description,
+    payout: config.payout,
+    stock: config.stock,
+    commission: config.commission,
+    originalTitle: config.title,
+    originalDescription: config.description,
+    editing: false,
+    loading: false,
+    saved: false,
+    error: "",
+
+    get buyerPrice() {
+      const value = parseFloat(this.payout);
+      return (isNaN(value) ? 0 : value) * (1 + this.commission / 100);
+    },
+
+    get warning() {
+      const changed =
+        this.title !== this.originalTitle || this.description !== this.originalDescription;
+      return changed
+        ? "Título ou descrição mudaram: o anúncio volta para a fila de moderação antes de reaparecer."
+        : "";
+    },
+
+    async request(url, options) {
+      const response = await fetch(url, {
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": window.getCsrfToken() },
+        ...options,
+      });
+      const data = await response.json().catch(() => ({}));
+      return { ok: response.ok, data };
+    },
+
+    async save() {
+      this.loading = true;
+      this.error = "";
+      this.saved = false;
+      try {
+        const { ok, data } = await this.request(`/api/vendedora/anuncios/${this.id}/`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            title: this.title,
+            description: this.description,
+            payout_amount: this.payout,
+            stock: this.stock,
+          }),
+        });
+        if (!ok) {
+          this.error = data.detail || Object.values(data).flat().join(" ") || "Não foi possível salvar.";
+          return;
+        }
+        this.status = data.status;
+        this.statusLabel = data.status_label;
+        this.stock = data.stock;
+        this.originalTitle = this.title;
+        this.originalDescription = this.description;
+        this.saved = true;
+      } catch (e) {
+        this.error = "Falha de conexão. Tente de novo.";
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async pause() {
+      const { ok, data } = await this.request(`/api/vendedora/anuncios/${this.id}/pausar/`, {
+        method: "POST",
+      });
+      if (ok) {
+        this.status = data.status;
+        this.statusLabel = data.status_label;
+      } else {
+        this.error = data.detail || "Não foi possível pausar.";
+      }
+    },
+
+    async resume() {
+      const { ok, data } = await this.request(`/api/vendedora/anuncios/${this.id}/publicar/`, {
+        method: "POST",
+      });
+      if (ok) {
+        this.status = data.status;
+        this.statusLabel = data.status_label;
+      } else {
+        this.error = data.detail || "Não foi possível reativar.";
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

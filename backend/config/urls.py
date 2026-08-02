@@ -2,7 +2,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.sitemaps.views import sitemap
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.static import serve
 
 import apps.accounts.urls as accounts_urls
 import apps.catalog.urls as catalog_urls
@@ -14,9 +15,9 @@ import apps.reviews.urls as reviews_urls
 import apps.stores.urls as stores_urls
 import apps.subscriptions.urls as subscriptions_urls
 import apps.wallet.urls as wallet_urls
-from apps.core.sitemaps import StaticViewSitemap, StoreSitemap
+from apps.core.sitemaps import ProductSitemap, StaticViewSitemap, StoreSitemap
 
-sitemaps = {"stores": StoreSitemap, "static": StaticViewSitemap}
+sitemaps = {"products": ProductSitemap, "stores": StoreSitemap, "static": StaticViewSitemap}
 
 api_urlpatterns = [
     path("", include((accounts_urls.urlpatterns, "accounts"))),
@@ -28,6 +29,7 @@ api_urlpatterns = [
     path("", include((offers_urls.api_urlpatterns, "offers_api"))),
     path("", include((catalog_urls.api_urlpatterns, "catalog_api"))),
     path("", include((reviews_urls.api_urlpatterns, "reviews_api"))),
+    path("", include((core_urls.api_urlpatterns, "core_api"))),
     path("", include("apps.shipping.urls")),
 ]
 
@@ -53,6 +55,12 @@ urlpatterns = [
     path("", include("apps.stores.urls")),
 ]
 
-# Mídia local (uploads) só em dev sem S3 - static() é no-op com DEBUG=False.
-if settings.DEBUG and not settings.AWS_STORAGE_BUCKET_NAME:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Midia em disco (Render disk ou pasta local). Com S3, as URLs ja apontam pro bucket.
+if not settings.USE_S3_MEDIA:
+    if settings.DEBUG:
+        urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    else:
+        # Producao no Render sem nginx: serve /media/ pelo Django (disco persistente).
+        urlpatterns += [
+            re_path(r"^media/(?P<path>.*)$", serve, {"document_root": settings.MEDIA_ROOT}),
+        ]

@@ -3,19 +3,30 @@
 
 {% block content %}
 <div x-data="walletDashboard()" class="space-y-8 max-w-3xl mx-auto">
-  <div>
-    <h1 class="text-2xl font-bold">Carteira</h1>
-    <p class="text-gray-400 text-sm">Saldo da loja {{ store.display_name }}.</p>
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold">Carteira</h1>
+      <p class="text-gray-400 text-sm">Saldo da loja {{ store.display_name }}.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="{% url 'catalog:seller_products' %}" class="btn-secondary !py-2 !min-h-0 text-sm">Meus anúncios</a>
+      <a href="{% url 'catalog:seller_questions' %}" class="btn-secondary !py-2 !min-h-0 text-sm">Perguntas</a>
+      <a href="{% url 'catalog:create' %}" class="btn-primary !py-2 !min-h-0 text-sm">Criar anúncio</a>
+    </div>
   </div>
 
   <div class="grid sm:grid-cols-2 gap-4">
     <div class="card p-5">
       <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Disponível para saque</p>
       <p class="text-3xl font-extrabold text-emerald-400">R$ {{ available_balance }}</p>
+      <p class="text-[11px] text-gray-500 mt-1">Já liberado da custódia — pode sacar quando quiser.</p>
     </div>
     <div class="card p-5">
-      <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Pendente (liberação em até {{ release_days }} dias)</p>
+      <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Em custódia</p>
       <p class="text-3xl font-extrabold text-amber-400">R$ {{ pending_balance }}</p>
+      <p class="text-[11px] text-gray-500 mt-1">
+        Vendas pagas aguardando o comprador confirmar o recebimento. Sem resposta, libera sozinho no prazo.
+      </p>
     </div>
   </div>
 
@@ -38,17 +49,35 @@
 
   <div class="card p-5">
     <h2 class="font-semibold mb-3">Pedidos da loja</h2>
-    <p class="text-xs text-gray-500 mb-3">Após postar nos Correios, registre o código de rastreio — o comprador é avisado por e-mail e a entrega antecipa a liberação do seu saldo.</p>
+    <p class="text-xs text-gray-500 mb-3">
+      Quando a etiqueta já estiver pronta, imprima, embale com caixa neutra e poste.
+      O rastreio atualiza sozinho. Se não houver etiqueta automática, registre o código manualmente.
+    </p>
     <div class="space-y-3">
       {% for order in orders %}
       <div class="card bg-surface-alt p-4 space-y-2" x-data="{ code: '', err: '' }">
         <div class="flex items-center justify-between gap-3 text-sm">
-          <span class="font-medium">#{{ order.id|slice:":8" }} · R$ {{ order.grand_total }}</span>
+          <span class="font-medium">#{{ order.short_id }} · R$ {{ order.grand_total }}</span>
           {% if order.status == 'paid' %}<span class="badge-pending">Aguardando postagem</span>
           {% elif order.status == 'shipped' %}<span class="badge-neutral">Enviado</span>
+          {% elif order.status == 'disputed' %}<span class="badge-boost">Em contestação</span>
           {% else %}<span class="badge-verified">Entregue</span>{% endif %}
         </div>
-        {% if order.status == 'paid' %}
+        {% if order.access_token %}
+        <a href="{% url 'payments_pages:guest_order' order.access_token %}"
+           class="text-xs text-brand hover:underline">Abrir pedido e conversar com o comprador</a>
+        {% endif %}
+
+        {% if order.shipment.label_url %}
+        <div class="rounded-xl border border-brand/30 bg-brand/5 px-3 py-2 space-y-1">
+          <p class="text-xs text-emerald-400 font-medium">Etiqueta pré-paga pronta</p>
+          <a href="{{ order.shipment.label_url }}" target="_blank" rel="noopener"
+             class="btn-primary !py-2 !min-h-0 text-xs inline-flex">Abrir / imprimir etiqueta</a>
+          {% if order.shipment.tracking_code %}
+          <p class="text-xs text-gray-500">Rastreio: <span class="font-mono text-gray-300">{{ order.shipment.tracking_code }}</span></p>
+          {% endif %}
+        </div>
+        {% elif order.status == 'paid' %}
         <div class="flex flex-col sm:flex-row gap-2">
           <input type="text" x-model="code" placeholder="Código de rastreio (AA123456789BR)" maxlength="13"
                  class="input-field flex-1 uppercase" style="text-transform: uppercase">
@@ -61,6 +90,7 @@
             Registrar postagem
           </button>
         </div>
+        <p class="text-[11px] text-gray-600">Sem etiqueta automática ainda? Aguarde alguns minutos ou registre o rastreio após postar.</p>
         <p x-show="err" x-text="err" class="input-error"></p>
         {% elif order.shipment.tracking_code %}
         <p class="text-xs text-gray-500">Rastreio: <span class="text-gray-300 font-mono">{{ order.shipment.tracking_code }}</span></p>

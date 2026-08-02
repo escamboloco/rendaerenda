@@ -1,0 +1,21 @@
+Olá!
+
+Você tem uma nova venda na loja {{ order.store.display_name }}.
+
+Pedido #{{ order.id|slice:":8" }}
+- Valor dos itens (seu líquido + taxa da plataforma): R$ {{ order.items_total }}
+- Embalagem neutra (repassada a você): R$ {{ order.packaging_fee }}
+- Frete da transportadora: pago na etiqueta pela plataforma
+- Seu repasse estimado (item + embalagem): R$ {{ order.seller_amount }}
+
+Entregar em:
+{{ shipping_line }}
+
+Comprador: {{ order.payer_name }}
+E-mail do comprador: {{ order.payer_email }}
+
+Se a etiqueta já estiver pronta, você recebe outro e-mail com o PDF para imprimir.
+Poste com embalagem neutra — o remetente na etiqueta é o nome discreto da plataforma.
+
+{{ site_name }}
+Este e-mail não lista o título do item por privacidade.

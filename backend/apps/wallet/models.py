@@ -36,7 +36,11 @@ class WalletEntry(models.Model):
     """
 
     class Kind(models.TextChoices):
-        SALE_CREDIT = "sale_credit", "Crédito de venda"
+        SALE_CREDIT = "sale_credit", "Crédito de venda (item)"
+        # Frete + embalagem neutra. Cai LIBERADO na hora do pagamento: e o
+        # dinheiro que a vendedora usa para comprar a caixa e postar. Segurar
+        # isso junto com o valor do item obrigaria ela a adiantar do bolso.
+        SHIPPING_CREDIT = "shipping_credit", "Crédito de frete e embalagem"
         WITHDRAWAL_DEBIT = "withdrawal_debit", "Débito de saque"
         ADJUSTMENT = "adjustment", "Ajuste"
 
@@ -52,6 +56,20 @@ class WalletEntry(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=["store", "available_at"])]
+        constraints = [
+            # Trava de dinheiro: um pedido so pode gerar UM credito de venda,
+            # mesmo com webhook duplicado do PSP + polling rodando junto.
+            models.UniqueConstraint(
+                fields=["order", "kind"],
+                condition=models.Q(kind="sale_credit"),
+                name="wallet_unique_sale_credit_per_order",
+            ),
+            models.UniqueConstraint(
+                fields=["order", "kind"],
+                condition=models.Q(kind="shipping_credit"),
+                name="wallet_unique_shipping_credit_per_order",
+            ),
+        ]
 
 
 class WithdrawalRequest(models.Model):

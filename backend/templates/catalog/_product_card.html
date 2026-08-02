@@ -1,0 +1,64 @@
+{% comment %}
+Card de produto reutilizavel (vitrine, rails, loja, relacionados).
+Espera `product` com store/images ja pre-carregados. `show_store` liga a
+linha com o nome da loja (na pagina da propria loja fica redundante).
+`compact` deixa o card estreito para uso dentro de .rail.
+{% endcomment %}
+<article class="product-card group {% if compact %}w-[11.25rem] sm:w-[13.5rem]{% endif %}"
+         x-data="buyButton('{{ product.id }}', '{{ product.store.slug }}')">
+  <a href="{% url 'catalog:detail' product.store.slug product.slug %}"
+     class="product-card__media">
+    {% with cover=product.images.first %}
+    {% if cover %}
+    <img src="{{ cover.file.url }}" alt="{{ product.title }}" loading="lazy"
+         class="w-full h-full object-cover group-hover:scale-[1.045] transition duration-700">
+    {% else %}
+    <span class="w-full h-full flex items-center justify-center text-gray-700 text-xs">sem foto</span>
+    {% endif %}
+    {% endwith %}
+
+    {# Selos: no maximo dois, senao o card vira arvore de natal. #}
+    <div class="absolute top-2 left-2 flex flex-col items-start gap-1">
+      {% if product.kind == 'digital' %}
+      <span class="badge bg-accent-orchid/20 text-accent-orchid">conteúdo digital</span>
+      {% elif product.kind == 'custom' %}
+      <span class="badge bg-accent-gold/15 text-accent-gold">sob encomenda</span>
+      {% elif product.stock == 1 %}
+      <span class="badge bg-black/60 text-accent-blush">peça única</span>
+      {% endif %}
+      {% if product.sold_count %}
+      <span class="badge bg-black/65 backdrop-blur text-gray-200">{{ product.sold_count }} vendida{{ product.sold_count|pluralize }}</span>
+      {% endif %}
+    </div>
+    <span class="product-card__quick">Ver detalhes e comprar</span>
+  </a>
+
+  <div class="product-card__body">
+    <div class="flex items-center justify-between gap-2">
+      <p class="eyebrow truncate">{{ product.category.name }}</p>
+      {% if product.stock == 1 %}<span class="text-[10px] text-amber-300 shrink-0">única</span>{% endif %}
+    </div>
+    <a href="{% url 'catalog:detail' product.store.slug product.slug %}"
+       class="text-sm leading-snug line-clamp-2 text-gray-100 hover:text-white min-h-[2.5rem]">{{ product.title }}</a>
+
+    {% if show_store %}
+    <a href="{% url 'stores:detail' product.store.slug %}"
+       class="product-card__store">
+      <svg class="w-3 h-3 text-accent-gold shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.7a1 1 0 00-1.4-1.4L9 10.2 7.7 8.9a1 1 0 10-1.4 1.4l2 2a1 1 0 001.4 0l4-4z" clip-rule="evenodd"/></svg>
+      <span class="truncate">{{ product.store.display_name }}</span>
+    </a>
+    {% endif %}
+
+    <div class="flex items-end justify-between gap-2 mt-auto pt-1">
+      <div>
+        <span class="text-[10px] text-gray-600 block">por</span>
+        <p class="price text-xl leading-none">R$ {{ product.price }}</p>
+      </div>
+      <button type="button" class="w-11 h-11 rounded-xl border border-white/10 bg-white/5 hover:bg-brand hover:border-brand text-gray-200 grid place-items-center transition"
+              @click="add()" aria-label="Adicionar {{ product.title }} à sacola">
+        <svg x-show="!added" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12l-1 13H7L6 7zm3 0a3 3 0 016 0"/></svg>
+        <span x-cloak x-show="added" class="text-emerald-300 font-bold">✓</span>
+      </button>
+    </div>
+  </div>
+</article>

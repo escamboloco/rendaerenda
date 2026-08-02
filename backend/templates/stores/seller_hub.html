@@ -1,0 +1,126 @@
+{% extends "core/base.html" %}
+{% block title %}Painel da loja — {{ store.display_name }} | Renda &amp; Renda{% endblock %}
+{% block robots %}noindex{% endblock %}
+
+{% block content %}
+<section class="hero-shell mb-6 sm:mb-8">
+  <div class="relative z-10 p-6 sm:p-9">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <span class="eyebrow">Painel da vendedora</span>
+      <h1 class="text-3xl font-bold mt-1">{{ store.display_name }}</h1>
+      <p class="text-sm text-gray-400 mt-1">Seu resumo de hoje e o próximo passo para vender mais.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      {% if store.status == 'active' %}
+      <a href="{% url 'catalog:create' %}" class="btn-primary">Anunciar peça</a>
+      <a href="{% url 'stores:detail' store.slug %}" class="btn-secondary">Ver vitrine pública</a>
+      {% else %}
+      <span class="badge-pending">Loja em moderação</span>
+      {% endif %}
+    </div>
+  </div>
+  </div>
+</section>
+
+{% if store.status != 'active' %}
+<section class="mb-6 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-4 sm:p-5 flex gap-3">
+  <span class="w-9 h-9 rounded-xl bg-amber-400/10 text-amber-300 grid place-items-center shrink-0">⌛</span>
+  <div>
+    <p class="font-semibold text-amber-100">Sua loja está em análise</p>
+    <p class="text-xs text-gray-400 mt-1">Você será avisada quando a vitrine for aprovada. Depois disso, o botão para criar o primeiro anúncio será liberado.</p>
+  </div>
+</section>
+{% endif %}
+
+{% if open_questions or open_customs or pending %}
+<section class="mb-6 rounded-2xl border border-brand/25 bg-brand/[0.06] p-4 sm:p-5">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div>
+      <p class="eyebrow">Prioridade agora</p>
+      <p class="font-semibold mt-1">
+        {% if open_questions %}Você tem {{ open_questions }} pergunta{{ open_questions|pluralize }} esperando resposta.
+        {% elif open_customs %}Você tem {{ open_customs }} pedido{{ open_customs|pluralize }} sob medida para analisar.
+        {% else %}{{ pending }} anúncio{{ pending|pluralize }} aguardando moderação.{% endif %}
+      </p>
+      <p class="text-xs text-gray-500 mt-1">Responder rápido reduz dúvidas e aumenta a chance de venda.</p>
+    </div>
+    {% if open_questions %}<a href="{% url 'catalog:seller_questions' %}" class="btn-primary shrink-0">Responder agora</a>
+    {% elif open_customs %}<a href="{% url 'offers:my_requests' %}" class="btn-primary shrink-0">Ver pedidos</a>
+    {% else %}<a href="{% url 'catalog:seller_products' %}" class="btn-secondary shrink-0">Acompanhar</a>{% endif %}
+  </div>
+</section>
+{% endif %}
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-2xl">{{ published }}</p>
+    <p class="stat-label">à venda</p>
+  </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-2xl">{{ pending }}</p>
+    <p class="stat-label">em moderação</p>
+  </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-2xl">{{ active_orders }}</p>
+    <p class="stat-label">pedidos ativos</p>
+  </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-2xl">{{ follower_count }}</p>
+    <p class="stat-label">seguidores</p>
+  </div>
+</div>
+
+<section class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-10">
+  <a href="{% url 'catalog:seller_products' %}" class="card card-hover p-5 space-y-2">
+    <span class="trust-icon">▦</span>
+    <p class="font-semibold">Anúncios e estoque</p>
+    <p class="text-xs text-gray-500">Editar, pausar e acompanhar moderação</p>
+  </a>
+  <a href="{% url 'catalog:seller_questions' %}" class="card card-hover p-5 space-y-2 {% if open_questions %}border-brand/40{% endif %}">
+    <span class="trust-icon">?</span>
+    <p class="font-semibold">Perguntas {% if open_questions %}<span class="text-brand">({{ open_questions }})</span>{% endif %}</p>
+    <p class="text-xs text-gray-500">Responda rápido — aumenta conversão</p>
+  </a>
+  <a href="{% url 'offers:my_requests' %}" class="card card-hover p-5 space-y-2 {% if open_customs %}border-brand/40{% endif %}">
+    <span class="trust-icon">◇</span>
+    <p class="font-semibold">Pedidos sob medida {% if open_customs %}<span class="text-brand">({{ open_customs }})</span>{% endif %}</p>
+    <p class="text-xs text-gray-500">Aceitar, recusar ou contra-propor</p>
+  </a>
+  <a href="{% url 'wallet:dashboard' %}" class="card card-hover p-5 space-y-2">
+    <span class="trust-icon">R$</span>
+    <p class="font-semibold">Carteira e envios</p>
+    <p class="text-xs text-gray-500">Saldo, rastreio e saques</p>
+  </a>
+  <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="card card-hover p-5 space-y-2">
+    <span class="trust-icon">✓</span>
+    <p class="font-semibold">Verificação KYC</p>
+    <p class="text-xs text-gray-500">Documento e selfie — gera o selo Verificada</p>
+  </a>
+  <div class="card p-5 space-y-2">
+    <span class="trust-icon">%</span>
+    <p class="font-semibold">Comissão da plataforma</p>
+    <p class="text-xs text-gray-500">{{ commission_percent }}% sobre o item (você recebe o líquido que pediu)</p>
+  </div>
+</section>
+
+<section>
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-lg font-bold">Pedidos recentes</h2>
+    <a href="{% url 'wallet:dashboard' %}" class="text-xs text-brand hover:underline">abrir carteira →</a>
+  </div>
+  <div class="space-y-2">
+    {% for order in recent_orders %}
+    <a href="{% url 'payments_pages:guest_order' order.access_token %}" class="card card-hover px-4 py-3 flex items-center justify-between gap-3 text-sm">
+      <div class="min-w-0">
+        <p class="font-medium truncate">Pedido {{ order.id|truncatechars:10 }}</p>
+        <p class="text-xs text-gray-500">{{ order.get_status_display }} · {{ order.created_at|date:"d/m/Y H:i" }}</p>
+      </div>
+      <p class="font-bold text-brand shrink-0">R$ {{ order.items_total }}</p>
+    </a>
+    {% empty %}
+    <p class="text-sm text-gray-500 py-8 text-center">Ainda sem pedidos. Anuncie a primeira peça para começar.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

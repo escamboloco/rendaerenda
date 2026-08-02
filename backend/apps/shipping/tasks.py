@@ -17,89 +17,154 @@ logger = logging.getLogger(__name__)
 def send_shipment_posted_email(shipment_id: str):
     """Avisa o comprador que o item foi postado, com o codigo de rastreio."""
     shipment = Shipment.objects.select_related("order__buyer").get(id=shipment_id)
-    send_mail(
-        subject=f"Seu pedido #{str(shipment.order_id)[:8]} foi postado",
-        message=render_to_string(
-            "emails/shipment_posted.txt",
-            {"shipment": shipment, "order": shipment.order, "site_name": settings.SITE_NAME},
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[shipment.order.buyer.email],
-    )
+    recipient = shipment.order.payer_email
+    if not recipient:
+        logger.warning("Pedido %s sem e-mail do comprador — e-mail de postagem pulado.", shipment.order_id)
+        return
+    try:
+        send_mail(
+            subject=f"Seu pedido #{str(shipment.order_id)[:8]} foi postado",
+            message=render_to_string(
+                "emails/shipment_posted.txt",
+                {"shipment": shipment, "order": shipment.order, "site_name": settings.SITE_NAME},
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[recipient],
+        )
+    except Exception:
+        logger.exception("Falha ao enviar e-mail de postagem do pedido %s", shipment.order_id)
 
 
 @shared_task(bind=True, max_retries=5, default_retry_delay=120)
 def buy_label_for_order(self, order_id: str):
     """
-    Fluxo automatizado da etiqueta (docs/checkout.md): assim que o
-    pagamento confirma, a PLATAFORMA compra a etiqueta no Melhor Envio
-    com o frete que o comprador ja pagou, e a vendedora recebe por
-    e-mail o PDF pronto pra imprimir e colar + o ponto de coleta mais
-    proximo. Ela nao paga nada nem digita codigo de rastreio.
+    Assim que o pagamento confirma, a plataforma compra a etiqueta no
+    SuperFrete com o frete pago pelo comprador. Remetente = nome neutro
+    da plataforma; CEP de origem = da vendedora.
     """
     from apps.payments.models import Order
 
-    from . import melhor_envio
+    from . import superfrete
+    from .services import platform_buys_shipping_label, shipping_sender
 
-    order = Order.objects.select_related("store__owner", "buyer", "shipment").get(id=order_id)
-    shipment = order.shipment
-    if shipment.label_url:
-        return  # idempotente - webhook do PSP pode repetir
-
-    if not shipment.service.startswith("me-"):
-        # Modo Correios direto: sem compra automatica de etiqueta - a
-        # vendedora posta e registra o rastreio manualmente no painel.
+    if not platform_buys_shipping_label():
         return
 
-    first_item = order.items.select_related("product").first()
-    product = first_item.product
+    order = Order.objects.select_related("store__owner", "buyer", "shipment").get(id=order_id)
+    if not hasattr(order, "shipment"):
+        return
+    shipment = order.shipment
+    if shipment.label_url:
+        return
+
+    if not shipment.service.startswith("sf-"):
+        # Cotação flat / Correios direto: sem compra automática.
+        logger.info(
+            "Pedido %s sem serviço SuperFrete (%s) — etiqueta manual.",
+            order_id,
+            shipment.service,
+        )
+        return
+
+    physical_items = [
+        item
+        for item in order.items.select_related("product").all()
+        if item.product.requires_shipping
+    ]
+    if not physical_items:
+        return
+
+    weight = sum(item.product.weight_grams * item.quantity for item in physical_items)
+    length = max(item.product.length_cm for item in physical_items)
+    width = max(item.product.width_cm for item in physical_items)
+    height = sum(item.product.height_cm * item.quantity for item in physical_items)
 
     try:
-        bought = melhor_envio.buy_label(
-            service_id=int(shipment.service.removeprefix("me-")),
-            origin_cep=order.store.origin_cep or settings.CORREIOS_ORIGIN_CEP,
-            destination_cep=order.shipping_address.get("cep", ""),
-            seller_name=order.store.owner.get_full_name() or order.store.owner.username,
-            seller_document=order.store.owner.cpf,
-            buyer_name=order.buyer.get_full_name() or order.buyer.username,
-            buyer_document=order.buyer.cpf,
-            shipping_address=order.shipping_address,
-            weight_grams=product.weight_grams,
-            length_cm=product.length_cm,
-            width_cm=product.width_cm,
-            height_cm=product.height_cm,
-            declared_value=order.items_total,
-            order_reference=str(order.id),
-        )
-    except melhor_envio.MelhorEnvioError as exc:
+        if shipment.provider_order_id:
+            if shipment.shipping_provider != "superfrete":
+                logger.warning(
+                    "Pedido %s possui etiqueta de outro integrador; compra SuperFrete ignorada.",
+                    order_id,
+                )
+                return
+            provider_order_id = shipment.provider_order_id
+        else:
+            address = order.shipping_address or {}
+            provider_order_id = superfrete.create_label(
+                service_id=int(shipment.service.removeprefix("sf-")),
+                sender=shipping_sender(order.store),
+                recipient={
+                    "name": order.payer_name,
+                    "document": order.payer_cpf,
+                    "email": order.payer_email,
+                    "postal_code": address.get("cep", ""),
+                    "address": address.get("street", ""),
+                    "number": address.get("number", ""),
+                    "complement": address.get("complement", ""),
+                    "district": address.get("neighborhood", ""),
+                    "city": address.get("city", ""),
+                    "state_abbr": address.get("state", ""),
+                },
+                # Declaração neutra, mas verdadeira, sem expor o título íntimo.
+                products=[
+                    {
+                        "name": "Peça de vestuário usada",
+                        "quantity": item.quantity,
+                        "unitary_value": item.unit_price,
+                    }
+                    for item in physical_items
+                ],
+                weight_grams=weight,
+                length_cm=length,
+                width_cm=width,
+                height_cm=height,
+                declared_value=order.items_total,
+                order_reference=str(order.id),
+            )
+            shipment.provider_order_id = provider_order_id
+            shipment.shipping_provider = "superfrete"
+            shipment.save(update_fields=["provider_order_id", "shipping_provider"])
+
+        bought = superfrete.finalize_label(provider_order_id)
+    except superfrete.SuperFreteConfigurationError as exc:
+        logger.warning("Etiqueta do pedido %s não configurada: %s", order_id, exc)
+        return
+    except superfrete.SuperFreteError as exc:
         logger.warning("Falha ao comprar etiqueta do pedido %s: %s", order_id, exc)
         raise self.retry(exc=exc)
 
-    shipment.melhor_envio_order_id = bought.order_id
+    shipment.provider_order_id = bought.order_id
+    shipment.shipping_provider = "superfrete"
     shipment.label_url = bought.label_url
     if bought.tracking_code:
         shipment.tracking_code = bought.tracking_code
-    shipment.save(update_fields=["melhor_envio_order_id", "label_url", "tracking_code"])
-
-    # Ponto de coleta mais proximo da vendedora, incluido no e-mail.
-    nearest = None
-    try:
-        points = melhor_envio.find_dropoff_points(
-            cep=order.store.origin_cep or settings.CORREIOS_ORIGIN_CEP
-        )
-        nearest = points[0] if points else None
-    except melhor_envio.MelhorEnvioError:
-        pass
-
-    send_mail(
-        subject=f"Etiqueta pronta — pedido #{str(order.id)[:8]}",
-        message=render_to_string(
-            "emails/label_ready.txt",
-            {"order": order, "shipment": shipment, "nearest": nearest, "site_name": settings.SITE_NAME},
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[order.store.owner.email],
+    shipment.save(
+        update_fields=[
+            "provider_order_id",
+            "shipping_provider",
+            "label_url",
+            "tracking_code",
+        ]
     )
+
+    seller_email = order.store.owner.email
+    if seller_email:
+        try:
+            send_mail(
+                subject=f"Etiqueta pronta — pedido #{str(order.id)[:8]}",
+                message=render_to_string(
+                    "emails/label_ready.txt",
+                    {
+                        "order": order,
+                        "shipment": shipment,
+                        "site_name": settings.SITE_NAME,
+                    },
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[seller_email],
+            )
+        except Exception:
+            logger.exception("Falha ao enviar e-mail de etiqueta do pedido %s", order_id)
 
 
 @shared_task
@@ -110,30 +175,37 @@ def poll_active_shipments():
     )
     for shipment in active:
         try:
-            if shipment.melhor_envio_order_id:
-                _sync_melhor_envio_status(shipment)
+            if (
+                shipment.shipping_provider == "superfrete"
+                and shipment.provider_order_id
+            ):
+                _sync_superfrete_status(shipment)
             elif shipment.tracking_code:
                 track_shipment(shipment)
         except Exception:
             logger.exception("Falha ao rastrear envio %s", shipment.id)
 
 
-def _sync_melhor_envio_status(shipment: Shipment):
-    from . import melhor_envio
+def _sync_superfrete_status(shipment: Shipment):
+    from . import superfrete
 
-    data = melhor_envio.track(shipment.melhor_envio_order_id)
-    me_status = data.get("status", "")
+    data = superfrete.track(shipment.provider_order_id)
+    provider_status = data.get("status", "")
     tracking = data.get("tracking") or shipment.tracking_code
 
     was_awaiting = shipment.status == Shipment.Status.AWAITING_POSTING
-    if me_status == "posted" and shipment.status == Shipment.Status.AWAITING_POSTING:
+    if provider_status == "posted" and shipment.status == Shipment.Status.AWAITING_POSTING:
         shipment.status = Shipment.Status.POSTED
         shipment.posted_at = timezone.now()
-    elif me_status == "delivered":
+    elif provider_status in {"in_transit", "in-transit"}:
+        shipment.status = Shipment.Status.IN_TRANSIT
+    elif provider_status == "delivered":
         mark_delivered(shipment)
+    elif provider_status in {"cancelled", "canceled"}:
+        shipment.status = Shipment.Status.RETURNED
 
     shipment.tracking_code = tracking
-    shipment.last_tracking_event = me_status
+    shipment.last_tracking_event = provider_status
     shipment.last_tracking_check_at = timezone.now()
     shipment.save()
 
@@ -148,27 +220,28 @@ def _sync_melhor_envio_status(shipment: Shipment):
 @shared_task
 def release_confirmed_deliveries():
     """
-    Roda de hora em hora (celery beat). Libera o saldo da vendedora
-    quando: o comprador confirmou o recebimento, OU a janela de
-    contestacao (DELIVERY_CONFIRMATION_WINDOW_HOURS, 24h por padrao)
-    passou desde a entrega sem contestacao. docs/checkout.md.
+    Libera o saldo da vendedora quando o comprador confirma ou a janela
+    de contestacao passa sem disputa.
     """
-    from apps.wallet.services import release_sale
+    from apps.wallet.services import release_and_payout
 
     window = timedelta(hours=settings.DELIVERY_CONFIRMATION_WINDOW_HOURS)
     cutoff = timezone.now() - window
 
-    to_release = Shipment.objects.filter(
-        status=Shipment.Status.DELIVERED,
-        buyer_disputed_at__isnull=True,
-        order__wallet_entries__available_at__gt=timezone.now(),
-    ).filter(
-        models_q_confirmed_or_expired(cutoff)
-    ).select_related("order").distinct()
+    to_release = (
+        Shipment.objects.filter(
+            status=Shipment.Status.DELIVERED,
+            buyer_disputed_at__isnull=True,
+            order__wallet_entries__available_at__gt=timezone.now(),
+        )
+        .filter(models_q_confirmed_or_expired(cutoff))
+        .select_related("order")
+        .distinct()
+    )
 
     for shipment in to_release:
-        release_sale(shipment.order)
-        logger.info("Saldo liberado para o pedido %s", shipment.order_id)
+        if release_and_payout(shipment.order):
+            logger.info("Custodia liberada e repasse disparado para o pedido %s", shipment.order_id)
 
 
 def models_q_confirmed_or_expired(cutoff):

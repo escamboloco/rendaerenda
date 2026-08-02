@@ -20,32 +20,60 @@ class AgeVerificationError(Exception):
     pass
 
 
+def is_configured() -> bool:
+    """True quando existe provider contratado (URL + chave)."""
+    return bool(
+        (getattr(settings, "AGE_KYC_API_URL", "") or "").strip()
+        and (getattr(settings, "AGE_KYC_API_KEY", "") or "").strip()
+    )
+
+
 def request_age_verification(user: User, selfie_video_ref: str, cpf: str, birth_date) -> AgeVerification:
     """
     Dispara a verificacao no provider externo. Retorna o registro em
     status PENDING - a aprovacao chega via webhook (ver views.age_verification_webhook).
+
+    A URL vem de AGE_KYC_API_URL: cada bureau (idwall, unico, CAF, Serpro)
+    tem endpoint e formato proprios, entao o endereco nunca e adivinhado a
+    partir do nome do provider. Sem contrato configurado, levanta erro em
+    vez de bater num host inexistente.
     """
+    if not is_configured():
+        raise AgeVerificationError(
+            "Verificação de idade indisponível: o provider de biometria ainda não está configurado."
+        )
+
     verification, _ = AgeVerification.objects.get_or_create(
         user=user,
         defaults={"provider": settings.AGE_KYC_PROVIDER},
     )
 
-    response = requests.post(
-        f"https://api.{settings.AGE_KYC_PROVIDER}.com/v1/liveness-checks",
-        headers={"Authorization": f"Bearer {settings.AGE_KYC_API_KEY}"},
-        json={
-            "external_id": str(user.id),
-            "cpf": cpf,
-            "birth_date": birth_date.isoformat(),
-            "selfie_video_ref": selfie_video_ref,
-        },
-        timeout=15,
-    )
-    if response.status_code >= 400:
-        raise AgeVerificationError(f"Falha ao iniciar verificacao: {response.status_code}")
+    try:
+        response = requests.post(
+            settings.AGE_KYC_API_URL,
+            headers={"Authorization": f"Bearer {settings.AGE_KYC_API_KEY}"},
+            json={
+                "external_id": str(user.id),
+                "cpf": cpf,
+                "birth_date": birth_date.isoformat(),
+                "selfie_video_ref": selfie_video_ref,
+            },
+            timeout=(5, 20),
+        )
+    except requests.RequestException as exc:
+        raise AgeVerificationError("Não foi possível falar com o serviço de verificação.") from exc
 
-    payload = response.json()
-    verification.provider_reference_id = payload["reference_id"]
+    if response.status_code >= 400:
+        # Nunca logar o corpo: pode conter CPF e dado biometrico.
+        raise AgeVerificationError(f"Falha ao iniciar verificacao: HTTP {response.status_code}")
+
+    try:
+        payload = response.json()
+        reference_id = payload["reference_id"]
+    except (ValueError, KeyError) as exc:
+        raise AgeVerificationError("Resposta inesperada do serviço de verificação.") from exc
+
+    verification.provider_reference_id = reference_id
     verification.save(update_fields=["provider_reference_id"])
     return verification
 

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BoostPackage, Store, StoreBoost, StorePlan
+from .models import BoostPackage, Store, StoreBoost, StoreFollow, StorePlan
 
 
 @admin.register(StorePlan)
@@ -24,3 +24,9 @@ class BoostPackageAdmin(admin.ModelAdmin):
 class StoreBoostAdmin(admin.ModelAdmin):
     list_display = ("store", "package", "starts_at", "ends_at", "paid")
     list_filter = ("paid",)
+
+
+@admin.register(StoreFollow)
+class StoreFollowAdmin(admin.ModelAdmin):
+    list_display = ("store", "user", "created_at")
+    search_fields = ("store__display_name", "user__username")

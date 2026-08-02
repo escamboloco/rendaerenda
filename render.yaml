@@ -1,33 +1,25 @@
 # Blueprint de deploy no Render (https://render.com/docs/blueprint-spec).
 #
-# MODO TESTE - CUSTO ZERO: so o servico "web", no plano free (`plan: free`).
-# Sem Redis (cache/rate-limit usam o proprio Postgres) e sem worker Celery
-# 24/7 (tasks assincronas do checkout rodam sincronas no mesmo processo
-# do gunicorn via CELERY_TASK_ALWAYS_EAGER - ver config/settings.py). Os
-# Render Cron Jobs das tarefas periodicas (rastreio de envio + liberacao
-# de saldo) foram REMOVIDOS deste blueprint por enquanto - mesmo custando
-# centavos, o pedido foi custo zero enquanto o site ainda e so teste. Pra
-# reativar antes de ir ao ar: ver os dois blocos `type: cron` no historico
-# do git (commit "Corrigir CSP do Alpine.js e reduzir custo de hospedagem")
-# e o management command correspondente em apps/shipping/management/.
+# PRODUCAO — rendaerenda.com.br (modelo intermediario simples)
+# Sobe: Postgres + Web + 2 Cron Jobs.
 #
-# O plano free do Render: dorme apos ~15 min sem trafego (primeiro acesso
-# depois disso demora uns 30-50s pra acordar) e tem 512MB RAM/CPU
-# compartilhada - inaceitavel pra checkout de verdade com webhook de
-# pagamento, mas ok pra testar o site. Antes de abrir pro publico, trocar
-# `plan: free` por `plan: starter` no servico web e reativar os cron jobs.
+# Variaveis sync:false = essenciais: Asaas + SuperFrete + e-mail.
+# Fotos ficam no disco persistente do web (/var/data) — sem AWS.
 #
-# Depois do primeiro deploy, va no dashboard do servico "web" e preencha as
-# variaveis marcadas com `sync: false` abaixo (segredos - nunca comitar no
-# repo). Ver docs/BASE_JURIDICA.md para o que cada uma controla.
-#
-# IMPORTANTE sobre envVarGroups: o grupo abaixo (rendaerenda-shared) so pode
-# conter valores LITERAIS ou `generateValue: true` - o Render nao aceita
-# `sync: false`, `fromDatabase` nem `fromService` dentro de um grupo (e
-# YAML nao tem como "espalhar" uma lista dentro da outra via ancora, entao
-# nao da pra fatorar isso com &anchor/*alias). Por isso os segredos (API
-# keys, tokens, credenciais) aparecem repetidos em CADA servico que precisa
-# deles, em vez de ficarem so no grupo.
+# Como usar:
+#   1. Push deste arquivo.
+#   2. Render → New → Blueprint → Apply.
+#   3. Preencha as poucas chaves pedidas (ou deixe em branco e complete depois).
+#   4. Hostinger DNS: A @ → 216.24.57.1 ; CNAME www → rendaerenda-web.onrender.com
+
+databases:
+  - name: rendaerenda-db
+    plan: basic-256mb
+    region: oregon
+    postgresMajorVersion: "16"
+    databaseName: rendaerenda
+    user: rendaerenda
+    ipAllowList: []
 
 envVarGroups:
   - name: rendaerenda-shared
@@ -37,112 +29,117 @@ envVarGroups:
       - key: DJANGO_DEBUG
         value: "False"
       - key: DJANGO_ALLOWED_HOSTS
-        value: ".onrender.com"
+        value: "rendaerenda.com.br,www.rendaerenda.com.br,.onrender.com"
       - key: SITE_NAME
         value: "Renda & Renda"
+      - key: SITE_DOMAIN
+        value: "rendaerenda.com.br"
       - key: CSRF_TRUSTED_ORIGINS
-        value: "https://*.onrender.com" # trocar pelo dominio custom quando configurar um
-      # Gerado UMA vez e compartilhado identico entre web e os cron jobs -
-      # por isso fica no grupo (generateValue e permitido aqui, sync:false nao).
+        value: "https://rendaerenda.com.br,https://www.rendaerenda.com.br"
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: PLATFORM_COMMISSION_PERCENT
-        value: "30"
-      - key: WALLET_RELEASE_DAYS_AFTER_SHIPPING
+        value: "15"
+      - key: PACKAGING_FEE
+        value: "0"
+      - key: CHECKOUT_FREE_SHIPPING
+        value: "False"
+      # Tempo que o pedido segura o estoque esperando o Pix (min).
+      - key: ORDER_PAYMENT_TTL_MINUTES
+        value: "60"
+      # Validade da cobranca Pix no Asaas (dias). 0 faria o QR morrer a meia-noite.
+      - key: PIX_DUE_DAYS
         value: "3"
+      # Pix pago por CPF diferente do titular do pedido: estorno automatico
+      # (trava de idade). Deixe True enquanto a verificacao biometrica nao
+      # estiver ligada.
+      - key: REFUND_ON_PAYER_CPF_MISMATCH
+        value: "True"
+      # --- Custodia: o dinheiro fica com a plataforma ate a entrega ---
+      - key: ESCROW_ENABLED
+        value: "True"
+      # Repasse imediato so existe com ESCROW_ENABLED=False.
+      - key: AUTO_PAYOUT_ON_PAYMENT
+        value: "False"
+      - key: AUTO_PAYOUT_ON_RELEASE
+        value: "True"
+      # Prazo do comprador para contestar depois de receber (dias).
+      - key: DISPUTE_WINDOW_DAYS
+        value: "7"
+      # Conteudo digital nao tem entrega para rastrear: libera por prazo (h).
+      - key: DIGITAL_RELEASE_HOURS
+        value: "24"
+      # Teto de retencao — o valor nunca fica preso para sempre (dias).
+      - key: ESCROW_MAX_HOLD_DAYS
+        value: "30"
+      - key: REQUIRE_SELLER_KYC
+        value: "False"
+      - key: WALLET_RELEASE_DAYS_AFTER_SHIPPING
+        value: "0"
       - key: DELIVERY_CONFIRMATION_WINDOW_HOURS
         value: "24"
-      - key: PACKAGING_FEE
-        value: "3.90"
       - key: SHIPPING_PROVIDER
-        value: "melhor_envio"
-      - key: MELHOR_ENVIO_SANDBOX
+        value: "superfrete"
+      - key: SUPERFRETE_SANDBOX
         value: "False"
+      - key: SUPERFRETE_SERVICES
+        value: "1,2,17,3"
+      - key: SUPERFRETE_USER_AGENT
+        value: "Renda & Renda/1.0 (suporte@rendaerenda.com.br)"
       - key: PAYMENT_PROVIDER
         value: "asaas"
       - key: ASAAS_API_URL
         value: "https://api.asaas.com/v3"
-      - key: AGE_KYC_PROVIDER
-        value: "idwall"
-      - key: NFSE_PROVIDER_URL
-        value: "https://api.focusnfe.com.br/v2/nfse"
-      - key: AWS_S3_SIGNED_URL_EXPIRE_SECONDS
-        value: "300"
-      - key: EMAIL_BACKEND
-        value: "django.core.mail.backends.smtp.EmailBackend"
+      # pf = sem split (repasse Pix); trocar para "pj" quando tiver CNPJ + subcontas
+      - key: ASAAS_ACCOUNT_TYPE
+        value: "pf"
+      # EMAIL_BACKEND: omitido — settings escolhe SMTP só se EMAIL_HOST+USER
+      # estiverem preenchidos; senao console (evita 500 no cadastro).
       - key: EMAIL_PORT
         value: "587"
       - key: EMAIL_USE_TLS
         value: "True"
       - key: DEFAULT_FROM_EMAIL
         value: "Renda & Renda <no-reply@rendaerenda.com.br>"
-
-# Sem bloco `databases:` de proposito: usamos um Postgres premium que ja
-# existe em producao (fora deste blueprint), em vez de deixar o Render
-# provisionar um banco novo pelo blueprint (que ficaria preso no plano
-# `starter`, indisponivel na conta). DATABASE_URL e preenchido manualmente
-# em cada servico abaixo (ver nota no `sync: false` correspondente) - cole
-# a "Internal Database URL" do banco existente (mais rapido/sem custo de
-# bandwidth do que a "External Database URL", já que web/cron rodam
-# dentro do proprio Render).
+      # Caixa que recebe alerta de contestacao — sem isso ninguem e avisado.
+      - key: MODERATION_ALERT_EMAIL
+        sync: false
+      - key: MEDIA_ROOT
+        value: "/var/data/media"
+      # Cria loja teste com 3 itens a R$ 5 em todo deploy (idempotente).
+      - key: SEED_PAYMENT_TEST
+        value: "True"
 
 services:
   - type: web
     name: rendaerenda-web
     runtime: python
     region: oregon
-    plan: free
+    plan: starter
     rootDir: backend
     buildCommand: "bash build.sh"
     startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 60"
     healthCheckPath: /healthz/
+    # Disco persistente pras fotos (sobrevive a redeploy). Cobra ~US$0.25/GB/mes.
+    disk:
+      name: rendaerenda-media
+      mountPath: /var/data
+      sizeGB: 5
+    domains:
+      - rendaerenda.com.br
+      - www.rendaerenda.com.br
     envVars:
       - fromGroup: rendaerenda-shared
       - key: DATABASE_URL
-        sync: false
-      - key: SITE_DOMAIN
-        sync: false
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      # --- Essenciais ---
       - key: ASAAS_API_KEY
         sync: false
       - key: ASAAS_WEBHOOK_TOKEN
         sync: false
-      - key: AGE_KYC_API_KEY
-        sync: false
-      - key: PHONE_CPF_BUREAU_URL
-        sync: false
-      - key: PHONE_CPF_BUREAU_API_KEY
-        sync: false
-      - key: SMS_PROVIDER_URL
-        sync: false
-      - key: SMS_PROVIDER_API_KEY
-        sync: false
-      - key: NFSE_PROVIDER_API_KEY
-        sync: false
-      - key: PLATFORM_LEGAL_NAME
-        sync: false
-      - key: PLATFORM_CNPJ
-        sync: false
-      - key: PLATFORM_MUNICIPAL_SERVICE_CODE
-        sync: false
-      - key: MELHOR_ENVIO_TOKEN
-        sync: false
-      - key: CORREIOS_CWS_USER
-        sync: false
-      - key: CORREIOS_CWS_PASSWORD
-        sync: false
-      - key: CORREIOS_CONTRACT_NUMBER
-        sync: false
-      - key: CORREIOS_CARD_NUMBER
-        sync: false
-      - key: CORREIOS_ORIGIN_CEP
-        sync: false
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_STORAGE_BUCKET_NAME
-        sync: false
-      - key: AWS_S3_ENDPOINT_URL
+      - key: SUPERFRETE_TOKEN
         sync: false
       - key: EMAIL_HOST
         sync: false
@@ -150,10 +147,105 @@ services:
         sync: false
       - key: EMAIL_HOST_PASSWORD
         sync: false
+      # Pix da loja teste (CPF/e-mail/telefone/EVP). Sem isso o checkout bloqueia.
+      - key: PIX_TEST_KEY
+        sync: false
 
-# Cron Jobs (rastreio de envio + liberacao de saldo) removidos deste
-# blueprint em modo teste pra custo ficar $0. Antes de ir ao ar, adicionar
-# de volta 2 servicos `type: cron` chamando `python manage.py poll_shipments`
-# (schedule "0 * * * *") e `python manage.py release_deliveries` (schedule
-# "*/30 * * * *") - ver commit "Corrigir CSP do Alpine.js e reduzir custo
-# de hospedagem no Render" no historico do git pro YAML completo.
+  - type: cron
+    name: rendaerenda-poll-shipments
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "0 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py poll_shipments"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: SUPERFRETE_TOKEN
+        sync: false
+
+  # Confere no Asaas os Pix pendentes (rede de seguranca caso o webhook
+  # falhe) e devolve para a vitrine o estoque de pedido nao pago.
+  - type: cron
+    name: rendaerenda-expire-orders
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "*/10 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py expire_orders"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: ASAAS_API_KEY
+        sync: false
+
+  - type: cron
+    name: rendaerenda-release-deliveries
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "*/30 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py release_deliveries"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: ASAAS_API_KEY
+        sync: false
+
+  # Repassa por Pix o que ja saiu da custodia (conteudo digital e casos
+  # em que o repasse falhou na hora da liberacao).
+  - type: cron
+    name: rendaerenda-release-escrow
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "*/30 * * * *"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py release_escrow"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: ASAAS_API_KEY
+        sync: false
+
+  # Digest semanal de novidades (segundas 14:00 UTC ≈ 11:00 BRT).
+  - type: cron
+    name: rendaerenda-marketing-digest
+    runtime: python
+    region: oregon
+    plan: starter
+    rootDir: backend
+    schedule: "0 14 * * 1"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python manage.py send_marketing_digest --days=7"
+    envVars:
+      - fromGroup: rendaerenda-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rendaerenda-db
+          property: connectionString
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false

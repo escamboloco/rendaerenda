@@ -1,0 +1,17 @@
+{% autoescape off %}Uma contestação foi aberta no pedido #{{ order.short_id }}.
+
+Valor: R$ {{ order.grand_total }}
+Aberta em: {{ opened_at|date:"d/m/Y H:i" }}
+
+O valor desta venda continua retido — nada é repassado até a análise
+terminar. Nossa equipe entra em contato pelo e-mail cadastrado.
+
+{% if is_seller %}Se você já enviou o item, responda a este e-mail com o
+comprovante de postagem e o código de rastreio.
+{% else %}Acompanhe pelo link do pedido:
+{{ order_url }}
+{% endif %}
+Por privacidade, não citamos o conteúdo do pedido neste e-mail.
+
+{{ site_name }}
+{% endautoescape %}

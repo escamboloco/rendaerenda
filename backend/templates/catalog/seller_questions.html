@@ -1,0 +1,102 @@
+{% extends "core/base.html" %}
+{% block title %}Perguntas dos compradores — Renda &amp; Renda{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold">Perguntas dos compradores</h1>
+    <p class="text-gray-400 text-sm mt-1">
+      A resposta fica pública no anúncio. Responder rápido é o que costuma destravar a compra de
+      quem está em dúvida.
+    </p>
+  </div>
+
+  <section class="space-y-3">
+    <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">
+      Sem resposta <span class="text-gray-600">({{ pending|length }})</span>
+    </h2>
+
+    {% for item in pending %}
+    <div class="card p-4 space-y-3" x-data="answerForm('{{ item.id }}')">
+      <a href="{% url 'catalog:detail' store.slug item.product.slug %}"
+         class="text-xs text-gray-500 hover:text-gray-300">{{ item.product.title }}</a>
+      <p class="text-sm text-gray-200">{{ item.question }}</p>
+      <p class="text-[11px] text-gray-600">{{ item.created_at|date:"d/m/Y H:i" }}</p>
+
+      <template x-if="sent">
+        <p class="text-sm text-emerald-400">Resposta publicada no anúncio.</p>
+      </template>
+      <template x-if="!sent">
+        <form @submit.prevent="submit()" class="space-y-2">
+          <textarea x-model="text" rows="2" maxlength="600" class="input-field"
+                    placeholder="Responda sobre o item. Sem contatos externos."></textarea>
+          <p x-show="error" x-text="error" class="input-error"></p>
+          <button type="submit" class="btn-primary !py-2 !min-h-0 text-sm" :disabled="loading">
+            <span x-show="!loading">Responder</span>
+            <span x-show="loading">Enviando…</span>
+          </button>
+        </form>
+      </template>
+    </div>
+    {% empty %}
+    <p class="card p-5 text-sm text-gray-500">Nenhuma pergunta esperando resposta.</p>
+    {% endfor %}
+  </section>
+
+  {% if answered %}
+  <section class="space-y-3">
+    <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Já respondidas</h2>
+    {% for item in answered %}
+    <div class="card p-4 space-y-2">
+      <a href="{% url 'catalog:detail' store.slug item.product.slug %}"
+         class="text-xs text-gray-500 hover:text-gray-300">{{ item.product.title }}</a>
+      <p class="text-sm text-gray-200">{{ item.question }}</p>
+      <div class="border-l-2 border-brand/40 pl-3">
+        <p class="text-sm text-gray-400">{{ item.answer }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_body %}
+<script>
+function answerForm(questionId) {
+  return {
+    text: "",
+    loading: false,
+    sent: false,
+    error: "",
+    async submit() {
+      this.error = "";
+      if (this.text.trim().length < 2) {
+        this.error = "Escreva a resposta.";
+        return;
+      }
+      this.loading = true;
+      try {
+        const response = await fetch(`/api/anuncios/perguntas/${questionId}/responder/`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": window.getCsrfToken() },
+          body: JSON.stringify({ answer: this.text }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          this.error = data.detail || "Não foi possível publicar a resposta.";
+          return;
+        }
+        this.sent = true;
+      } catch (e) {
+        this.error = "Falha de conexão. Tente de novo.";
+      } finally {
+        this.loading = false;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

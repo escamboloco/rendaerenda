@@ -33,6 +33,8 @@ class SellerKYCSerializer(serializers.ModelSerializer):
             defaults={
                 **validated_data,
                 "status": SellerKYC.Status.PENDING,
+                "submitted_at": timezone.now(),
+                "rejection_reason": "",
                 "majority_and_image_consent_term_signed_at": timezone.now(),
             },
         )

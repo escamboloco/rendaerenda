@@ -11,7 +11,12 @@ from apps.payments.models import Order
 
 from .models import Shipment
 from .serializers import FreightOptionSerializer, FreightQuoteRequestSerializer, MarkPostedSerializer
-from .services import calculate_freight_options, save_quote
+from .services import (
+    calculate_freight_options,
+    products_are_payment_test,
+    save_quote,
+    test_free_freight_option,
+)
 from .tasks import send_shipment_posted_email
 
 
@@ -41,25 +46,41 @@ class FreightQuoteView(APIView):
         origin_cep = products[0].store.origin_cep
         declared_value = sum(p.price for p in products)
 
-        options = calculate_freight_options(
-            destination_cep=destination_cep,
-            weight_grams=total_weight,
-            length_cm=max((p.length_cm for p in products), default=16),
-            width_cm=max((p.width_cm for p in products), default=11),
-            height_cm=sum(p.height_cm for p in products),
-            origin_cep=origin_cep,
-            declared_value=declared_value,
-        )
-        for option in options:
-            save_quote(destination_cep, total_weight, option)
+        from .packaging import neutral_box_for
 
-        packaging = float(settings.PACKAGING_FEE)
+        length = max((p.length_cm for p in products), default=16)
+        width = max((p.width_cm for p in products), default=11)
+        height = sum(p.height_cm for p in products)
+
+        if products_are_payment_test(products):
+            options = [test_free_freight_option()]
+            packaging = 0.0
+        else:
+            options = calculate_freight_options(
+                destination_cep=destination_cep,
+                weight_grams=total_weight,
+                length_cm=length,
+                width_cm=width,
+                height_cm=height,
+                origin_cep=origin_cep,
+                declared_value=declared_value,
+            )
+            box = neutral_box_for(
+                weight_grams=total_weight,
+                length_cm=length,
+                width_cm=width,
+                height_cm=height,
+            )
+            packaging = float(box.price + settings.PACKAGING_FEE)
+        for option in options:
+            save_quote(destination_cep, total_weight, option, origin_cep=origin_cep or "")
+
         return Response(
             FreightOptionSerializer(
                 [
                     {
                         "service": o.service,
-                        "label": o.label,
+                        "label": f"{o.label} + embalagem neutra" if packaging else o.label,
                         "price": round(o.price + packaging, 2),
                         "deadline_days": o.deadline_days,
                         "company": o.company,
@@ -147,38 +168,3 @@ class DeliveryConfirmationView(APIView):
             order.save(update_fields=["status"])
             return Response({"status": "disputed"})
         return Response({"detail": "Ação inválida (use confirm ou dispute)."}, status=http_status.HTTP_400_BAD_REQUEST)
-
-
-class DropoffPointsView(APIView):
-    """GET /api/vendedora/pontos-coleta/ — pontos de postagem mais próximos do CEP da loja."""
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        from django.conf import settings
-
-        from . import melhor_envio
-
-        store = getattr(request.user, "store", None)
-        if not store:
-            raise PermissionDenied("Usuário não possui loja.")
-        cep = store.origin_cep or settings.CORREIOS_ORIGIN_CEP
-        if not cep:
-            return Response({"detail": "Cadastre o CEP de postagem da sua loja."}, status=http_status.HTTP_400_BAD_REQUEST)
-
-        try:
-            points = melhor_envio.find_dropoff_points(cep=cep)
-        except melhor_envio.MelhorEnvioError:
-            return Response({"detail": "Não foi possível buscar os pontos agora."}, status=http_status.HTTP_502_BAD_GATEWAY)
-
-        return Response([
-            {
-                "name": p.get("name", ""),
-                "company": (p.get("company") or {}).get("name", ""),
-                "address": (p.get("address") or {}).get("address", ""),
-                "number": (p.get("address") or {}).get("number", ""),
-                "city": (p.get("address") or {}).get("city", ""),
-                "state": (p.get("address") or {}).get("state_abbr", ""),
-            }
-            for p in points[:5]
-        ])

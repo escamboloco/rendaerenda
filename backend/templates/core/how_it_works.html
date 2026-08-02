@@ -1,0 +1,122 @@
+{% extends "core/base.html" %}
+{% block title %}Como funciona a compra protegida — Renda &amp; Renda{% endblock %}
+{% block description %}Seu Pix fica retido na plataforma e só chega à vendedora depois que você confirma o recebimento. Entenda prazos, disputa e reembolso.{% endblock %}
+{% block robots %}index, follow{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+
+{% block content %}
+<section class="max-w-2xl mb-10">
+  <span class="badge-verified">Compra protegida</span>
+  <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight mt-3">
+    Seu dinheiro fica parado até o pedido chegar
+  </h1>
+  <p class="text-gray-400 mt-3 leading-relaxed">
+    Comprar por rede social é pagar e torcer. Aqui o Pix não vai para a mão de ninguém: ele fica retido
+    com a plataforma e só é liberado quando você confirma que recebeu — ou quando o prazo de
+    {{ dispute_window_days }} dias passa sem você reclamar.
+  </p>
+</section>
+
+<div class="grid md:grid-cols-4 gap-4 mb-14">
+  {% for step in "1234" %}{% endfor %}
+  <div class="card p-5 space-y-2">
+    <span class="w-8 h-8 rounded-full bg-brand/15 text-brand font-bold flex items-center justify-center text-sm">1</span>
+    <p class="font-semibold text-sm">Você escolhe e paga por Pix</p>
+    <p class="text-xs text-gray-500 leading-relaxed">Sem cadastro obrigatório. O QR aparece na hora e o pedido confirma sozinho quando o Pix cai.</p>
+  </div>
+  <div class="card p-5 space-y-2">
+    <span class="w-8 h-8 rounded-full bg-brand/15 text-brand font-bold flex items-center justify-center text-sm">2</span>
+    <p class="font-semibold text-sm">A plataforma segura o valor</p>
+    <p class="text-xs text-gray-500 leading-relaxed">A vendedora vê a venda e o saldo aparece como retido na carteira dela — mas ela ainda não pode sacar.</p>
+  </div>
+  <div class="card p-5 space-y-2">
+    <span class="w-8 h-8 rounded-full bg-brand/15 text-brand font-bold flex items-center justify-center text-sm">3</span>
+    <p class="font-semibold text-sm">Você recebe e confere</p>
+    <p class="text-xs text-gray-500 leading-relaxed">Item físico vai com rastreio e embalagem neutra. Conteúdo digital é liberado na página do pedido.</p>
+  </div>
+  <div class="card p-5 space-y-2">
+    <span class="w-8 h-8 rounded-full bg-emerald-400/15 text-emerald-400 font-bold flex items-center justify-center text-sm">4</span>
+    <p class="font-semibold text-sm">Você libera o pagamento</p>
+    <p class="text-xs text-gray-500 leading-relaxed">Confirmou? A vendedora recebe por Pix na hora. Não confirmou nem reclamou? Libera sozinho no prazo.</p>
+  </div>
+</div>
+
+<section class="grid md:grid-cols-2 gap-6 mb-14">
+  <div class="card p-6 space-y-3">
+    <h2 class="font-bold">Se algo sair errado</h2>
+    <p class="text-sm text-gray-400 leading-relaxed">
+      Não chegou, chegou diferente do anunciado ou veio danificado? Abra a contestação na página do pedido
+      em até {{ dispute_window_days }} dias após a entrega. O valor fica travado enquanto a moderação analisa
+      — a vendedora não recebe nada até o caso ser resolvido.
+    </p>
+    <ul class="text-sm text-gray-400 space-y-2 pt-1">
+      <li class="flex gap-2"><span class="text-emerald-400">✓</span> Reembolso volta pela mesma chave Pix que pagou</li>
+      <li class="flex gap-2"><span class="text-emerald-400">✓</span> Análise feita por pessoas, não por robô</li>
+      <li class="flex gap-2"><span class="text-emerald-400">✓</span> Sem rastreio de postagem, o dinheiro volta</li>
+    </ul>
+  </div>
+
+  <div class="card p-6 space-y-3">
+    <h2 class="font-bold">Privacidade de verdade</h2>
+    <ul class="text-sm text-gray-400 space-y-2">
+      <li class="flex gap-2"><span class="text-emerald-400">✓</span> <span><strong class="text-gray-200">Extrato neutro.</strong> A cobrança aparece com um nome genérico, sem citar o site nem o produto.</span></li>
+      <li class="flex gap-2"><span class="text-emerald-400">✓</span> <span><strong class="text-gray-200">Pacote sem identificação.</strong> Nada por fora indica o conteúdo ou a origem.</span></li>
+      <li class="flex gap-2"><span class="text-emerald-400">✓</span> <span><strong class="text-gray-200">Dados mínimos.</strong> A vendedora vê só o endereço de entrega; seu CPF fica com a plataforma.</span></li>
+      <li class="flex gap-2"><span class="text-emerald-400">✓</span> <span><strong class="text-gray-200">Zero rastreador.</strong> Nenhum script de terceiro roda no seu navegador aqui.</span></li>
+    </ul>
+  </div>
+</section>
+
+<section class="max-w-3xl">
+  <h2 class="text-xl font-bold mb-4">Perguntas frequentes</h2>
+  <div class="space-y-3">
+    <details class="card p-5 group">
+      <summary class="font-medium cursor-pointer list-none flex justify-between gap-3">
+        Quando exatamente a vendedora recebe?
+        <span class="text-gray-500 group-open:rotate-180 transition">⌄</span>
+      </summary>
+      <p class="text-sm text-gray-400 mt-3 leading-relaxed">
+        No momento em que você confirma o recebimento na página do pedido. Se você não fizer nada, a liberação
+        automática acontece {{ release_hours }} horas depois da entrega registrada. Conteúdo digital libera
+        {{ digital_hours }} horas após o pagamento, já que não existe entrega para rastrear.
+      </p>
+    </details>
+    <details class="card p-5 group">
+      <summary class="font-medium cursor-pointer list-none flex justify-between gap-3">
+        Preciso criar conta para comprar?
+        <span class="text-gray-500 group-open:rotate-180 transition">⌄</span>
+      </summary>
+      <p class="text-sm text-gray-400 mt-3 leading-relaxed">
+        Não. Você informa nome, e-mail, CPF e data de nascimento no checkout — o CPF é exigido porque a venda
+        é restrita a maiores de 18 anos e o Pix precisa sair do mesmo titular. O acompanhamento do pedido vai
+        por um link privado no seu e-mail.
+      </p>
+    </details>
+    <details class="card p-5 group">
+      <summary class="font-medium cursor-pointer list-none flex justify-between gap-3">
+        Posso pagar com o Pix de outra pessoa?
+        <span class="text-gray-500 group-open:rotate-180 transition">⌄</span>
+      </summary>
+      <p class="text-sm text-gray-400 mt-3 leading-relaxed">
+        Não. Pix vindo de um CPF diferente do informado na compra é estornado automaticamente e o item volta
+        para a vitrine. É assim que garantimos que quem compra é um adulto identificado.
+      </p>
+    </details>
+    <details class="card p-5 group">
+      <summary class="font-medium cursor-pointer list-none flex justify-between gap-3">
+        Quem são as vendedoras?
+        <span class="text-gray-500 group-open:rotate-180 transition">⌄</span>
+      </summary>
+      <p class="text-sm text-gray-400 mt-3 leading-relaxed">
+        Pessoas físicas maiores de 18 anos com identidade conferida antes de anunciar. Cada anúncio passa por
+        moderação e cada loja tem reputação pública, formada só por avaliações de quem realmente comprou.
+      </p>
+    </details>
+  </div>
+
+  <div class="card p-6 mt-6 flex flex-wrap items-center justify-between gap-4">
+    <p class="text-sm text-gray-300">Pronto para começar com proteção?</p>
+    <a href="{% url 'stores:listing' %}" class="btn-primary">Ver anúncios</a>
+  </div>
+</section>
+{% endblock %}

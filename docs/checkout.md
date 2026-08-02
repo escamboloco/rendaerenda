@@ -1,5 +1,16 @@
 # Checkout, pagamento, frete e liberação — Renda & Renda
 
+> **Atualização (jul/2026): o modelo mudou para pagamento em custódia.**
+> A seção 1 abaixo descreve o modelo anterior (repasse Pix imediato na
+> confirmação do pagamento). Hoje o valor fica retido com a plataforma e
+> só é repassado quando o comprador confirma o recebimento — ou quando o
+> prazo vence sem contestação. A comissão padrão passou de 20% para 15%,
+> e o catálogo aceita conteúdo digital e adicionais pagos.
+> A referência atual do fluxo é `backend/README.md`
+> (seções "Modelo de negócio" e "Fluxo de uma compra") e o checklist
+> operacional é `docs/PRODUCAO.md`. O resto deste documento (pesquisa de
+> PSP, logística e fiscal) continua valendo.
+
 > Documento técnico + pesquisa. Consolida as decisões do novo modelo de
 > negócio e o passo a passo de integração. Como todo o resto do projeto,
 > **nada entra em produção sem o aval jurídico** de `docs/BASE_JURIDICA.md`
@@ -12,31 +23,28 @@
 
 | Antes | Agora |
 |---|---|
-| Comprador pagava assinatura mensal para poder comprar | **Sem assinatura.** Navegar, ver fotos e comprar são gratuitos — só se paga o pedido no ato |
-| Vendedora pagava plano mensal para manter a loja | **Anunciar é grátis.** `Store.plan` é opcional (null = plano gratuito) |
-| Comissão calculada como % "para dentro" do preço | Vendedora declara **quanto quer receber** (`Product.payout_amount`); o site soma 30% **por cima**, e o comprador paga o total |
-| Frete repassado à vendedora | Frete + embalagem ficam com a plataforma, que **compra a etiqueta automaticamente** e entrega pronta pra vendedora colar |
-| Saldo liberado N dias após o envio | Comprador confirma o recebimento (libera na hora) **ou** libera automático 24h após a entrega |
+| Comprador precisava de conta + telefone | **Compra guest** — nome, e-mail, CPF, nascimento (+18), endereço e pagamento |
+| Frete repassado à vendedora | **Etiqueta pré-paga** pela plataforma (SuperFrete); embalagem neutra creditada à vendedora |
+| Comissão 30% | **~20%** por cima do payout; transportadora fica com a plataforma para a etiqueta |
+| Saque manual / retido | **Custódia do item** + Pix da embalagem na confirmação; item libera na entrega |
 
-Como a plataforma ganha: **só a comissão de 30% sobre cada venda** (mais o que sobrar do frete acima do custo real da etiqueta). Sem receita recorrente.
-
-### Exemplo de cálculo (implementado em `apps/catalog/models.py`)
+### Exemplo de cálculo
 
 ```
 Vendedora quer receber:  R$ 100,00   (payout_amount)
-Comissão da plataforma:  R$  30,00   (30% por cima)
+Comissão da plataforma:  R$  20,00   (20% por cima)
 ─────────────────────────────────
-Preço exibido/pago:      R$ 130,00   (price)   ← Product.save() calcula
-+ Frete (ex. PAC):       R$  18,50   (cotado do CEP da vendedora)
-+ Embalagem:             R$   3,90   (PACKAGING_FEE, embutida no frete)
+Preço do anúncio:        R$ 120,00   (price)
++ Frete transportadora:  R$  18,00   ← compra a etiqueta (plataforma)
++ Embalagem neutra:      R$   4,50   ← creditada à vendedora
 ─────────────────────────────────
-Comprador paga:          R$ 152,40
-Vendedora recebe:        R$ 100,00 (líquido, na carteira)
-Plataforma fica com:     R$  30,00 + sobra do frete
+Comprador paga:          R$ 142,50
+Vendedora recebe:        R$ 104,50   (100 + embalagem; item em custódia)
+Etiqueta:                já paga — PDF no e-mail / carteira
 ```
 
-A tela de anúncio (`templates/catalog/product_create.html`) mostra esse
-cálculo **ao vivo** enquanto a vendedora digita o valor.
+O site **não vende nada** — só conecta comprador e vendedora (Termos de Uso).
+
 
 ---
 
@@ -104,31 +112,25 @@ Fontes: [gov.br — documentação técnica](https://www.gov.br/fazenda/pt-br/as
 
 ---
 
-## 3. Logística — recomendação: Melhor Envio
+## 3. Logística — SuperFrete
 
-### Por que Melhor Envio
-Pesquisa (jul/2026) — a **Kangu encerrou** a intermediação de fretes em
-jan/2025, então saiu da mesa. O **Melhor Envio** virou o hub mais completo e
-faz tudo que o pedido exige, com **API gratuita**:
+### Integração adotada
+A SuperFrete oferece cotação, emissão e rastreio por API para sites próprios:
 
-- **Cotação simultânea** Correios + transportadoras privadas (Jadlog, Loggi,
-  Buslog…) numa chamada só — `POST /api/v2/me/shipment/calculate`.
-- **+14.000 pontos de postagem/coleta** parceiros, incluindo **Loggi Ponto**
-  e agências Jadlog — é o "sistema de pontos tipo Shopee/Mercado Livre" que
-  você pediu. Endpoint de agências devolve o ponto mais próximo do CEP.
-- **Compra de etiqueta via API** (carrinho → checkout → generate → print),
-  em **PDF/ZPL** — é o "papel pronto pra colar na encomenda".
-- **Rastreio unificado** independente da transportadora.
-- **Logística reversa/devolução** suportada (`reverse: true`).
-- **Sandbox** com saldo fake de R$ 10.000 para testar tudo.
+- **Cotação simultânea** de PAC, SEDEX, Mini Envios e Jadlog em
+  `POST /api/v0/calculator`; Loggi é habilitada nas configurações do token.
+- **Etiqueta pré-paga** criada em `POST /api/v0/cart` e paga com o saldo da
+  conta em `POST /api/v1/orders/finalize`.
+- **PDF e rastreio** consultados em `GET /api/v0/order/info/{id}`.
+- **Sandbox separado de produção**; o token e o saldo também são separados.
 
-Implementado em `apps/shipping/melhor_envio.py` e plugado via
-`SHIPPING_PROVIDER=melhor_envio` (o provider Correios/CWS continua como
-alternativa).
+Implementado em `apps/shipping/superfrete.py` e plugado via
+`SHIPPING_PROVIDER=superfrete` (Correios/CWS continua como alternativa).
 
-Fontes: [Melhor Envio — API](https://docs.melhorenvio.com.br/reference/introducao-api-melhor-envio) ·
-[Fim da Kangu](https://melhorenvio.com.br/blog/ecommerce-e-marketplace/fim-da-kangu-o-que-aconteceu/) ·
-[Loggi Ponto](https://melhorenvio.com.br/blog/frete-e-logistica/loggi-ponto/)
+Fontes oficiais, consultadas em 02/08/2026:
+[primeiros passos](https://superfrete.readme.io/reference/primeiros-passos) ·
+[cotação](https://superfrete.readme.io/reference/calculator) ·
+[etiquetas](https://superfrete.readme.io/reference/etiquetas).
 
 ### Fluxo automatizado da etiqueta (já implementado)
 1. Comprador escolhe o frete no checkout (cotado do **CEP da vendedora**).
@@ -136,13 +138,19 @@ Fontes: [Melhor Envio — API](https://docs.melhorenvio.com.br/reference/introdu
 2. Pagamento confirma → webhook do PSP dispara
    `apps.shipping.tasks.buy_label_for_order` (Celery task, roda síncrona no
    mesmo processo — sem worker dedicado, ver seção de deploy do `README.md`).
-3. A **plataforma compra a etiqueta** no Melhor Envio com o frete que o
+3. A **plataforma compra a etiqueta** na SuperFrete com o frete que o
    comprador pagou. A vendedora **não paga nada**.
-4. Vendedora recebe e-mail (`emails/label_ready.txt`) com: link do PDF da
-   etiqueta + **ponto de coleta mais próximo** dela.
+4. Vendedora recebe e-mail (`emails/label_ready.txt`) com o link do PDF e
+   posta no ponto compatível com a transportadora indicada na etiqueta.
 5. Rastreio sincroniza sozinho (`poll_active_shipments`, Render Cron Job de
    hora em hora — `manage.py poll_shipments`) e o comprador acompanha cada
    etapa em `/compras/`.
+
+A SuperFrete exige endereço completo de retorno. Novas lojas informam rua,
+número, bairro, cidade e UF no onboarding; esses campos são privados. Lojas
+criadas antes da migration `stores.0007` precisam completar o endereço no
+admin antes da primeira etiqueta. A etiqueta usa o nome/documento neutro da
+plataforma e o endereço operacional de postagem da vendedora.
 
 ---
 
@@ -211,8 +219,8 @@ Fontes: [Clicksign](https://www.clicksign.com/) ·
 ### Pré-requisitos (contas e contratos)
 - [ ] Conta **Asaas** aprovada **por escrito** para o nicho (vestuário íntimo
       usado entre PF). Ativar Split + Subcontas + **Conta Escrow**.
-- [ ] Conta **Melhor Envio** (sandbox para dev, produção depois). Gerar o
-      **token OAuth2**.
+- [ ] Conta **SuperFrete** (sandbox para dev, produção depois), token de API
+      e saldo suficiente para finalizar etiquetas.
 - [ ] Provider de **KYC/idade** (idwall, unico, CAF) — CPF+biometria.
 - [ ] Bureau **telefone×CPF** (Serpro Datavalid, idwall) + provider de **SMS**
       (Zenvia, Twilio, AWS SNS).
@@ -224,9 +232,10 @@ Fontes: [Clicksign](https://www.clicksign.com/) ·
 ```
 PAYMENT_PROVIDER=asaas
 ASAAS_API_KEY=...            ASAAS_WEBHOOK_TOKEN=...
-SHIPPING_PROVIDER=melhor_envio
-MELHOR_ENVIO_TOKEN=...       MELHOR_ENVIO_SANDBOX=True
-PLATFORM_COMMISSION_PERCENT=30
+SHIPPING_PROVIDER=superfrete
+SUPERFRETE_TOKEN=...         SUPERFRETE_SANDBOX=True
+SUPERFRETE_SERVICES=1,2,17,3
+PLATFORM_COMMISSION_PERCENT=20
 PACKAGING_FEE=3.90
 DELIVERY_CONFIRMATION_WINDOW_HOURS=24
 PHONE_CPF_BUREAU_URL=...     PHONE_CPF_BUREAU_API_KEY=...
@@ -252,9 +261,8 @@ python manage.py runserver
   `PAYMENT_REFUNDED`, `PAYMENT_CHARGEBACK_REQUESTED`.
 - **KYC** → `POST https://SEU_DOMINIO/webhooks/kyc/` (header
   `X-Kyc-Webhook-Token` = `AGE_KYC_API_KEY`).
-- **Melhor Envio**: o rastreio é puxado por polling (`poll_active_shipments`);
-  se quiser push, configurar o webhook de tracking do ME apontando pra um
-  endpoint novo (não obrigatório para o MVP).
+- **SuperFrete**: o rastreio é puxado por polling (`poll_active_shipments`);
+  webhook não é necessário para o MVP.
 
 ### O que já está pronto no código
 - Modelo de comissão (`Product.payout_amount` → `price`), sem paywall.
@@ -269,7 +277,7 @@ python manage.py runserver
 - SDK do provider de KYC/biometria na página de verificação de idade.
 - Chamada real do bureau telefone×CPF e do provider de SMS.
 - Webhook/SDK do provider de assinatura eletrônica do termo.
-- Credenciais reais do Asaas, Melhor Envio e Focus NFe (hoje rodam em modo
+- Credenciais reais do Asaas, SuperFrete e Focus NFe (hoje rodam em modo
   dev/sandbox, que **falha fechado** em produção sem credencial).
 
 ---

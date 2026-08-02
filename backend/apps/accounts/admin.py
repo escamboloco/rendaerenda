@@ -27,11 +27,41 @@ class AgeVerificationAdmin(admin.ModelAdmin):
 
 @admin.register(SellerKYC)
 class SellerKYCAdmin(admin.ModelAdmin):
-    list_display = ("user", "status", "majority_and_image_consent_term_signed_at", "reviewed_by")
-    list_filter = ("status",)
-    actions = ["approve_selected"]
+    """
+    Fila de conferência de identidade. O revisor abre os arquivos, confere
+    se o rosto bate com o documento, se o código escrito no papel é o
+    mesmo desta conta e digita a data de nascimento que está no documento.
+    """
 
-    @admin.action(description="Aprovar KYC selecionados")
+    list_display = ("user", "status", "verification_code", "document_birth_date", "submitted_at", "reviewed_by")
+    list_filter = ("status",)
+    search_fields = ("user__username", "user__email", "user__cpf", "verification_code")
+    readonly_fields = ("verification_code", "submitted_at", "reviewed_at", "reviewed_by")
+    actions = ["approve_selected", "reject_selected"]
+
+    @admin.action(description="Aprovar (exige data de nascimento do documento preenchida)")
     def approve_selected(self, request, queryset):
+        approved, missing = 0, 0
         for kyc in queryset:
+            if not kyc.document_birth_date:
+                missing += 1
+                continue
             kyc.approve(reviewer=request.user)
+            approved += 1
+        if approved:
+            self.message_user(request, f"{approved} KYC aprovado(s) e idade verificada.")
+        if missing:
+            self.message_user(
+                request,
+                f"{missing} não aprovado(s): preencha a data de nascimento lida no documento antes.",
+                level="warning",
+            )
+
+    @admin.action(description="Rejeitar (pede reenvio à vendedora)")
+    def reject_selected(self, request, queryset):
+        for kyc in queryset:
+            kyc.reject(
+                reviewer=request.user,
+                reason="Documento ou selfie ilegível, ou código do papel não confere. Envie novamente.",
+            )
+        self.message_user(request, f"{queryset.count()} KYC rejeitado(s).")

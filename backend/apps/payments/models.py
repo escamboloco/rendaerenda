@@ -11,17 +11,16 @@ from apps.stores.models import Store
 
 class Order(models.Model):
     """
-    Pedido de compra de item fisico entre comprador e vendedora. A
-    plataforma NUNCA e dona do produto nem processa o dinheiro
-    diretamente - o pagamento e feito via PSP (Asaas/Iugu) com split
-    automatico. Ver apps.payments.services.PaymentProvider.
+    Pedido entre comprador e vendedora. A plataforma so intermedia:
+    nao vende o item. Pagamento via Asaas.
 
-    Fluxo de valores (docs/checkout.md): a vendedora recebe exatamente o
-    payout_amount que ela declarou em cada item (nunca items_total, que
-    ja embute a comissao). O frete NAO vai para a vendedora - a
-    etiqueta e comprada automaticamente pela plataforma (Melhor Envio/
-    Correios) e entregue pronta pra ela colar, entao o valor do frete
-    pago pelo comprador cobre esse custo e fica com a plataforma.
+    Repasse: vendedora recebe payout_amount (o liquido que ela pediu) +
+    frete; a plataforma fica so com a comissao
+    (settings.PLATFORM_COMMISSION_PERCENT) ja embutida em items_total.
+    Compra pode ser guest (sem conta): buyer null + campos guest_*.
+
+    O estoque e reservado na criacao do pedido e devolvido se o Pix nao
+    for pago ate `expires_at` (management command expire_orders).
     """
 
     class Status(models.TextChoices):
@@ -31,26 +30,97 @@ class Order(models.Model):
         DELIVERED = "delivered", "Entregue"
         DISPUTED = "disputed", "Em disputa"
         CANCELED = "canceled", "Cancelado"
+        EXPIRED = "expired", "Expirado (não pago)"
         REFUNDED = "refunded", "Reembolsado"
 
+    # Estados em que o estoque continua reservado para o pedido.
+    RESERVING_STATUSES = ("awaiting_payment", "paid", "shipped", "delivered", "disputed")
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders")
+    buyer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders", null=True, blank=True
+    )
+    guest_name = models.CharField(max_length=150, blank=True)
+    guest_email = models.EmailField(blank=True)
+    guest_cpf = models.CharField(max_length=11, blank=True)
+    guest_birth_date = models.DateField(null=True, blank=True)
+    access_token = models.CharField(max_length=64, blank=True, db_index=True)
+
     store = models.ForeignKey(Store, on_delete=models.PROTECT, related_name="orders")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AWAITING_PAYMENT)
 
     items_total = models.DecimalField(max_digits=10, decimal_places=2)
     shipping_total = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
     packaging_fee = models.DecimalField(
-        max_digits=6, decimal_places=2, default=Decimal("0.00"),
-        help_text="Já somado a shipping_total - guardado à parte só para exibir o detalhamento ao comprador.",
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text=(
+            "Parcela da embalagem neutra embutida no frete. Com etiqueta "
+            "pela plataforma, só este valor é creditado à vendedora; o "
+            "restante do shipping_total compra a etiqueta."
+        ),
     )
 
-    shipping_address = models.JSONField()
+    # Vazio ({}) em pedido só de conteúdo digital — não existe entrega física.
+    shipping_address = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)
+    # Ate quando o Pix deste pedido pode ser pago. Passou disso sem
+    # pagamento, o pedido expira e o estoque volta para a vitrine.
+    expires_at = models.DateTimeField(null=True, blank=True)
+    canceled_reason = models.CharField(max_length=80, blank=True)
+    # Quando o dinheiro saiu da custódia para a vendedora. Trava de
+    # idempotência do repasse: preenchido, nunca mais paga de novo.
+    payout_sent_at = models.DateTimeField(null=True, blank=True)
+    # Repasse do frete + embalagem, feito assim que o pagamento confirma.
+    # Separado de payout_sent_at porque sai antes e por outro motivo.
+    shipping_payout_sent_at = models.DateTimeField(null=True, blank=True)
+    # Trava de idempotencia: garante que o estoque so volta uma vez,
+    # mesmo com webhook repetido + cron de expiracao rodando junto.
+    stock_restored = models.BooleanField(default=False)
 
     class Meta:
-        indexes = [models.Index(fields=["status"]), models.Index(fields=["buyer", "status"])]
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["buyer", "status"]),
+            models.Index(fields=["status", "expires_at"]),
+            models.Index(fields=["store", "status"]),
+        ]
+
+    def __str__(self):
+        return f"Pedido {str(self.id)[:8]} — {self.get_status_display()}"
+
+    @property
+    def short_id(self) -> str:
+        return str(self.id)[:8].upper()
+
+    @property
+    def is_open_for_payment(self) -> bool:
+        return self.status == self.Status.AWAITING_PAYMENT
+
+    @property
+    def track_url(self) -> str:
+        return f"/pedido/{self.access_token}/" if self.access_token else "/compras/"
+
+    @property
+    def payer_cpf(self) -> str:
+        if self.buyer_id and self.buyer.cpf:
+            return self.buyer.cpf
+        return self.guest_cpf
+
+    @property
+    def payer_name(self) -> str:
+        if self.buyer_id:
+            return self.buyer.get_full_name() or self.buyer.username
+        return self.guest_name
+
+    @property
+    def payer_email(self) -> str:
+        if self.buyer_id:
+            return self.buyer.email
+        return self.guest_email
 
     @property
     def grand_total(self) -> Decimal:
@@ -58,18 +128,41 @@ class Order(models.Model):
 
     @property
     def payout_total(self) -> Decimal:
-        """Soma do que cada vendedora declarou querer receber (snapshot por item)."""
-        return sum((item.unit_payout_amount * item.quantity for item in self.items.all()), Decimal("0.00"))
+        """Soma do que a vendedora declarou querer receber (itens + adicionais)."""
+        return sum((item.line_payout for item in self.items.all()), Decimal("0.00"))
+
+    @property
+    def requires_shipping(self) -> bool:
+        """Pedido só de conteúdo digital não tem endereço, frete nem rastreio."""
+        return any(item.product.requires_shipping for item in self.items.all())
+
+    @property
+    def is_digital_only(self) -> bool:
+        return not self.requires_shipping
 
     @property
     def seller_amount(self) -> Decimal:
-        # So o valor dos itens - frete/embalagem cobre a etiqueta que a
-        # PLATAFORMA compra automaticamente (nunca vai pra vendedora).
-        return self.payout_total
+        """
+        O que a vendedora recebe no split/repasse:
+        - etiqueta pela plataforma: payout + embalagem neutra;
+        - modo legado: payout + frete inteiro.
+        """
+        from apps.shipping.services import platform_buys_shipping_label
+
+        if platform_buys_shipping_label():
+            return self.payout_total + (self.packaging_fee or Decimal("0.00"))
+        return self.payout_total + self.shipping_total
 
     @property
     def platform_amount(self) -> Decimal:
-        return (self.items_total - self.payout_total) + self.shipping_total
+        """Comissão do item (+ frete da transportadora se a plataforma compra a etiqueta)."""
+        from apps.shipping.services import platform_buys_shipping_label
+
+        commission = self.items_total - self.payout_total
+        if platform_buys_shipping_label():
+            carrier = self.shipping_total - (self.packaging_fee or Decimal("0.00"))
+            return commission + max(carrier, Decimal("0.00"))
+        return commission
 
 
 class OrderItem(models.Model):
@@ -82,6 +175,48 @@ class OrderItem(models.Model):
         max_digits=8, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))], default=Decimal("0.01")
     )
     quantity = models.PositiveSmallIntegerField(default=1)
+
+    # Adicionais escolhidos ("quer com X?"). Guardados como snapshot: o
+    # que foi combinado nao muda se a vendedora editar o anuncio depois.
+    addons = models.JSONField(default=list, blank=True)
+    addons_price = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
+    addons_payout = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
+
+    @property
+    def line_price(self) -> Decimal:
+        return self.unit_price * self.quantity + self.addons_price
+
+    @property
+    def line_payout(self) -> Decimal:
+        return self.unit_payout_amount * self.quantity + self.addons_payout
+
+
+class OrderMessage(models.Model):
+    """
+    Conversa privada entre comprador e vendedora, presa a um pedido.
+
+    Existe para o combinado de item sob encomenda e para resolver dúvida
+    de entrega sem ninguém precisar trocar telefone. Passa pelo mesmo
+    filtro anti-contato-externo do resto da plataforma: a conversa tem
+    que ficar aqui, onde a moderação enxerga (docs/BASE_JURIDICA.md § 3).
+    """
+
+    class Sender(models.TextChoices):
+        BUYER = "buyer", "Comprador"
+        SELLER = "seller", "Vendedora"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="messages")
+    sender = models.CharField(max_length=6, choices=Sender.choices)
+    body = models.TextField(max_length=1000)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        indexes = [models.Index(fields=["order", "created_at"])]
+
+    def __str__(self):
+        return f"{self.get_sender_display()} — pedido {self.order.short_id}"
 
 
 class Payment(models.Model):
@@ -101,9 +236,19 @@ class Payment(models.Model):
 
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name="payment")
     provider = models.CharField(max_length=20, default=settings.PAYMENT_PROVIDER)
-    provider_charge_id = models.CharField(max_length=100, blank=True)
+    provider_charge_id = models.CharField(max_length=100, blank=True, db_index=True)
     method = models.CharField(max_length=15, choices=Method.choices)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+
+    # Dados do Pix guardados para a pessoa poder voltar ao pedido pelo link
+    # do e-mail e continuar pagando sem gerar uma cobranca nova.
+    payment_url = models.URLField(blank=True)
+    pix_qr_code = models.TextField(blank=True, help_text="Imagem do QR em data URL.")
+    pix_copy_paste = models.TextField(blank=True)
+    pix_expires_at = models.DateTimeField(null=True, blank=True)
+    # Ultimo status bruto retornado pelo PSP (RECEIVED, CONFIRMED, OVERDUE...).
+    provider_status = models.CharField(max_length=40, blank=True)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
     split_confirmed = models.BooleanField(
         default=False, help_text="True quando o PSP confirma que o split para a subconta da vendedora foi feito."
     )

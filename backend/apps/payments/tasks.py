@@ -4,7 +4,7 @@ E-mails transacionais e emissao de NF do pedido - tudo assincrono
 
 Politica de discricao (docs/BASE_JURIDICA.md secao 4.4 + skill): nem o
 assunto nem o corpo dos e-mails citam o nicho ou os titulos dos itens -
-so numero do pedido, valores e link para ver os detalhes logado.
+so numero do pedido, valores e link para ver os detalhes.
 """
 import logging
 
@@ -23,22 +23,111 @@ def _site_url(path: str = "") -> str:
     return f"{scheme}://{domain}{path}"
 
 
+def _shipping_line(order) -> str:
+    addr = order.shipping_address or {}
+    parts = [
+        addr.get("street", ""),
+        addr.get("number", ""),
+        addr.get("neighborhood", ""),
+        f"{addr.get('city', '')}/{addr.get('state', '')}",
+        f"CEP {addr.get('cep', '')}",
+    ]
+    return ", ".join(p for p in parts if p)
+
+
+def _safe_send(subject: str, template: str, context: dict, recipient: str) -> bool:
+    if not recipient:
+        logger.warning("E-mail '%s' sem destinatario — pulando.", subject)
+        return False
+    try:
+        send_mail(
+            subject=subject,
+            message=render_to_string(template, context),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[recipient],
+        )
+        return True
+    except Exception:
+        logger.exception("Falha ao enviar e-mail '%s' para %s", subject, recipient)
+        return False
+
+
 @shared_task
 def send_order_confirmation_email(order_id: str):
     from .models import Order
 
     order = Order.objects.select_related("buyer", "store").prefetch_related("items").get(id=order_id)
+    track = (
+        f"/pedido/{order.access_token}/"
+        if order.access_token
+        else "/compras/"
+    )
     context = {
         "order": order,
         "site_name": settings.SITE_NAME,
-        "order_url": _site_url("/pedidos-personalizados/"),
+        "order_url": _site_url(track),
+        "shipping_line": _shipping_line(order),
     }
-    send_mail(
+    _safe_send(
         subject=f"Pedido confirmado #{str(order.id)[:8]}",
-        message=render_to_string("emails/order_confirmation.txt", context),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[order.buyer.email],
+        template="emails/order_confirmation.txt",
+        context=context,
+        recipient=order.payer_email,
     )
+
+
+@shared_task
+def send_seller_new_sale_email(order_id: str):
+    from .models import Order
+
+    order = Order.objects.select_related("store__owner").prefetch_related("items").get(id=order_id)
+    seller_email = getattr(order.store.owner, "email", "") or ""
+    context = {
+        "order": order,
+        "site_name": settings.SITE_NAME,
+        "shipping_line": _shipping_line(order),
+    }
+    _safe_send(
+        subject=f"Nova venda #{str(order.id)[:8]}",
+        template="emails/seller_new_sale.txt",
+        context=context,
+        recipient=seller_email,
+    )
+
+
+@shared_task
+def send_dispute_opened_email(order_id: str):
+    """
+    Avisa a vendedora e a moderação que uma contestação foi aberta.
+
+    Sem o título do item no corpo (política de discrição) e sem derrubar
+    a resposta da API se o SMTP falhar.
+    """
+    from django.utils import timezone
+
+    from .models import Order
+
+    order = Order.objects.select_related("store__owner").get(id=order_id)
+    context = {
+        "order": order,
+        "site_name": settings.SITE_NAME,
+        "opened_at": timezone.now(),
+        "order_url": _site_url(order.track_url),
+    }
+    subject = f"Contestação aberta — pedido #{order.short_id}"
+
+    seller_email = getattr(order.store.owner, "email", "") or ""
+    if seller_email:
+        _safe_send(subject, "emails/dispute_opened.txt", {**context, "is_seller": True}, seller_email)
+
+    moderation_email = (getattr(settings, "MODERATION_ALERT_EMAIL", "") or "").strip()
+    if moderation_email:
+        _safe_send(subject, "emails/dispute_opened.txt", {**context, "is_seller": False}, moderation_email)
+    else:
+        logger.warning(
+            "Contestacao no pedido %s sem MODERATION_ALERT_EMAIL configurado — ninguem foi avisado.",
+            order_id,
+        )
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
@@ -47,16 +136,32 @@ def emit_invoice_for_order(self, order_id: str):
     from .invoicing import InvoiceProviderError, issue_service_invoice
     from .models import Invoice, Order
 
-    order = Order.objects.select_related("buyer").get(id=order_id)
+    order = Order.objects.select_related("buyer", "payment").get(id=order_id)
+    if not settings.NFSE_PROVIDER_API_KEY and not settings.DEBUG:
+        logger.info("NFS-e nao configurada — pulando pedido %s", order_id)
+        return
+
+    recipient_name = order.payer_name
+    recipient_cpf = order.payer_cpf
+    recipient_email = order.payer_email
+    if not recipient_cpf or not recipient_email:
+        logger.warning("Pedido %s sem CPF/e-mail do pagador — NFS-e pulada.", order_id)
+        return
+
+    charge_ref = ""
+    try:
+        charge_ref = order.payment.provider_charge_id
+    except Exception:
+        charge_ref = str(order.id)
+
     invoice, _ = Invoice.objects.get_or_create(
         order=order,
         defaults={
             "kind": Invoice.Kind.ORDER_COMMISSION,
-            "reference_id": order.payment.provider_charge_id,
-            # Identidade CIVIL do tomador - obrigacao fiscal, nunca o apelido.
-            "recipient_name": order.buyer.get_full_name() or order.buyer.username,
-            "recipient_cpf": order.buyer.cpf,
-            "recipient_email": order.buyer.email,
+            "reference_id": charge_ref,
+            "recipient_name": recipient_name,
+            "recipient_cpf": recipient_cpf,
+            "recipient_email": recipient_email,
             "amount": order.platform_amount,
             "description": "Intermediação de anúncios classificados - taxa de serviço",
         },
@@ -76,6 +181,8 @@ def emit_invoice_for_order(self, order_id: str):
     except InvoiceProviderError as exc:
         invoice.status = Invoice.Status.FAILED
         invoice.save(update_fields=["status"])
+        if not settings.NFSE_PROVIDER_API_KEY:
+            return
         raise self.retry(exc=exc)
 
     invoice.provider_invoice_id = issued.provider_invoice_id
@@ -84,14 +191,11 @@ def emit_invoice_for_order(self, order_id: str):
     invoice.issued_at = timezone.now()
     invoice.save(update_fields=["provider_invoice_id", "pdf_url", "status", "issued_at"])
 
-    send_mail(
+    _safe_send(
         subject=f"Sua nota fiscal — pedido #{str(order.id)[:8]}",
-        message=render_to_string(
-            "emails/invoice_issued.txt",
-            {"invoice": invoice, "order": order, "site_name": settings.SITE_NAME},
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[invoice.recipient_email],
+        template="emails/invoice_issued.txt",
+        context={"invoice": invoice, "order": order, "site_name": settings.SITE_NAME},
+        recipient=invoice.recipient_email,
     )
 
 
@@ -102,6 +206,10 @@ def emit_invoice_for_subscription(self, user_id: str, amount: str, reference_id:
 
     from .invoicing import InvoiceProviderError, issue_service_invoice
     from .models import Invoice
+
+    if not settings.NFSE_PROVIDER_API_KEY and not settings.DEBUG:
+        logger.info("NFS-e nao configurada — pulando assinatura %s", user_id)
+        return
 
     user = get_user_model().objects.get(id=user_id)
     invoice = Invoice.objects.create(
@@ -133,12 +241,9 @@ def emit_invoice_for_subscription(self, user_id: str, amount: str, reference_id:
     invoice.issued_at = timezone.now()
     invoice.save(update_fields=["provider_invoice_id", "pdf_url", "status", "issued_at"])
 
-    send_mail(
+    _safe_send(
         subject="Sua nota fiscal — assinatura",
-        message=render_to_string(
-            "emails/invoice_issued.txt",
-            {"invoice": invoice, "order": None, "site_name": settings.SITE_NAME},
-        ),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[invoice.recipient_email],
+        template="emails/invoice_issued.txt",
+        context={"invoice": invoice, "order": None, "site_name": settings.SITE_NAME},
+        recipient=invoice.recipient_email,
     )

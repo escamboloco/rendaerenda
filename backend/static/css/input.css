@@ -1,3 +1,60 @@
+/*
+ * Fontes self-hosted (npm @fontsource -> static/fonts/). Nada de CDN: a CSP
+ * do projeto e `font-src 'self'`, e fonte de terceiro vazaria o IP de quem
+ * navega para outro dominio.
+ *
+ * Bodoni Moda (display) + Space Grotesk (UI). Ver tailwind.config.js.
+ */
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/bodoni-moda-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/bodoni-moda-latin-400-italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/bodoni-moda-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bodoni Moda";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/bodoni-moda-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/space-grotesk-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/space-grotesk-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/space-grotesk-latin-700-normal.woff2") format("woff2");
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,8 +63,18 @@
   html {
     scroll-behavior: smooth;
   }
+  /* Titulo editorial: didone pede tracking negativo e peso alto para nao
+     parecer frágil em tela escura. */
+  h1,
+  h2 {
+    @apply font-display tracking-tightest;
+  }
   body {
     @apply bg-surface text-gray-100 antialiased;
+    background-image:
+      radial-gradient(circle at 8% 2%, rgba(138, 63, 168, 0.08), transparent 24rem),
+      radial-gradient(circle at 92% 18%, rgba(192, 24, 68, 0.055), transparent 28rem);
+    background-attachment: fixed;
   }
   ::selection {
     @apply bg-brand/40 text-white;
@@ -32,13 +99,14 @@
 
 @layer components {
   .container-page {
-    @apply max-w-6xl mx-auto w-full px-4 sm:px-6;
+    @apply max-w-[78rem] mx-auto w-full px-4 sm:px-6 lg:px-8;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-dark
+    @apply inline-flex items-center justify-center gap-2 bg-brand hover:bg-brand-light
       text-white font-semibold text-sm rounded-xl px-5 py-3 min-h-[44px]
-      transition shadow-glow disabled:opacity-50 disabled:pointer-events-none;
+      transition duration-200 shadow-glow disabled:opacity-50 disabled:pointer-events-none
+      active:translate-y-px;
   }
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10
@@ -55,10 +123,10 @@
   }
 
   .card {
-    @apply bg-surface-card border border-surface-border rounded-2xl overflow-hidden;
+    @apply bg-surface-card/95 border border-white/[0.08] rounded-2xl overflow-hidden;
   }
   .card-hover {
-    @apply hover:border-brand/60 hover:shadow-glow transition;
+    @apply hover:border-brand/50 hover:shadow-float hover:-translate-y-0.5 transition duration-300;
   }
 
   .input-field {
@@ -102,7 +170,59 @@
   }
 
   .nav-link {
-    @apply text-sm font-medium text-gray-300 hover:text-white transition;
+    @apply relative text-sm font-medium text-gray-300 hover:text-white transition min-h-[44px]
+      inline-flex items-center;
+  }
+  .nav-link::after {
+    content: "";
+    @apply absolute left-0 right-full bottom-1 h-px bg-brand-light transition-all duration-300;
+  }
+  .nav-link:hover::after {
+    @apply right-0;
+  }
+
+  .store-discovery {
+    @apply relative z-30 border-b border-white/[0.07] bg-surface-alt/90 backdrop-blur-xl py-3;
+    background-image: linear-gradient(90deg, rgba(138, 63, 168, 0.07), transparent 35%, rgba(192, 24, 68, 0.05));
+  }
+  .store-discovery__label {
+    @apply hidden sm:flex w-16 shrink-0 flex-col leading-none;
+  }
+  .store-discovery__label strong {
+    @apply text-xs text-white mt-1;
+  }
+  .store-discovery__track {
+    @apply min-w-0 flex-1 flex items-start gap-3 overflow-x-auto snap-x snap-mandatory py-1;
+    scrollbar-width: none;
+  }
+  .store-discovery__track::-webkit-scrollbar {
+    display: none;
+  }
+  .store-discovery__all {
+    @apply hidden lg:inline-flex shrink-0 min-h-[44px] items-center text-xs font-semibold
+      text-accent-blush hover:text-white;
+  }
+  .store-story {
+    @apply w-[4.75rem] shrink-0 snap-start text-center;
+  }
+  .store-story__ring {
+    @apply relative mx-auto block w-16 h-16 rounded-[1.35rem] p-[2px] transition duration-300
+      group-hover:-translate-y-1 group-hover:shadow-glow;
+    background: linear-gradient(145deg, #f4d3dc 0%, #e0295c 42%, #8a3fa8 100%);
+  }
+  .store-story__photo {
+    @apply w-full h-full rounded-[1.2rem] overflow-hidden bg-surface-card border-2 border-surface-alt
+      grid place-items-center font-display text-xl text-accent-blush;
+  }
+  .store-story__photo img {
+    @apply w-full h-full object-cover transition duration-500 group-hover:scale-110;
+  }
+  .store-story__verified {
+    @apply absolute -right-1 -bottom-1 w-5 h-5 rounded-full border-2 border-surface-alt
+      bg-emerald-400 text-surface text-[10px] font-bold grid place-items-center;
+  }
+  .store-story__name {
+    @apply block mt-1.5 text-[10px] leading-tight text-gray-400 truncate group-hover:text-white;
   }
 
   .lock-overlay {
@@ -125,6 +245,470 @@
 
   .table-row-alt > * {
     @apply odd:bg-white/[0.02];
+  }
+
+  /* ---------------------------------------------------------- vitrine ---
+     "Rail": prateleira horizontal com titulo + link, o padrao que faz uma
+     home de marketplace parecer curada em vez de um grid infinito. */
+  .rail {
+    @apply flex gap-3 overflow-x-auto pb-3 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory;
+  }
+  .rail > * {
+    @apply snap-start shrink-0;
+  }
+  .rail-head {
+    @apply flex items-end justify-between gap-3 mb-3;
+  }
+  .rail-title {
+    @apply text-xl sm:text-2xl font-display font-bold text-white leading-none;
+  }
+  .rail-sub {
+    @apply text-xs text-gray-500 mt-1.5;
+  }
+  .rail-link {
+    @apply text-sm text-brand hover:text-brand-light shrink-0 font-medium;
+  }
+
+  /* -------------------------------------------------------- carrossel ---
+     Scroll nativo com snap. As bordas em degrade sinalizam conteudo fora
+     da tela melhor que qualquer seta, e funcionam mesmo sem JS. */
+  .carousel {
+    @apply relative;
+  }
+  .carousel-btn {
+    @apply w-8 h-8 rounded-full border border-surface-border bg-surface-alt
+      text-gray-300 flex items-center justify-center transition
+      hover:border-brand/60 hover:text-white
+      disabled:opacity-25 disabled:pointer-events-none;
+  }
+  .carousel-fade {
+    @apply pointer-events-none absolute inset-y-0 w-14 z-10 hidden sm:block;
+  }
+  .carousel-fade--left {
+    @apply left-0;
+    background: linear-gradient(90deg, #0b0709 10%, transparent);
+  }
+  .carousel-fade--right {
+    @apply right-0;
+    background: linear-gradient(270deg, #0b0709 10%, transparent);
+  }
+  .carousel-progress {
+    @apply h-[3px] rounded-full bg-surface-border overflow-hidden mt-1 max-w-[8rem];
+  }
+  .carousel-progress__bar {
+    @apply h-full rounded-full bg-gradient-brand transition-[width] duration-200;
+  }
+  /* Esconde a barra de rolagem sem tirar a rolagem. */
+  .rail {
+    scrollbar-width: none;
+  }
+  .rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-accent-orchid;
+  }
+
+  .price {
+    @apply font-sans font-bold text-brand-light;
+  }
+  .price-old {
+    @apply text-xs text-gray-600 line-through font-normal;
+  }
+
+  /* Tile de categoria: imagem/inicial + nome, usado no indice e na home. */
+  .cat-tile {
+    @apply relative flex flex-col items-center justify-center gap-2 aspect-[4/3]
+      rounded-2xl border border-surface-border bg-surface-card overflow-hidden
+      text-center px-3 transition hover:border-brand/60 hover:shadow-glow;
+  }
+
+  /* Navegação de intenção: deixa Comprar e Vender inequívocos no mobile. */
+  .intent-switch {
+    @apply inline-flex items-center rounded-full border border-white/10 bg-black/20 p-1;
+  }
+  .intent-switch__item {
+    @apply min-h-[38px] px-4 rounded-full text-xs font-semibold text-gray-400
+      inline-flex items-center justify-center transition;
+  }
+  .intent-switch__item--active {
+    @apply bg-white text-surface shadow-lift;
+  }
+
+  .mobile-dock {
+    @apply fixed inset-x-3 bottom-3 z-40 md:hidden rounded-2xl border border-white/10
+      bg-surface-card/95 backdrop-blur-xl shadow-float px-2 py-1.5 grid grid-cols-5;
+  }
+  .mobile-dock__item {
+    @apply min-h-[50px] flex flex-col items-center justify-center gap-0.5 text-[10px]
+      font-medium text-gray-400 rounded-xl transition;
+  }
+  .mobile-dock__item:hover,
+  .mobile-dock__item:focus-visible {
+    @apply text-white bg-white/5;
+  }
+  .mobile-dock__item--sell {
+    @apply text-white bg-gradient-brand -translate-y-2 shadow-glow;
+  }
+
+  /* Hero editorial + objeto vetorial em profundidade. */
+  .hero-shell {
+    @apply relative overflow-hidden rounded-[1.75rem] sm:rounded-[2.25rem] border border-white/10
+      bg-gradient-hero shadow-float;
+  }
+  .hero-grid {
+    @apply relative z-10 grid lg:grid-cols-[minmax(0,1.12fr)_minmax(19rem,.88fr)]
+      gap-8 items-center px-5 py-9 sm:px-10 sm:py-14 lg:px-14 lg:py-16;
+  }
+  .hero-orbit {
+    @apply relative hidden lg:grid place-items-center min-h-[25rem];
+    perspective: 900px;
+  }
+  .hero-shop-carousel {
+    @apply relative hidden lg:block min-h-[25rem] rounded-[2rem] overflow-hidden
+      border border-white/10 bg-surface-card shadow-float;
+  }
+  .hero-shop-carousel__track {
+    @apply absolute inset-0 flex overflow-x-auto snap-x snap-mandatory;
+    scrollbar-width: none;
+  }
+  .hero-shop-carousel__track::-webkit-scrollbar {
+    display: none;
+  }
+  .hero-shop-slide {
+    @apply relative w-full h-full shrink-0 snap-start overflow-hidden;
+  }
+  .hero-shop-slide::after {
+    content: "";
+    @apply absolute inset-0 pointer-events-none;
+    background: linear-gradient(180deg, rgba(11,7,9,.02) 20%, rgba(11,7,9,.24) 52%, rgba(11,7,9,.98) 100%);
+  }
+  .hero-shop-slide > img {
+    @apply w-full h-full object-cover transition duration-700 group-hover:scale-105;
+  }
+  .hero-shop-slide__content {
+    @apply absolute z-10 inset-x-0 bottom-12 p-6 flex flex-col items-start;
+  }
+  .hero-shop-slide__content strong {
+    @apply font-display text-3xl text-white leading-none;
+  }
+  .hero-shop-slide__content small {
+    @apply text-xs text-gray-300 mt-2;
+  }
+  .hero-shop-slide__cta {
+    @apply mt-4 min-h-[42px] px-4 rounded-xl bg-white text-surface text-xs font-bold
+      inline-flex items-center gap-2 transition group-hover:bg-accent-blush;
+  }
+  .hero-shop-carousel__controls {
+    @apply absolute z-20 left-5 right-5 bottom-4 flex items-center gap-3;
+  }
+  .hero-orbit__core {
+    @apply relative w-56 h-56 rounded-full;
+    transform-style: preserve-3d;
+    animation: orbit-core 12s ease-in-out infinite;
+  }
+  .hero-orbit__ring {
+    @apply absolute inset-0 rounded-full border;
+    transform-style: preserve-3d;
+  }
+  .hero-orbit__ring--one {
+    border-color: rgba(244, 211, 220, 0.44);
+    transform: rotateX(68deg) rotateZ(8deg);
+  }
+  .hero-orbit__ring--two {
+    border-color: rgba(138, 63, 168, 0.58);
+    transform: rotateY(64deg) rotateZ(-18deg) scale(1.24);
+  }
+  .hero-orbit__ring--three {
+    border-color: rgba(224, 41, 92, 0.4);
+    transform: rotateX(34deg) rotateY(52deg) scale(0.78);
+  }
+  .hero-orbit__gem {
+    @apply absolute inset-[3.2rem] rounded-[2.8rem] bg-gradient-brand;
+    transform: translateZ(46px) rotate(18deg);
+    box-shadow: inset 14px 16px 30px rgba(255,255,255,.14), 0 35px 65px rgba(192,24,68,.28);
+  }
+  .hero-orbit__gem::after {
+    content: "";
+    @apply absolute inset-5 rounded-[2rem] border border-white/25;
+  }
+  @keyframes orbit-core {
+    0%, 100% { transform: rotateX(7deg) rotateY(-12deg) translateY(0); }
+    50% { transform: rotateX(-8deg) rotateY(15deg) translateY(-10px); }
+  }
+
+  .quick-category {
+    @apply relative min-w-[8.5rem] sm:min-w-0 min-h-[7.5rem] p-4 rounded-2xl border
+      border-white/[0.08] bg-surface-card overflow-hidden transition duration-300
+      hover:border-brand/45 hover:-translate-y-0.5 hover:shadow-glow;
+  }
+  .quick-category__icon {
+    @apply w-10 h-10 rounded-xl grid place-items-center text-accent-blush mb-5;
+    background: linear-gradient(145deg, rgba(138,63,168,.28), rgba(192,24,68,.18));
+    transform: rotate(-5deg);
+    box-shadow: inset 0 1px rgba(255,255,255,.14);
+  }
+
+  .store-photo-card {
+    @apply relative w-[15rem] sm:w-[18rem] aspect-[4/5] rounded-3xl overflow-hidden
+      border border-white/10 bg-surface-card snap-start shrink-0 shadow-float;
+  }
+  .store-photo-card::after {
+    content: "";
+    @apply absolute inset-0 pointer-events-none;
+    background: linear-gradient(180deg, transparent 36%, rgba(11,7,9,.2) 58%, rgba(11,7,9,.96) 100%);
+  }
+  .store-photo-card__image {
+    @apply w-full h-full object-cover transition duration-700;
+  }
+  .store-photo-card:hover .store-photo-card__image {
+    @apply scale-105;
+  }
+  .store-photo-card__body {
+    @apply absolute z-10 inset-x-0 bottom-0 p-5;
+  }
+
+  .store-cover {
+    @apply relative z-10 grid grid-cols-4 gap-1 h-44 sm:h-64 overflow-hidden;
+  }
+  .store-cover__item {
+    @apply relative overflow-hidden bg-surface-raised;
+  }
+  .store-cover__item:first-child {
+    @apply col-span-2 row-span-2;
+  }
+  .store-cover__item:nth-child(2),
+  .store-cover__item:nth-child(3) {
+    @apply col-span-1;
+  }
+  .store-cover__item:nth-child(4) {
+    @apply col-span-2;
+  }
+  .store-cover__item img {
+    @apply w-full h-full object-cover transition duration-700 hover:scale-105;
+  }
+  .store-cover::after {
+    content: "";
+    @apply absolute inset-0 pointer-events-none;
+    background: linear-gradient(180deg, transparent 42%, rgba(11,7,9,.92) 100%);
+  }
+
+  .trust-strip {
+    @apply grid sm:grid-cols-3 rounded-2xl border border-emerald-300/10 bg-emerald-400/[0.035]
+      divide-y sm:divide-y-0 sm:divide-x divide-white/[0.07];
+  }
+  .trust-strip__item {
+    @apply flex items-center gap-3 px-4 py-3.5 text-xs text-gray-400;
+  }
+  .trust-strip > li,
+  .trust-strip > span {
+    @apply px-4 py-3.5 items-center text-xs text-gray-400;
+  }
+
+  .product-card {
+    @apply relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.08]
+      bg-surface-card transition duration-300 hover:border-brand/45 hover:shadow-float;
+  }
+  .product-card__media {
+    @apply relative aspect-[4/5] overflow-hidden bg-surface-alt;
+  }
+  .product-card__media::after {
+    content: "";
+    @apply absolute inset-x-0 bottom-0 h-20 pointer-events-none;
+    background: linear-gradient(transparent, rgba(11,7,9,.5));
+  }
+  .product-card__quick {
+    @apply absolute inset-x-2 bottom-2 z-10 min-h-[42px] rounded-xl bg-white text-surface
+      text-xs font-bold flex items-center justify-center transition duration-300
+      translate-y-14 opacity-0 group-hover:translate-y-0 group-hover:opacity-100;
+  }
+  @media (hover: none) {
+    .product-card__quick {
+      @apply translate-y-0 opacity-100 bg-surface/90 text-white border border-white/15 backdrop-blur;
+    }
+  }
+  .product-card__body {
+    @apply p-3.5 flex flex-col gap-2 flex-1;
+  }
+  .product-card__store {
+    @apply flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-accent-blush truncate;
+  }
+
+  .filter-bar {
+    @apply sticky top-[7.3rem] sm:top-[4.6rem] z-30 -mx-4 px-4 py-3
+      bg-surface/90 backdrop-blur-xl border-y border-white/[0.06]
+      flex items-center gap-2 overflow-x-auto;
+    scrollbar-width: none;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .filter-pill {
+    @apply shrink-0 min-h-[42px] px-4 rounded-full border border-white/10 bg-surface-card
+      text-xs font-semibold text-gray-300 inline-flex items-center gap-2 transition
+      hover:border-brand/50 hover:text-white;
+  }
+  .filter-pill--active {
+    @apply border-brand bg-brand/15 text-white;
+  }
+
+  .purchase-panel {
+    @apply rounded-3xl border border-white/10 bg-surface-card p-5 sm:p-6 shadow-float;
+  }
+  .mobile-buybar {
+    @apply fixed md:hidden inset-x-0 bottom-0 z-50 border-t border-white/10
+      bg-surface-card/95 backdrop-blur-xl px-4 py-3 flex items-center gap-3;
+  }
+  .seller-step {
+    @apply relative rounded-2xl border border-white/[0.08] bg-surface-card p-5 overflow-hidden;
+  }
+  .seller-step__number {
+    @apply absolute right-3 top-0 font-display text-6xl leading-none text-white/[0.035] font-bold;
+  }
+
+  /* Cartao de garantia (custodia, embalagem neutra, etc.). */
+  .trust-card {
+    @apply card p-5 space-y-2 bg-surface-card/80;
+  }
+  .trust-icon {
+    @apply w-10 h-10 rounded-xl bg-brand/10 border border-brand/25
+      flex items-center justify-center text-brand-light shrink-0;
+  }
+
+  .stat-value {
+    @apply font-display text-3xl sm:text-4xl font-bold text-white leading-none;
+  }
+  .stat-label {
+    @apply text-xs text-gray-500 mt-1;
+  }
+
+  /* ------------------------------------------------------------ marca ---
+     Monograma 3D em CSS puro. Três camadas + perspective = paralaxe
+     suave sem WebGL (CSP fechada em 'self'). */
+  .logo3d {
+    @apply inline-block shrink-0 w-9 h-9;
+    perspective: 480px;
+    perspective-origin: 50% 45%;
+  }
+  .logo3d--sm {
+    @apply w-7 h-7;
+  }
+  .logo3d__stage {
+    @apply relative block w-full h-full;
+    transform-style: preserve-3d;
+    animation: logo-float 9s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+    transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .logo3d__layer {
+    @apply absolute inset-0 w-full h-full;
+    backface-visibility: hidden;
+  }
+  .logo3d__layer--back {
+    transform: translateZ(-14px) scale(1.06);
+    filter: blur(1px);
+    opacity: 0.7;
+  }
+  .logo3d__layer--mid {
+    transform: translateZ(0);
+    opacity: 0.55;
+    filter: blur(0.35px);
+  }
+  .logo3d__layer--front {
+    transform: translateZ(12px);
+    filter: drop-shadow(0 4px 10px rgba(224, 41, 92, 0.35));
+  }
+  @media (hover: hover) and (pointer: fine) {
+    a:hover > .logo3d .logo3d__stage,
+    .logo3d:hover .logo3d__stage {
+      transform: rotateY(32deg) rotateX(-10deg) translateZ(6px) scale(1.08);
+      animation-play-state: paused;
+    }
+  }
+  @keyframes logo-float {
+    0%   { transform: rotateY(-14deg) rotateX(5deg) translateZ(0); }
+    25%  { transform: rotateY(-4deg) rotateX(-3deg) translateZ(2px); }
+    50%  { transform: rotateY(14deg) rotateX(-5deg) translateZ(0); }
+    75%  { transform: rotateY(4deg) rotateX(3deg) translateZ(2px); }
+    100% { transform: rotateY(-14deg) rotateX(5deg) translateZ(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .logo3d__stage {
+      animation: none;
+      transform: none;
+    }
+    .logo3d__layer--front {
+      filter: none;
+    }
+    .hero-orbit__core {
+      animation: none;
+    }
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+
+  .logo-word {
+    @apply font-display text-lg font-bold tracking-tightest leading-none whitespace-nowrap;
+  }
+  .logo-word__amp {
+    @apply text-gradient-brand italic px-[1px];
+  }
+
+  /* --------------------------------------------------------- estrutura ---
+     Ritmo de secao unico. "Organizado" e, na pratica, todo bloco
+     respirando a mesma distancia — sem margens ad hoc por template. */
+  .section {
+    @apply mb-14 sm:mb-20;
+  }
+  .section-head {
+    @apply mb-6;
+  }
+  .section-title {
+    @apply text-2xl sm:text-[2rem] font-display font-bold text-white leading-[1.1];
+  }
+  .section-sub {
+    @apply text-sm text-gray-500 mt-2 max-w-xl;
+  }
+
+  /* Superficie elevada com borda em gradiente — profundidade sem sombra
+     pesada, que em tema escuro vira mancha. */
+  .surface-raised {
+    @apply relative rounded-2xl border border-surface-border bg-surface-card;
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 55%);
+  }
+
+  /* ------------------------------------------------------------ bento ---
+     Grade de blocos de tamanhos diferentes. Organiza a informacao sem a
+     monotonia de uma fileira de cards iguais, e deixa o bloco mais
+     importante ocupar o espaco que merece. Mobile empilha tudo. */
+  .bento {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 auto-rows-auto;
+  }
+  .bento-item {
+    @apply min-w-0;
+  }
+  .bento-item--wide {
+    @apply sm:col-span-2 lg:col-span-3;
+  }
+  .bento-item--tall {
+    @apply sm:row-span-2;
+  }
+
+  /* Grao sutil: tira o aspecto "chapado" do preto puro. */
+  .grain::after {
+    content: "";
+    @apply pointer-events-none absolute inset-0 opacity-[0.035] mix-blend-overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Faixa fina do topo — recado curto e permanente (discricao/custodia). */
+  .topbar {
+    @apply text-[11px] text-center py-1.5 text-accent-blush/80 bg-accent-orchid/10
+      border-b border-surface-border;
   }
 
   .prose-legal {

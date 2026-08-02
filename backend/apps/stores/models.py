@@ -47,15 +47,30 @@ class Store(models.Model):
     plan_expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # Subconta no PSP (Asaas/Iugu) que efetivamente custodia o dinheiro
-    # da vendedora - ver apps.payments.services. Criada no onboarding,
-    # antes da loja poder receber pedidos.
+    # Subconta Asaas (walletId) que recebe o split de cada venda.
     psp_subaccount_id = models.CharField(max_length=100, blank=True)
+    # apiKey da subconta (retornada na criacao) — usada pro Pix automatico.
+    psp_api_key = models.CharField(max_length=200, blank=True)
+    # Chave Pix cadastrada pela vendedora (CPF, e-mail, telefone ou aleatoria).
     pix_key = models.CharField(max_length=140, blank=True)
+    pix_key_type = models.CharField(
+        max_length=10,
+        blank=True,
+        default="CPF",
+        help_text="CPF, CNPJ, EMAIL, PHONE ou EVP (chave aleatoria).",
+    )
     # CEP de onde a vendedora posta os itens - usado como origem em TODA
     # cotacao de frete (o comprador ve preco/prazo reais a partir daqui) e
     # para achar o ponto de coleta mais proximo dela.
     origin_cep = models.CharField(max_length=8, blank=True)
+    # Endereço de postagem privado. É usado como endereço de retorno na
+    # etiqueta; nunca aparece na vitrine pública.
+    origin_street = models.CharField(max_length=120, blank=True)
+    origin_number = models.CharField(max_length=20, blank=True)
+    origin_complement = models.CharField(max_length=60, blank=True)
+    origin_district = models.CharField(max_length=80, blank=True)
+    origin_city = models.CharField(max_length=80, blank=True)
+    origin_state = models.CharField(max_length=2, blank=True)
 
     # Metricas cacheadas (apps.reviews.services.recompute_store_rating /
     # apps.stores.services.increment_sales_count) - evita recalcular
@@ -105,3 +120,23 @@ class StoreBoost(models.Model):
     @property
     def is_active(self) -> bool:
         return self.paid and self.starts_at <= timezone.now() <= self.ends_at
+
+
+class StoreFollow(models.Model):
+    """
+    Comprador segue a loja para voltar nela (novidades / vitrine).
+    Não envia e-mail sozinho — serve de base para digest futuro.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="followers")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="followed_stores"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["store", "user"], name="store_follow_unique"),
+        ]
+        indexes = [models.Index(fields=["-created_at"])]

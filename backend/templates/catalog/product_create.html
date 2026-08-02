@@ -1,88 +1,208 @@
 {% extends "core/base.html" %}
-{% block title %}Anunciar item — Renda &amp; Renda{% endblock %}
+{% block title %}Criar anúncio — Renda &amp; Renda{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto space-y-6" x-data="productCreate()">
+<div class="max-w-3xl mx-auto space-y-6" x-data="productCreate({{ commission_percent|floatformat:'-2' }})">
   <div class="text-center">
-    <h1 class="text-2xl font-bold">Anunciar item</h1>
-    <p class="text-gray-400 text-sm mt-1">Anunciar é grátis. Você diz quanto quer receber — a comissão é somada por cima, quem paga é o comprador.</p>
+    <span class="eyebrow">Nova publicação</span>
+    <h1 class="text-3xl sm:text-4xl font-bold mt-2">Crie um anúncio que vende</h1>
+    <p class="text-gray-400 text-sm mt-1">
+      Conte o essencial, mostre bem o item e defina quanto quer receber.
+    </p>
   </div>
+
+  <ol class="grid grid-cols-4 gap-2 text-center text-[10px] sm:text-xs">
+    <li class="rounded-xl border border-brand/40 bg-brand/10 px-1 py-3 text-white">1 · Tipo</li>
+    <li class="rounded-xl border border-white/10 px-1 py-3 text-gray-400">2 · Detalhes</li>
+    <li class="rounded-xl border border-white/10 px-1 py-3 text-gray-400">3 · Preço</li>
+    <li class="rounded-xl border border-white/10 px-1 py-3 text-gray-400">4 · Fotos</li>
+  </ol>
 
   <div x-show="done" x-cloak class="card p-6 text-center space-y-3">
     <span class="badge-pending text-sm px-3 py-1">Aguardando moderação</span>
     <p class="text-gray-400 text-sm">Anúncio enviado! Ele passa por revisão antes de aparecer na sua loja.</p>
     <div class="flex gap-3 justify-center">
-      <button type="button" class="btn-secondary" @click="resetForm()">Anunciar outro</button>
-      <a href="{% url 'stores:detail' store.slug %}" class="btn-primary">Ver minha loja</a>
+      <button type="button" class="btn-secondary" @click="resetForm()">Criar outro</button>
+      <a href="{% url 'catalog:seller_products' %}" class="btn-primary">Acompanhar moderação</a>
     </div>
   </div>
 
-  <form x-show="!done" @submit.prevent="submit()" class="space-y-4" enctype="multipart/form-data">
-    <div>
-      <label class="input-label" for="title">Título</label>
-      <input id="title" type="text" x-model="title" required maxlength="120" placeholder="Ex.: calcinha de renda preta, 3 dias de uso" class="input-field">
+  <form x-show="!done" @submit.prevent="submit()" class="space-y-5" enctype="multipart/form-data">
+
+    {# ----------------------------------------------------- tipo do anúncio #}
+    <fieldset class="purchase-panel space-y-3">
+      <legend class="font-semibold px-1">1. O que você está anunciando?</legend>
+      <div class="grid sm:grid-cols-3 gap-2">
+        <label class="rounded-xl border px-3 py-3 cursor-pointer transition"
+               :class="kind === 'physical' ? 'border-brand bg-brand/10' : 'border-surface-border hover:border-brand/50'">
+          <input type="radio" value="physical" x-model="kind" class="sr-only">
+          <span class="block text-sm font-medium">Item físico</span>
+          <span class="block text-[11px] text-gray-500 mt-0.5">Vai pelo correio, com rastreio</span>
+        </label>
+        <label class="rounded-xl border px-3 py-3 cursor-pointer transition"
+               :class="kind === 'digital' ? 'border-brand bg-brand/10' : 'border-surface-border hover:border-brand/50'">
+          <input type="radio" value="digital" x-model="kind" class="sr-only">
+          <span class="block text-sm font-medium">Conteúdo digital</span>
+          <span class="block text-[11px] text-gray-500 mt-0.5">Entregue na hora pelo site</span>
+        </label>
+        <label class="rounded-xl border px-3 py-3 cursor-pointer transition"
+               :class="kind === 'custom' ? 'border-brand bg-brand/10' : 'border-surface-border hover:border-brand/50'">
+          <input type="radio" value="custom" x-model="kind" class="sr-only">
+          <span class="block text-sm font-medium">Sob encomenda</span>
+          <span class="block text-[11px] text-gray-500 mt-0.5">Você produz depois do pedido</span>
+        </label>
+      </div>
+      <p class="input-help" x-show="kind === 'digital'" x-cloak>
+        O comprador baixa o arquivo na página do pedido assim que o Pix cair. Sem endereço e sem frete.
+      </p>
+      <p class="input-help" x-show="kind === 'custom'" x-cloak>
+        Combine o prazo abaixo — ele aparece no anúncio para quem compra.
+      </p>
+    </fieldset>
+
+    {# --------------------------------------------------------------- básico #}
+    <div class="purchase-panel space-y-4">
+      <div>
+        <p class="font-semibold">2. Apresente seu anúncio</p>
+        <p class="text-xs text-gray-500 mt-1">Título direto e detalhes claros ajudam a pessoa a decidir mais rápido.</p>
+      </div>
+      <div>
+        <label class="input-label" for="title">Título</label>
+        <input id="title" type="text" x-model="title" required maxlength="120"
+               placeholder="Ex.: calcinha de renda preta, 3 dias de uso" class="input-field">
+      </div>
+
+      <div>
+        <label class="input-label" for="description">Descrição</label>
+        <textarea id="description" x-model="description" required maxlength="2000" rows="4"
+                  placeholder="Cor, tamanho, tempo de uso, embalagem… Sem contatos externos." class="input-field"></textarea>
+        <p class="input-help">Combinar contato ou serviço fora da plataforma bloqueia o anúncio na moderação.</p>
+      </div>
+
+      <div>
+        <label class="input-label" for="category">Categoria</label>
+        <select id="category" x-model="categoryId" required class="input-field">
+          <option value="">Escolha…</option>
+          {% for category in categories %}
+          <option value="{{ category.id }}">{{ category.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
 
-    <div>
-      <label class="input-label" for="description">Descrição</label>
-      <textarea id="description" x-model="description" required maxlength="2000" rows="4"
-                placeholder="Cor, tamanho, tempo de uso, embalagem… Sem contatos externos." class="input-field"></textarea>
-    </div>
-
-    <div>
-      <label class="input-label" for="category">Categoria</label>
-      <select id="category" x-model="categoryId" required class="input-field">
-        <option value="">Escolha…</option>
-        {% for category in categories %}
-        <option value="{{ category.id }}">{{ category.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    {# --- Calculadora de comissão ao vivo --- #}
-    <div class="card p-4 space-y-3 border-brand/40">
-      <label class="input-label" for="payout">Quanto VOCÊ quer receber (R$)</label>
-      <input id="payout" type="number" x-model="payout" required step="0.01" min="1" class="input-field text-lg font-bold">
+    {# ---------------------------------------------------- preço + comissão #}
+    <div class="purchase-panel space-y-3 !border-brand/40">
+      <div>
+        <p class="font-semibold">3. Defina seu ganho</p>
+        <p class="text-xs text-gray-500 mt-1">Você informa o líquido; mostramos o preço final antes de publicar.</p>
+      </div>
+      <label class="input-label" for="payout">Quanto você quer receber (R$)</label>
+      <input id="payout" type="number" x-model="payout" required step="0.01" min="1"
+             class="input-field text-lg font-bold">
       <div class="grid grid-cols-2 gap-3 text-sm" x-show="payoutNumber > 0" x-cloak>
         <div class="card bg-surface-alt px-3 py-2.5">
-          <p class="text-[11px] uppercase tracking-wide text-gray-500">Comprador paga</p>
+          <p class="text-[11px] uppercase tracking-wide text-gray-500">Quem compra paga</p>
           <p class="font-bold text-lg" x-text="'R$ ' + buyerPrice.toFixed(2)"></p>
-          <p class="text-[11px] text-gray-500">(item + comissão de {{ commission_percent }}%)</p>
+          <p class="text-[11px] text-gray-500">item + comissão de {{ commission_percent|floatformat:"-2" }}%</p>
         </div>
         <div class="card bg-surface-alt px-3 py-2.5 border-emerald-500/30">
           <p class="text-[11px] uppercase tracking-wide text-gray-500">Você recebe</p>
           <p class="font-bold text-lg text-emerald-400" x-text="'R$ ' + payoutNumber.toFixed(2)"></p>
-          <p class="text-[11px] text-gray-500">líquido, direto na sua carteira</p>
+          <p class="text-[11px] text-gray-500">líquido, na sua chave Pix</p>
         </div>
       </div>
-      <p class="input-help">O frete e a embalagem são pagos pelo comprador à parte — não saem do seu valor.</p>
+      <p class="input-help">
+        O valor fica em custódia e é liberado quando quem comprou confirmar o recebimento.
+      </p>
     </div>
 
-    <div class="grid grid-cols-2 gap-3">
+    {# -------------------------------------------------------- entrega física #}
+    <div class="purchase-panel space-y-4" x-show="kind !== 'digital'" x-cloak>
+      <p class="font-semibold">Envio e disponibilidade</p>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <div x-show="kind === 'physical'">
+          <label class="input-label" for="weight">Peso (gramas)</label>
+          <input id="weight" type="number" x-model="weight" min="10" max="30000" placeholder="200" class="input-field">
+          <p class="input-help">É o que calcula o frete.</p>
+        </div>
+        <div>
+          <label class="input-label" for="stock">Quantidade</label>
+          <input id="stock" type="number" x-model="stock" required min="1" max="1000" class="input-field">
+        </div>
+        <div x-show="kind === 'custom'">
+          <label class="input-label" for="production">Prazo de produção (dias)</label>
+          <input id="production" type="number" x-model="productionDays" min="0" max="90" class="input-field">
+        </div>
+      </div>
+    </div>
+
+    {# ---------------------------------------------------------------- mídia #}
+    <div class="purchase-panel space-y-4">
       <div>
-        <label class="input-label" for="weight">Peso (gramas)</label>
-        <input id="weight" type="number" x-model="weight" required min="10" max="30000" placeholder="200" class="input-field">
+        <p class="font-semibold">4. Mostre o que está vendendo</p>
+        <p class="text-xs text-gray-500 mt-1">Fotos nítidas e variadas aumentam confiança. A primeira vira capa.</p>
       </div>
       <div>
-        <label class="input-label" for="stock">Quantidade</label>
-        <input id="stock" type="number" x-model="stock" required min="1" max="100" value="1" class="input-field">
+        <label class="input-label" for="images">Fotos (até 5 — a primeira é a capa)</label>
+        <input id="images" type="file" accept="image/*" multiple required class="input-field"
+               @change="files = $event.target.files">
+        <p class="input-help">Sem rosto ou sinais identificáveis, se preferir anonimato. Passam por moderação.</p>
+      </div>
+
+      <div>
+        <label class="input-label" for="videos">Vídeo do item (opcional, até 2)</label>
+        <input id="videos" type="file" accept="video/mp4,video/quicktime,video/webm" multiple class="input-field"
+               @change="videoFiles = $event.target.files">
+        <p class="input-help">Vídeo mostrando a peça. Nada de nudez — vai para revisão manual.</p>
+      </div>
+
+      <div x-show="kind === 'digital'" x-cloak>
+        <label class="input-label" for="assets">Arquivos entregues ao comprador</label>
+        <input id="assets" type="file" multiple class="input-field" @change="assetFiles = $event.target.files">
+        <p class="input-help">
+          Até 10 arquivos, 200MB cada. Só quem pagou consegue baixar — o link é individual por pedido.
+        </p>
       </div>
     </div>
 
-    <div>
-      <label class="input-label" for="images">Fotos (até 5 — a primeira é a capa)</label>
-      <input id="images" type="file" name="images" accept="image/*" multiple required class="input-field" @change="files = $event.target.files">
-      <p class="input-help">Sem rosto ou sinais identificáveis, se preferir anonimato. As fotos passam por moderação.</p>
-    </div>
+    {# ----------------------------------------------------------- adicionais #}
+    <div class="purchase-panel space-y-4">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="input-label mb-0">Adicionais pagos (opcional)</p>
+          <p class="text-xs text-gray-500 mt-1">
+            Extras que quem compra pode marcar no anúncio, cobrados no mesmo pedido.
+          </p>
+        </div>
+        <button type="button" class="btn-secondary !py-2 !min-h-0 text-sm shrink-0" @click="addAddon()">
+          + Adicionar
+        </button>
+      </div>
 
-    <div>
-      <label class="input-label" for="videos">Vídeo do item (opcional, até 2)</label>
-      <input id="videos" type="file" name="videos" accept="video/mp4,video/quicktime,video/webm" multiple class="input-field" @change="videoFiles = $event.target.files">
-      <p class="input-help">Só vídeo mostrando/descrevendo o item (ex.: "aqui está a peça, tamanho M..."). Nada de nudez ou conteúdo sexual — vai para moderação manual antes de publicar.</p>
+      <template x-for="(addon, index) in addons" :key="index">
+        <div class="rounded-xl border border-surface-border p-3 space-y-2">
+          <div class="grid sm:grid-cols-[1fr_9rem] gap-2">
+            <input type="text" x-model="addon.title" maxlength="80" placeholder="Ex.: com bilhete escrito à mão"
+                   class="input-field">
+            <input type="number" x-model="addon.payout_amount" step="0.01" min="1" placeholder="Valor p/ você"
+                   class="input-field">
+          </div>
+          <input type="text" x-model="addon.description" maxlength="200" placeholder="Detalhe (opcional)"
+                 class="input-field">
+          <div class="flex items-center justify-between">
+            <p class="text-[11px] text-gray-500"
+               x-text="addon.payout_amount ? 'Quem compra paga R$ ' + addonBuyerPrice(addon).toFixed(2) : ''"></p>
+            <button type="button" class="text-xs text-gray-500 hover:text-red-300" @click="removeAddon(index)">
+              Remover
+            </button>
+          </div>
+        </div>
+      </template>
     </div>
 
     <p x-show="error" x-text="error" class="input-error"></p>
-    <button type="submit" class="btn-primary w-full" :disabled="loading">
+    <button type="submit" class="btn-primary w-full text-base sticky bottom-20 md:bottom-4 z-20 shadow-float" :disabled="loading">
       <span x-show="!loading">Enviar anúncio para moderação</span>
       <span x-show="loading">Enviando…</span>
     </button>
@@ -92,52 +212,99 @@
 
 {% block extra_body %}
 <script>
-function productCreate() {
+function productCreate(commissionPercent) {
   return {
+    commissionPercent: Number(commissionPercent) || 0,
+    kind: "physical",
     title: "",
     description: "",
     categoryId: "",
     payout: "",
     weight: "",
     stock: 1,
+    productionDays: 0,
+    addons: [],
     files: null,
     videoFiles: null,
+    assetFiles: null,
     loading: false,
     error: "",
     done: false,
+
     get payoutNumber() {
       const value = parseFloat(this.payout);
       return isNaN(value) ? 0 : value;
     },
     get buyerPrice() {
-      return this.payoutNumber * (1 + {{ commission_percent }} / 100);
+      return this.payoutNumber * (1 + this.commissionPercent / 100);
+    },
+    addonBuyerPrice(addon) {
+      const value = parseFloat(addon.payout_amount);
+      return (isNaN(value) ? 0 : value) * (1 + this.commissionPercent / 100);
+    },
+    addAddon() {
+      this.addons.push({ title: "", description: "", payout_amount: "" });
+    },
+    removeAddon(index) {
+      this.addons.splice(index, 1);
     },
     resetForm() {
-      this.title = ""; this.description = ""; this.categoryId = "";
-      this.payout = ""; this.weight = ""; this.stock = 1;
-      this.files = null; this.videoFiles = null; this.done = false; this.error = "";
+      this.kind = "physical";
+      this.title = "";
+      this.description = "";
+      this.categoryId = "";
+      this.payout = "";
+      this.weight = "";
+      this.stock = 1;
+      this.productionDays = 0;
+      this.addons = [];
+      this.files = null;
+      this.videoFiles = null;
+      this.assetFiles = null;
+      this.done = false;
+      this.error = "";
     },
+
     async submit() {
-      this.loading = true; this.error = "";
+      this.loading = true;
+      this.error = "";
       try {
         const formData = new FormData();
+        formData.append("kind", this.kind);
         formData.append("title", this.title);
         formData.append("description", this.description);
         formData.append("category_id", this.categoryId);
         formData.append("payout_amount", this.payout);
-        formData.append("weight_grams", this.weight);
+        formData.append("weight_grams", this.kind === "physical" ? this.weight || 0 : 0);
         formData.append("stock", this.stock);
+        formData.append("production_days", this.kind === "custom" ? this.productionDays || 0 : 0);
+        // Adicionais vão como JSON: FormData não aninha objeto.
+        formData.append(
+          "addons",
+          JSON.stringify(
+            this.addons
+              .filter((addon) => addon.title.trim() && parseFloat(addon.payout_amount) > 0)
+              .map((addon) => ({
+                title: addon.title.trim(),
+                description: (addon.description || "").trim(),
+                payout_amount: addon.payout_amount,
+              }))
+          )
+        );
         for (const file of this.files || []) formData.append("images", file);
         for (const file of this.videoFiles || []) formData.append("videos", file);
+        for (const file of this.assetFiles || []) formData.append("assets", file);
 
-        const resp = await fetch("{% url 'catalog_api:api_create' %}", {
+        const response = await fetch("{% url 'catalog_api:api_create' %}", {
           method: "POST",
-          headers: { "X-CSRFToken": window.CSRF_TOKEN },
+          credentials: "same-origin",
+          headers: { "X-CSRFToken": window.getCsrfToken() },
           body: formData,
         });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          this.error = data.detail || Object.values(data).flat().join(" ") || "Não foi possível enviar o anúncio.";
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          this.error =
+            data.detail || Object.values(data).flat().join(" ") || "Não foi possível enviar o anúncio.";
           return;
         }
         this.done = true;

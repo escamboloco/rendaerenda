@@ -1,0 +1,280 @@
+{% extends "core/base.html" %}
+{% block title %}Pedido {{ order.short_id }} — Renda &amp; Renda{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-4"
+     x-data="orderTracker('{{ order.access_token }}', {{ order.is_open_for_payment|yesno:'true,false' }})">
+
+  <div class="flex items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-bold">Pedido {{ order.short_id }}</h1>
+      <p class="text-xs text-gray-500">{{ order.created_at|date:"d/m/Y H:i" }} · {{ order.store.display_name }}</p>
+    </div>
+    <span class="badge {% if order.status == 'paid' or order.status == 'shipped' or order.status == 'delivered' %}badge-verified{% elif order.status == 'awaiting_payment' %}badge-pending{% else %}badge-neutral{% endif %}">
+      {{ order.get_status_display }}
+    </span>
+  </div>
+
+  {# ------------------------------------------------------ linha do tempo #}
+  {% if order.status != 'expired' and order.status != 'canceled' and order.status != 'refunded' %}
+  {% with s=order.shipment %}
+  <section class="card p-5">
+    {% comment %}
+    Cada etapa sabe onde o dinheiro está. É a dúvida real de quem comprou
+    num site que não conhece: "já pagaram a vendedora?".
+    {% endcomment %}
+    <ol class="grid grid-cols-4 gap-2 text-center">
+      {% for step in timeline %}
+      <li class="space-y-2">
+        <div class="h-1 rounded-full {% if step.done %}bg-brand{% elif step.current %}bg-brand/40{% else %}bg-surface-border{% endif %}"></div>
+        <p class="text-[11px] font-medium {% if step.done or step.current %}text-gray-200{% else %}text-gray-600{% endif %}">
+          {{ step.label }}
+        </p>
+        <p class="text-[10px] leading-tight {% if step.current %}text-accent-blush{% else %}text-gray-600{% endif %}">
+          {{ step.hint }}
+        </p>
+      </li>
+      {% endfor %}
+    </ol>
+
+    {% if order.status == 'paid' or order.status == 'shipped' %}
+    <p class="text-[11px] text-gray-500 mt-4 pt-3 border-t border-surface-border">
+      O valor do item está retido com a plataforma. A vendedora só recebe quando você confirmar —
+      ou {{ dispute_window_days }} dias após a entrega, se você não responder.
+    </p>
+    {% endif %}
+  </section>
+  {% endwith %}
+  {% endif %}
+
+  {# ------------------------------------------------ pagamento em aberto #}
+  {% if order.is_open_for_payment %}
+  <section class="card p-5 space-y-4">
+    <div>
+      {% if payment.method == 'pix' %}
+      <h2 class="font-semibold">Pague com Pix para confirmar</h2>
+      <p class="text-sm text-gray-400 mt-1">
+        Use o <strong class="text-white">mesmo CPF</strong> informado na compra — Pix de terceiro é estornado
+        automaticamente por exigência de verificação de idade.
+      </p>
+      {% else %}
+      <h2 class="font-semibold">Conclua o pagamento</h2>
+      <p class="text-sm text-gray-400 mt-1">
+        O pagamento é feito na página segura do Asaas. Assim que for aprovado, o status aqui muda sozinho.
+      </p>
+      {% endif %}
+    </div>
+
+    {% if payment.pix_qr_code %}
+    <div class="flex justify-center">
+      <div class="bg-white p-3 rounded-2xl">
+        <img src="{{ payment.pix_qr_code }}" alt="QR Code Pix" class="w-52 h-52 block">
+      </div>
+    </div>
+    {% endif %}
+
+    {% if payment.pix_copy_paste %}
+    {{ payment.pix_copy_paste|json_script:"pix-payload" }}
+    <div class="space-y-2">
+      <p class="input-label">Pix copia e cola</p>
+      <textarea readonly rows="3" class="input-field font-mono text-xs" @focus="$event.target.select()">{{ payment.pix_copy_paste }}</textarea>
+      <button type="button" class="btn-primary w-full"
+              @click="copy(JSON.parse(document.getElementById('pix-payload').textContent))">
+        <span x-show="!copied">Copiar código Pix</span>
+        <span x-cloak x-show="copied">Código copiado ✓</span>
+      </button>
+    </div>
+    {% endif %}
+
+    {% if payment.payment_url %}
+    <a href="{{ payment.payment_url }}" target="_blank" rel="noopener" class="btn-secondary w-full">Abrir a página do Asaas</a>
+    {% endif %}
+
+    <div class="flex items-center justify-center gap-2 text-xs text-gray-500">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      Confirmamos automaticamente assim que o Pix cair.
+    </div>
+  </section>
+  {% elif order.status == 'paid' %}
+  <div class="card p-4 text-sm text-emerald-200 border-emerald-900/40">
+    Pagamento confirmado. A loja foi avisada e vai postar o item.
+  </div>
+  {% elif order.status == 'shipped' %}
+  <div class="card p-4 text-sm text-sky-200 border-sky-900/40">
+    Pedido enviado. O código de rastreio está abaixo.
+  </div>
+  {% elif order.status == 'delivered' %}
+  <div class="card p-4 text-sm text-emerald-200 border-emerald-900/40">
+    Entregue. Obrigado pela compra!
+  </div>
+  {% elif order.status == 'expired' %}
+  <div class="card p-4 text-sm text-amber-200 border-amber-900/50">
+    Este pedido expirou sem pagamento e as peças voltaram para a vitrine.
+    <a href="{% url 'stores:detail' order.store.slug %}" class="text-brand hover:underline">Ver a loja de novo</a>.
+  </div>
+  {% elif order.status == 'refunded' %}
+  <div class="card p-4 text-sm text-amber-200 border-amber-900/50">
+    Pagamento estornado. Se o Pix saiu de um CPF diferente do titular do pedido, o estorno é automático.
+  </div>
+  {% endif %}
+
+  {# --------------------------------------------------- conteúdo digital #}
+  {% if digital_assets %}
+  <section class="card p-5 space-y-3 border-emerald-900/40">
+    <div>
+      <p class="font-semibold">Seu conteúdo está liberado</p>
+      <p class="text-xs text-gray-500 mt-0.5">Os links são pessoais: só funcionam com o endereço deste pedido.</p>
+    </div>
+    <ul class="space-y-2">
+      {% for entry in digital_assets %}
+      <li>
+        <a href="{% url 'catalog:download_asset' order.access_token entry.asset.id %}"
+           class="btn-secondary w-full justify-start text-sm">
+          ⬇ {{ entry.asset.label|default:entry.product.title }}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {# ----------------------------------------- custódia: confirmar/contestar #}
+  {% if can_confirm %}
+  <section class="card p-5 space-y-3" x-data="orderRelease('{{ order.access_token }}')">
+    <div>
+      <p class="font-semibold">O pagamento está retido</p>
+      <p class="text-sm text-gray-400 mt-1">
+        A vendedora só recebe quando você confirmar. Recebeu tudo certo? Confirme e libere.
+        Deu problema, conteste em até {{ dispute_window_days }} dias e o valor fica travado para análise.
+      </p>
+    </div>
+    <p x-cloak x-show="error" x-text="error" class="input-error"></p>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" class="btn-primary flex-1" @click="confirm()" :disabled="loading">
+        <span x-show="!loading">Recebi, liberar pagamento</span>
+        <span x-cloak x-show="loading">Enviando…</span>
+      </button>
+      <button type="button" class="btn-secondary !text-red-300" @click="dispute()" :disabled="loading">
+        Tive um problema
+      </button>
+    </div>
+  </section>
+  {% elif order.status == 'disputed' %}
+  <section class="card p-5 text-sm text-amber-200 border-amber-900/50">
+    Contestação registrada. O valor continua retido e a moderação vai analisar o caso — você recebe a
+    resposta por e-mail.
+  </section>
+  {% endif %}
+
+  {# ------------------------------------------------------------- itens #}
+  <section class="card p-5 space-y-3">
+    <p class="font-semibold text-sm">Itens</p>
+    {% for item in order.items.all %}
+    <div class="flex gap-3 items-center">
+      <div class="w-12 h-12 rounded-lg bg-white/5 overflow-hidden shrink-0">
+        {% with cover=item.product.images.first %}
+        {% if cover %}<img src="{{ cover.file.url }}" alt="" class="w-full h-full object-cover">{% endif %}
+        {% endwith %}
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="text-sm truncate">{{ item.product.title }}</p>
+        <p class="text-xs text-gray-500">{{ item.quantity }}x R$ {{ item.unit_price }}</p>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="border-t border-surface-border pt-3 space-y-1 text-sm">
+      <div class="flex justify-between text-gray-400"><span>Itens</span><span>R$ {{ order.items_total }}</span></div>
+      <div class="flex justify-between text-gray-400"><span>Frete</span><span>R$ {{ order.shipping_total }}</span></div>
+      <div class="flex justify-between font-bold pt-1"><span>Total</span><span class="text-brand">R$ {{ order.grand_total }}</span></div>
+    </div>
+  </section>
+
+  {% if order.shipment and order.shipment.tracking_code %}
+  <section class="card p-5 space-y-1 text-sm">
+    <p class="font-semibold">Rastreio</p>
+    <p class="font-mono text-gray-300">{{ order.shipment.tracking_code }}</p>
+    {% if order.shipment.last_tracking_event %}
+    <p class="text-xs text-gray-500">{{ order.shipment.last_tracking_event }}</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {# ------------------------------------------------------------- conversa #}
+  <section class="card p-5 space-y-3" x-data="orderChat('{{ order.access_token }}')">
+    <div>
+      <p class="font-semibold">Conversa com {{ order.store.display_name }}</p>
+      <p class="text-xs text-gray-500 mt-0.5">
+        Combine detalhes por aqui. Mensagem pedindo contato ou pagamento fora da plataforma é bloqueada —
+        é o que mantém sua proteção valendo.
+      </p>
+    </div>
+
+    <div id="chat-scroll" class="space-y-3 max-h-80 overflow-y-auto pr-1">
+      <template x-if="!messages.length">
+        <div class="text-center py-8 space-y-3">
+          <p class="text-sm text-gray-500">Nenhuma mensagem ainda.</p>
+          {% comment %} Sugestão de primeira mensagem: quase ninguém sabe o que
+             escrever, e conversa iniciada reduz contestação depois.
+{% endcomment %}
+          <div class="flex flex-wrap justify-center gap-2">
+            <template x-for="suggestion in suggestions" :key="suggestion">
+              <button type="button" class="chip !text-xs !py-1.5" @click="text = suggestion; $refs.input.focus()"
+                      x-text="suggestion"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <template x-for="message in messages" :key="message.id">
+        <div class="flex gap-2 items-end" :class="message.mine ? 'justify-end' : 'justify-start'">
+          <div x-show="!message.mine"
+               class="w-7 h-7 rounded-full bg-accent-orchid/25 border border-surface-border shrink-0
+                      flex items-center justify-center text-[10px] text-accent-blush"
+               x-text="message.sender === 'seller' ? 'V' : 'C'"></div>
+
+          <div class="max-w-[78%] rounded-2xl px-3.5 py-2.5"
+               :class="message.mine
+                 ? 'bg-brand/20 border border-brand/30 rounded-br-sm'
+                 : 'bg-surface-alt border border-surface-border rounded-bl-sm'">
+            <p class="text-sm text-gray-100 whitespace-pre-line break-words" x-text="message.body"></p>
+            <p class="text-[10px] text-gray-600 mt-1 flex items-center gap-1.5">
+              <span x-text="message.sender === 'seller' ? 'Vendedora' : 'Comprador'"></span>
+              <span x-show="message.created_at">·</span>
+              <span x-text="formatTime(message.created_at)"></span>
+            </p>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <form @submit.prevent="send()" class="flex gap-2">
+      <input type="text" x-ref="input" x-model="text" maxlength="1000" class="input-field"
+             placeholder="Escreva uma mensagem…" :disabled="sending">
+      <button type="submit" class="btn-primary !px-4 shrink-0" :disabled="sending || !text.trim()">
+        <span x-show="!sending">Enviar</span>
+        <span x-cloak x-show="sending">…</span>
+      </button>
+    </form>
+    <p x-show="error" x-text="error" class="input-error"></p>
+    <p class="text-[11px] text-gray-600">
+      A conversa fica registrada e serve de prova se houver contestação.
+    </p>
+  </section>
+
+  {% if order.shipping_address %}
+  <section class="card p-5 text-sm space-y-1">
+    <p class="font-semibold">Entrega</p>
+    <p class="text-gray-400">{{ order.shipping_address.street }}, {{ order.shipping_address.number }}{% if order.shipping_address.complement %} — {{ order.shipping_address.complement }}{% endif %}</p>
+    <p class="text-gray-400">{{ order.shipping_address.neighborhood }} — {{ order.shipping_address.city }}/{{ order.shipping_address.state }}</p>
+    <p class="text-gray-400">CEP {{ order.shipping_address.cep }}</p>
+  </section>
+  {% endif %}
+
+  <p class="text-xs text-gray-500">
+    A loja é responsável pelo envio. Guarde este link para acompanhar — por privacidade, os e-mails
+    não citam o título dos itens.
+  </p>
+</div>
+{% endblock %}

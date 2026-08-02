@@ -1,67 +1,433 @@
 {% extends "core/base.html" %}
-{% block title %}Renda &amp; Renda — Classificados +18 entre adultos verificados{% endblock %}
-{% block description %}Compre e venda itens íntimos usados direto com vendedoras verificadas. Sem mensalidade — pague só na compra. Cobrança discreta e envio rastreado.{% endblock %}
+{% block title %}Renda &amp; Renda — marketplace +18 com pagamento em custódia{% endblock %}
+{% block description %}Peças íntimas usadas e conteúdo digital direto de vendedoras verificadas. O Pix fica retido até você confirmar a entrega. Embalagem neutra e cobrança discreta.{% endblock %}
 {% block robots %}index, follow{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 
+{% block extra_head %}
+{% comment %} FAQ estruturada: o Google pode exibir as perguntas direto no resultado
+   de busca. É o tipo de ganho que só existe se o dado for o mesmo da
+   página — por isso a lista vem do mesmo lugar (stores.views.HOME_FAQ).
+{% endcomment %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {% for item in faq %}
+    {
+      "@type": "Question",
+      "name": "{{ item.0|escapejs }}",
+      "acceptedAnswer": {"@type": "Answer", "text": "{{ item.1|escapejs }}"}
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endblock %}
+
 {% block content %}
-<section class="hero-glow -mx-4 sm:-mx-6 px-4 sm:px-6 pt-2 pb-10 text-center max-w-2xl mx-auto mb-2 space-y-4 rounded-b-[2rem]">
-  <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">
-    Classificados <span class="text-gradient-brand">+18</span> entre adultos verificados
-  </h1>
-  <p class="text-gray-400">Compra e venda direta com vendedoras verificadas. Privacidade em primeiro lugar, cobrança discreta, envio rastreado.</p>
-  <div class="flex flex-wrap justify-center gap-3 pt-2 text-xs text-gray-500">
-    <span class="badge-verified">Idade verificada por biometria</span>
-    <span class="badge-neutral">Sem mensalidade — pague só na compra</span>
-    <span class="badge-neutral">Envio via Correios</span>
+{% url 'stores:listing' as listing_url %}
+
+{# ============================================================== hero ==== #}
+<section class="hero-shell mb-8 sm:mb-12 animate-fade-up">
+  <div class="hero-grid">
+    <div class="space-y-6">
+      <span class="eyebrow inline-flex items-center gap-2">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.8)]"></span>
+        Marketplace privado para adultos
+      </span>
+      <div class="space-y-4">
+        <h1 class="text-[2.65rem] sm:text-6xl lg:text-7xl font-bold leading-[.94] max-w-3xl">
+          Desejo com <em class="text-gradient-brand not-italic">privacidade.</em><br>
+          Compra sem medo.
+        </h1>
+        <p class="text-gray-400 max-w-xl text-sm sm:text-base leading-relaxed">
+          Descubra peças únicas e packs de vendedoras verificadas. Pague com proteção,
+          receba em embalagem neutra e acompanhe tudo sem exposição.
+        </p>
+      </div>
+
+      <form action="{% url 'stores:listing' %}" method="get" class="max-w-xl">
+        <div class="relative rounded-2xl bg-white p-1.5 shadow-float">
+          <input type="search" name="q" placeholder="Ex.: renda preta, meia 7/8, pack..."
+                 class="w-full h-12 bg-transparent pl-11 pr-28 text-surface placeholder-gray-500 outline-none text-sm"
+                 aria-label="Buscar anúncios">
+          <svg class="w-5 h-5 text-gray-500 absolute left-4 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+          </svg>
+          <button type="submit" class="btn-primary absolute right-1.5 top-1.5 bottom-1.5 !min-h-0 !py-2 !px-5">Buscar</button>
+        </div>
+      </form>
+
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+        <a href="{% url 'stores:listing' %}" class="btn-primary">Explorar anúncios</a>
+        <a href="{% url 'stores:sell' %}" class="btn-ghost justify-start">Quero vender <span aria-hidden="true">→</span></a>
+      </div>
+    </div>
+
+    {% if header_stores %}
+    <div class="hero-shop-carousel" x-data="carousel()">
+      <div class="hero-shop-carousel__track" x-ref="track" @scroll.passive="measure()">
+        {% for hero_store in header_stores|slice:":6" %}
+        {% with product=hero_store.showcase_products.0 %}
+        {% with cover=product.images.all.0 %}
+        <a href="{% url 'stores:detail' hero_store.slug %}" class="hero-shop-slide group">
+          {% if cover %}
+          <img src="{{ cover.file.url }}" alt="Conheça a loja {{ hero_store.display_name }}" {% if not forloop.first %}loading="lazy"{% endif %}>
+          {% else %}
+          <span class="absolute inset-0 bg-gradient-brand grid place-items-center font-display text-8xl text-white/40">{{ hero_store.display_name|slice:":1" }}</span>
+          {% endif %}
+          <span class="hero-shop-slide__content">
+            <span class="badge-verified mb-2">✓ Loja verificada</span>
+            <strong>{{ hero_store.display_name }}</strong>
+            <small><span class="text-accent-gold">★</span> {{ hero_store.avg_rating }} · {{ hero_store.sales_count }} venda{{ hero_store.sales_count|pluralize }}</small>
+            <span class="hero-shop-slide__cta">Conhecer a loja <span aria-hidden="true">→</span></span>
+          </span>
+        </a>
+        {% endwith %}
+        {% endwith %}
+        {% endfor %}
+      </div>
+      <div class="hero-shop-carousel__controls">
+        <button type="button" class="carousel-btn !bg-surface/80" @click="scrollBy(-1)" :disabled="!canPrev" aria-label="Loja anterior">‹</button>
+        <div class="carousel-progress !m-0 flex-1"><div class="carousel-progress__bar" :style="'width: ' + Math.max(progress, 8) + '%'"></div></div>
+        <button type="button" class="carousel-btn !bg-surface/80" @click="scrollBy(1)" :disabled="!canNext" aria-label="Próxima loja">›</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="hero-orbit" aria-hidden="true">
+      <div class="hero-orbit__core">
+        <span class="hero-orbit__ring hero-orbit__ring--one"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--two"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--three"></span>
+        <span class="hero-orbit__gem"></span>
+      </div>
+      <span class="absolute left-5 top-16 badge-verified shadow-lift">identidade verificada</span>
+      <span class="absolute right-0 bottom-16 badge-neutral shadow-lift">embalagem neutra</span>
+    </div>
+    {% endif %}
   </div>
 </section>
 
-<section class="flex gap-2 overflow-x-auto pb-2 mb-8 -mx-4 px-4 sm:mx-0 sm:px-0">
-  <a href="{% url 'stores:home' %}" class="chip {% if not active_category %}chip-active{% endif %}">Todas</a>
-  {% for category in categories %}
-  <a href="?categoria={{ category.slug }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}"
-     class="chip {% if active_category == category.slug %}chip-active{% endif %}">{{ category.name }}</a>
-  {% endfor %}
-</section>
+<div class="trust-strip mb-10 sm:mb-14">
+  <div class="trust-strip__item">
+    <span class="w-8 h-8 rounded-full bg-emerald-400/10 text-emerald-400 grid place-items-center shrink-0">✓</span>
+    <span><strong class="text-gray-200 block">Compra protegida</strong>dinheiro retido até a confirmação</span>
+  </div>
+  <div class="trust-strip__item">
+    <span class="w-8 h-8 rounded-full bg-accent-orchid/15 text-accent-blush grid place-items-center shrink-0">◎</span>
+    <span><strong class="text-gray-200 block">Privacidade real</strong>extrato e embalagem discretos</span>
+  </div>
+  <div class="trust-strip__item">
+    <span class="w-8 h-8 rounded-full bg-accent-gold/10 text-accent-gold grid place-items-center shrink-0">★</span>
+    <span><strong class="text-gray-200 block">Vendedoras verificadas</strong>documento e moderação prévia</span>
+  </div>
+</div>
 
-{% if request.GET.q %}
-<p class="text-sm text-gray-500 mb-4">Resultados para "<span class="text-gray-300">{{ request.GET.q }}</span>"</p>
+{# ====================================================== categorias ==== #}
+{% if home_categories %}
+<section class="section">
+  <div class="rail-head">
+    <div>
+      <span class="eyebrow">Comece por aqui</span>
+      <h2 class="section-title mt-2">O que você procura?</h2>
+      <p class="section-sub">Catálogo organizado por intenção — sem precisar adivinhar filtros.</p>
+    </div>
+    <a href="{% url 'stores:categories' %}" class="rail-link">todas →</a>
+  </div>
+  <div class="rail sm:grid sm:grid-cols-4 lg:grid-cols-6 sm:overflow-visible sm:mx-0 sm:px-0">
+    {% for cat in home_categories %}
+    <a href="{% url 'stores:listing' %}?categoria={{ cat.slug }}"
+       class="quick-category group">
+      <span class="quick-category__icon">
+        <svg class="w-6 h-6 transition group-hover:rotate-6 group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 5c2.5 2 7.5 2 10 0l2 4-3 2v8H8v-8L5 9l2-4z"/>
+        </svg>
+      </span>
+      <span class="block text-sm font-semibold text-gray-100">{{ cat.name }}</span>
+      <span class="text-[11px] text-gray-500">{{ cat.active_count }} disponíveis</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
 {% endif %}
 
-<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-  {% for store in stores %}
-  <a href="{% url 'stores:detail' store.slug %}" class="card card-hover group">
-    <div class="aspect-square bg-white/5 flex items-center justify-center text-gray-600 text-xs relative overflow-hidden">
-      {% with cover=store.products.first.images.first %}
-      {% if cover %}
-      <img src="{{ cover.file.url }}" alt="{{ store.display_name }}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-      {% else %}
-      <span>{{ store.display_name|slice:":1" }}</span>
-      {% endif %}
-      {% endwith %}
-      {% if store.id in boosted_ids %}
-      <span class="badge-boost absolute top-2 left-2">Destaque</span>
-      {% endif %}
-    </div>
-    <div class="p-3">
-      <p class="font-semibold truncate flex items-center gap-1">
-        {{ store.display_name }}
-        <svg class="w-3.5 h-3.5 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 1l2.39 1.94 3.03-.36.99 2.9 2.9.99-.36 3.03L21 12l-1.94 2.39.36 3.03-2.9.99-.99 2.9-3.03-.36L10 23l-2.39-1.94-3.03.36-.99-2.9-2.9-.99.36-3.03L-1 12l1.94-2.39-.36-3.03 2.9-.99.99-2.9 3.03.36L10 1zm-1.2 13.6l5.6-5.6-1.13-1.13-4.47 4.47-2.07-2.07L5.6 11.4l3.2 3.2z" clip-rule="evenodd"/></svg>
+{# ====================================================== destaques ==== #}
+{% if products %}
+{% include "catalog/_carousel.html" with items=products|slice:":10" title="Escolhas para você" subtitle="Disponíveis agora, com compra protegida" link=listing_url link_label="ver todos" show_store=True %}
+{% endif %}
+
+{% if top_sellers %}
+{% include "catalog/_carousel.html" with items=top_sellers title="Mais vendidos" subtitle="Quem já saiu daqui com entrega confirmada" link=listing_url|add:"?ordem=relevancia" link_label="ver mais" show_store=True %}
+{% endif %}
+
+{# ========================================================= custódia ==== #}
+{% comment %}
+Bento grid: blocos de tamanhos diferentes numa grade única. Organiza sem
+ficar monótono como uma fileira de cards iguais, e deixa a informação mais
+importante (a custódia) ocupar o espaço que ela merece.
+{% endcomment %}
+<section class="section">
+  <div class="section-head">
+    <span class="eyebrow">Compra protegida</span>
+    <h2 class="section-title text-3xl sm:text-[2.6rem] mt-2">
+      Seu dinheiro fica guardado até o pedido chegar
+    </h2>
+    <p class="section-sub">
+      Comprar por rede social é pagar e torcer. Aqui o Pix não vai para a vendedora: fica com a
+      plataforma até você confirmar — ou até {{ dispute_window_days }} dias sem reclamação.
+    </p>
+  </div>
+
+  <div class="bento">
+    {# bloco principal, ocupa 2 colunas #}
+    <article class="bento-item bento-item--wide surface-raised grain overflow-hidden p-6 sm:p-8 border-brand/25">
+      <div class="trust-icon mb-4">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3l7 3v6c0 4.4-3 7.7-7 9-4-1.3-7-4.6-7-9V6l7-3z"/></svg>
+      </div>
+      <h3 class="font-display text-xl sm:text-2xl text-white leading-tight">Pagamento em custódia</h3>
+      <p class="text-sm text-gray-400 leading-relaxed mt-2 max-w-md">
+        Você nunca paga direto para a vendedora. O valor fica retido com a plataforma e só é
+        liberado depois que você confirma que recebeu. Deu problema, você contesta e o dinheiro
+        trava na hora, antes de sair.
       </p>
-      <div class="flex items-center gap-1 text-xs text-gray-500 truncate">
-        {% if store.review_count %}
-        <svg class="w-3 h-3 text-accent-gold shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.958a1 1 0 00.95.69h4.162c.969 0 1.371 1.24.588 1.81l-3.368 2.447a1 1 0 00-.363 1.118l1.287 3.959c.299.921-.755 1.688-1.539 1.118l-3.367-2.447a1 1 0 00-1.176 0l-3.367 2.447c-.784.57-1.838-.197-1.539-1.118l1.287-3.959a1 1 0 00-.363-1.118L2.062 9.385c-.783-.57-.38-1.81.588-1.81h4.163a1 1 0 00.95-.69l1.286-3.958z"/></svg>
-        <span class="text-gray-300">{{ store.avg_rating }}</span>
-        <span>({{ store.review_count }})</span>
-        <span>·</span>
-        {% endif %}
-        <span>{{ store.products.count }} itens</span>
+      <a href="{% url 'stores:how_it_works' %}" class="rail-link inline-block mt-4">como funciona →</a>
+    </article>
+
+    {% if stats.show %}
+    <article class="bento-item surface-raised p-6 flex flex-col justify-center">
+      <p class="stat-value">{{ stats.delivered }}</p>
+      <p class="stat-label">entregas confirmadas</p>
+      {% if stats.rating %}
+      <p class="stat-value mt-5">{{ stats.rating }}</p>
+      <p class="stat-label">nota média das lojas</p>
+      {% endif %}
+    </article>
+    {% else %}
+    <article class="bento-item surface-raised p-6 flex flex-col justify-center">
+      <p class="stat-value">100%</p>
+      <p class="stat-label">dos pedidos com valor em custódia</p>
+      <p class="text-[11px] text-gray-600 mt-3 leading-relaxed">
+        Sem exceção e sem plano pago para ter proteção.
+      </p>
+    </article>
+    {% endif %}
+
+    <article class="bento-item surface-raised p-6">
+      <div class="trust-icon mb-3">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16v13H4zM4 7l2-3h12l2 3M9 11h6"/></svg>
+      </div>
+      <h3 class="font-semibold text-sm">Embalagem neutra</h3>
+      <p class="text-xs text-gray-500 leading-relaxed mt-1.5">
+        Caixa sem logo, sem tema e sem remetente que entregue o conteúdo. O custo dela já vem
+        embutido no frete.
+      </p>
+    </article>
+
+    <article class="bento-item surface-raised p-6">
+      <div class="trust-icon mb-3">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/></svg>
+      </div>
+      <h3 class="font-semibold text-sm">Extrato discreto</h3>
+      <p class="text-xs text-gray-500 leading-relaxed mt-1.5">
+        A cobrança aparece com nome neutro. Nada no extrato indica o site nem o tipo de produto.
+      </p>
+    </article>
+
+    <article class="bento-item surface-raised p-6">
+      <div class="trust-icon mb-3">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M12 3l7 3v6c0 4.4-3 7.7-7 9-4-1.3-7-4.6-7-9V6l7-3z"/></svg>
+      </div>
+      <h3 class="font-semibold text-sm">Identidade conferida</h3>
+      <p class="text-xs text-gray-500 leading-relaxed mt-1.5">
+        Quem vende envia documento e selfie, conferidos por uma pessoa da equipe. Perfil anônimo
+        não anuncia.
+      </p>
+    </article>
+  </div>
+</section>
+
+{# ========================================================= novidades ==== #}
+{% if newest %}
+{% include "catalog/_carousel.html" with items=newest title="Acabou de entrar" subtitle="Anúncios recém-aprovados pela moderação" link=listing_url|add:"?ordem=recentes" link_label="ver mais" show_store=True %}
+{% endif %}
+
+{# ============================================================ lojas ==== #}
+{% if featured_stores %}
+<section class="section" x-data="carousel()">
+  <div class="rail-head">
+    <div>
+      <span class="eyebrow">Perfis que vendem</span>
+      <h2 class="section-title mt-2">Entre nas lojas mais queridas</h2>
+      <p class="section-sub">Conheça o estilo, a reputação e os produtos de cada vendedora.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="{% url 'stores:ranking' %}" class="rail-link hidden sm:inline">ver ranking →</a>
+      <button type="button" class="carousel-btn hidden md:flex" @click="scrollBy(-1)" :disabled="!canPrev" aria-label="Loja anterior">‹</button>
+      <button type="button" class="carousel-btn hidden md:flex" @click="scrollBy(1)" :disabled="!canNext" aria-label="Próxima loja">›</button>
+    </div>
+  </div>
+  <div class="rail !gap-4" x-ref="track" @scroll.passive="measure()">
+    {% for store in featured_stores %}
+    {% with product=store.showcase_products.0 %}
+    {% with cover=product.images.all.0 %}
+    <a href="{% url 'stores:detail' store.slug %}" class="store-photo-card group">
+      {% if cover %}
+      <img src="{{ cover.file.url }}" alt="Vitrine de {{ store.display_name }}" loading="lazy" class="store-photo-card__image">
+      {% else %}
+      <div class="store-photo-card__image bg-gradient-brand grid place-items-center font-display text-7xl text-white/70">{{ store.display_name|slice:":1" }}</div>
+      {% endif %}
+      <div class="absolute z-10 top-4 left-4 flex gap-2">
+        <span class="badge-verified backdrop-blur bg-surface/70">✓ Verificada</span>
+        {% if store.sales_count %}<span class="badge bg-surface/70 backdrop-blur text-white">{{ store.sales_count }} vendas</span>{% endif %}
+      </div>
+      <div class="store-photo-card__body">
+        <div class="flex items-center gap-2">
+          <span class="w-10 h-10 rounded-xl bg-gradient-brand border border-white/20 grid place-items-center font-display text-lg">{{ store.display_name|slice:":1" }}</span>
+          <div class="min-w-0">
+            <h3 class="font-display text-xl text-white truncate">{{ store.display_name }}</h3>
+            <p class="text-xs text-gray-400"><span class="text-accent-gold">★</span> {{ store.avg_rating }} · {{ store.review_count }} avaliações</p>
+          </div>
+        </div>
+        {% if store.bio %}<p class="text-xs text-gray-400 line-clamp-2 mt-3">{{ store.bio }}</p>{% endif %}
+        <span class="mt-4 min-h-[42px] rounded-xl bg-white text-surface font-bold text-xs flex items-center justify-center group-hover:bg-accent-blush transition">Entrar na loja</span>
+      </div>
+    </a>
+    {% endwith %}
+    {% endwith %}
+    {% endfor %}
+  </div>
+  <div class="carousel-progress" x-cloak x-show="canPrev || canNext">
+    <div class="carousel-progress__bar" :style="'width: ' + Math.max(progress, 6) + '%'"></div>
+  </div>
+</section>
+{% endif %}
+
+{# ==================================================== como funciona ==== #}
+<section class="section">
+  <div class="text-center max-w-xl mx-auto mb-8">
+    <span class="eyebrow">Como funciona</span>
+    <h2 class="section-title mt-2">Da escolha à entrega, em quatro passos</h2>
+  </div>
+
+  <ol class="grid sm:grid-cols-4 gap-3">
+    <li class="card p-5 space-y-2">
+      <span class="font-display text-3xl text-brand-light">1</span>
+      <p class="font-semibold text-sm">Escolha</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Filtre por categoria, veja a reputação da vendedora e pergunte antes de comprar.</p>
+    </li>
+    <li class="card p-5 space-y-2">
+      <span class="font-display text-3xl text-brand-light">2</span>
+      <p class="font-semibold text-sm">Pague com Pix</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Sem cadastro obrigatório. O valor fica retido pela plataforma, não vai para a vendedora.</p>
+    </li>
+    <li class="card p-5 space-y-2">
+      <span class="font-display text-3xl text-brand-light">3</span>
+      <p class="font-semibold text-sm">Receba</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Acompanhe o rastreio pelo link do pedido. Conteúdo digital libera na hora do pagamento.</p>
+    </li>
+    <li class="card p-5 space-y-2">
+      <span class="font-display text-3xl text-brand-light">4</span>
+      <p class="font-semibold text-sm">Confirme</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Deu tudo certo? Confirme e a vendedora recebe. Deu errado? Conteste em até {{ dispute_window_days }} dias.</p>
+    </li>
+  </ol>
+</section>
+
+{# ====================================================== depoimentos ==== #}
+{% if testimonials %}
+<section class="section">
+  <div class="text-center max-w-xl mx-auto mb-6">
+    <span class="eyebrow">Quem já comprou</span>
+    <h2 class="section-title mt-2">O que a comunidade diz</h2>
+    <p class="text-xs text-gray-500 mt-2">
+      Todas as avaliações vêm de pedidos entregues de verdade. Não existe depoimento escrito por nós.
+    </p>
+  </div>
+
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    {% for review in testimonials %}
+    <figure class="card p-5 space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        {% include "reviews/_stars.html" with rating=review.rating size="w-3.5 h-3.5" %}
+        <span class="badge bg-emerald-400/10 text-emerald-400">compra verificada</span>
+      </div>
+      <blockquote class="text-sm text-gray-300 leading-relaxed">“{{ review.comment|truncatechars:180 }}”</blockquote>
+      <figcaption class="text-xs text-gray-600 flex items-center justify-between gap-2">
+        <span>{{ review.buyer.interaction_name }}</span>
+        <a href="{% url 'stores:detail' review.store.slug %}" class="text-gray-500 hover:text-accent-blush truncate">
+          {{ review.store.display_name }}
+        </a>
+      </figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{# ================================================= incluído em tudo ==== #}
+<section class="section">
+  <div class="text-center max-w-xl mx-auto mb-6">
+    <span class="eyebrow">Sem custo extra</span>
+    <h2 class="section-title mt-2">O que está incluído em toda compra</h2>
+  </div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
+    {% for item in included_items %}
+    <div class="card p-4 flex gap-3 items-start">
+      <span class="text-brand-light text-lg leading-none shrink-0">✓</span>
+      <div>
+        <p class="text-sm font-semibold">{{ item.0 }}</p>
+        <p class="text-[11px] text-gray-500 leading-relaxed mt-0.5">{{ item.1 }}</p>
       </div>
     </div>
-  </a>
-  {% empty %}
-  <p class="col-span-full text-gray-500 text-center py-12">Nenhuma loja encontrada.</p>
-  {% endfor %}
-</div>
+    {% endfor %}
+  </div>
+</section>
+
+{# ============================================================== faq ==== #}
+<section class="mb-12" x-data="{ open: null }">
+  <div class="text-center max-w-xl mx-auto mb-6">
+    <span class="eyebrow">Dúvidas</span>
+    <h2 class="section-title mt-2">Perguntas de quem compra pela primeira vez</h2>
+  </div>
+
+  <div class="max-w-2xl mx-auto space-y-2">
+    {% for item in faq %}
+    <div class="card overflow-hidden">
+      <button type="button" class="w-full text-left px-5 py-4 flex items-center justify-between gap-3 hover:bg-white/[0.03] transition"
+              @click="open = open === {{ forloop.counter }} ? null : {{ forloop.counter }}"
+              :aria-expanded="open === {{ forloop.counter }}">
+        <span class="text-sm font-medium">{{ item.0 }}</span>
+        <span class="text-brand-light shrink-0 text-lg leading-none"
+              x-text="open === {{ forloop.counter }} ? '−' : '+'">+</span>
+      </button>
+      <div x-show="open === {{ forloop.counter }}" x-cloak>
+        <p class="px-5 pb-4 text-sm text-gray-400 leading-relaxed">{{ item.1 }}</p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <p class="text-center text-xs text-gray-600 mt-5">
+    Ficou outra dúvida? <a href="{% url 'stores:how_it_works' %}" class="text-brand hover:underline">Veja como funciona em detalhe</a>.
+  </p>
+</section>
+
+{# =========================================================== vender ==== #}
+<section class="surface-raised grain overflow-hidden p-6 sm:p-10 border-accent-orchid/25 flex flex-col sm:flex-row sm:items-center gap-6">
+  <div class="flex-1">
+    <span class="eyebrow">Para vender</span>
+    <h2 class="section-title mt-2">Anunciar é grátis. A plataforma só ganha quando você vende.</h2>
+    <p class="text-gray-400 text-sm mt-3 leading-relaxed">
+      Sem mensalidade e sem taxa de anúncio. A comissão de {{ commission_percent }}% entra por cima do
+      valor que você pediu — você recebe o líquido inteiro, por Pix, na chave que cadastrar.
+    </p>
+  </div>
+  <div class="flex flex-col gap-2 shrink-0">
+    <a href="{% url 'stores:sell' %}" class="btn-primary">Quero vender</a>
+    <a href="{% url 'stores:onboard_page' %}" class="btn-secondary">Abrir minha loja</a>
+  </div>
+</section>
 {% endblock %}

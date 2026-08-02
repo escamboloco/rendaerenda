@@ -1,39 +1,57 @@
 """
-Camada de integracao com a Instituicao de Pagamento (PSP). O principio
-de arquitetura aqui e o que resolve o problema juridico descrito em
-docs/BASE_JURIDICA.md: A PLATAFORMA NUNCA CUSTODIA DINHEIRO. Quem
-recebe, retem e libera o dinheiro e o PSP (Asaas ou Iugu), atraves de:
+Regra de negocio da integracao com a Instituicao de Pagamento (PSP).
 
-  1. Uma subconta por vendedora (criada no onboarding da loja).
-  2. Split automatico configurado por cobranca: X% cai direto na
-     subconta da vendedora, o resto na conta master da plataforma.
-  3. Saque via Pix feito pela propria vendedora dentro da conta dela
-     no PSP (nos so espelhamos o saldo aqui - ver apps.wallet).
+Dois modos (settings.ASAAS_ACCOUNT_TYPE):
 
-Regra "pagamento so pelo CPF do titular": toda cobranca e criada em um
-customer do PSP amarrado ao CPF da conta (get_or_create por cpfCnpj);
-no cartao o Asaas valida titularidade, e no Pix o CPF de quem pagou
-chega no webhook/consulta - qualquer divergencia gera estorno
-automatico (ver apps.payments.views.asaas_webhook + verify_payer_cpf).
+  pf — Conta pessoa fisica. Sem subconta/split (bloqueado pelo Bacen).
+       Cobra 100% na conta da plataforma; na confirmacao repassa a parte
+       da vendedora via Pix (POST /transfers).
 
-Trocar de provider = trocar a classe usada em `get_payment_provider()`.
-Nao ha dependencia direta de Asaas/Iugu fora deste arquivo.
+  pj — Conta CNPJ. Subconta por vendedora + split na propria cobranca.
+
+O HTTP cru fica em apps/payments/asaas.py. Aqui so tem a traducao entre o
+dominio (pedido, vendedora, comissao) e o PSP.
 """
 from __future__ import annotations
 
-import re
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 
-import requests
 from django.conf import settings
+from django.utils import timezone
+
+from .asaas import AsaasClient, AsaasError, digits, payer_document_from_webhook
+
+logger = logging.getLogger(__name__)
+
+# Mantido publico: varios modulos ja importam `_digits` deste arquivo.
+_digits = digits
+
+BILLING_TYPES = {
+    "pix": "PIX",
+    "credit_card": "CREDIT_CARD",
+    "debit_card": "DEBIT_CARD",
+    "boleto": "BOLETO",
+}
+
+
+def asaas_uses_split() -> bool:
+    """True so com conta PJ (subcontas + split nativo)."""
+    return getattr(settings, "ASAAS_ACCOUNT_TYPE", "pf") == "pj"
+
+
+def payment_is_configured() -> bool:
+    return bool((getattr(settings, "ASAAS_API_KEY", "") or "").strip())
 
 
 @dataclass
 class SubaccountResult:
     provider_subaccount_id: str
     pix_key: str | None
+    api_key: str | None = None
 
 
 @dataclass
@@ -41,6 +59,45 @@ class ChargeResult:
     provider_charge_id: str
     payment_url: str | None
     pix_qr_code: str | None
+    pix_copy_paste: str | None = None
+    status: str = "PENDING"
+    is_paid: bool = False
+    pix_expires_at: str | None = None
+
+
+def detect_pix_key_type(pix_key: str) -> str:
+    """Infere o tipo da chave Pix pro Asaas (CPF/CNPJ/EMAIL/PHONE/EVP)."""
+    key = (pix_key or "").strip()
+    if "@" in key:
+        return "EMAIL"
+    if "-" in key and len(key) >= 32:
+        return "EVP"
+    numeric = digits(key)
+    if len(numeric) == 14:
+        return "CNPJ"
+    if len(numeric) == 11:
+        # 11 digitos e ambiguo (CPF x celular com DDD). Chave de telefone no
+        # Asaas so e aceita no formato internacional, entao exigimos o "+"
+        # para tratar como PHONE; o resto e CPF, que e o caso comum.
+        return "PHONE" if key.startswith("+") else "CPF"
+    if len(numeric) in (10, 12, 13):
+        return "PHONE"
+    return "EVP"
+
+
+def age_from_birth_date(birth_date: date) -> int:
+    today = timezone.localdate()
+    return today.year - birth_date.year - (
+        (today.month, today.day) < (birth_date.month, birth_date.day)
+    )
+
+
+def is_adult(birth_date: date) -> bool:
+    return age_from_birth_date(birth_date) >= 18
+
+
+# Alias historico usado em apps.payments.views.
+_adult_from_birth = is_adult
 
 
 class PaymentProvider(ABC):
@@ -60,85 +117,69 @@ class PaymentProvider(ABC):
         customer_cpf: str,
         customer_name: str,
         customer_email: str,
+        return_url: str = "",
     ) -> ChargeResult: ...
 
     @abstractmethod
-    def request_seller_withdrawal(self, *, seller_subaccount_id: str, amount: Decimal, pix_key: str) -> str: ...
+    def request_seller_withdrawal(
+        self,
+        *,
+        seller_subaccount_id: str,
+        amount: Decimal,
+        pix_key: str,
+        pix_key_type: str = "CPF",
+        api_key: str | None = None,
+        reference: str = "",
+    ) -> str: ...
 
     @abstractmethod
     def create_charge(
         self, *, reference_id: str, method: str, amount: Decimal,
         customer_cpf: str, customer_name: str = "", customer_email: str = "",
     ) -> ChargeResult:
-        """Cobranca 100% para a plataforma, sem split (assinatura de compradora, plano de loja, boost)."""
+        """Cobranca 100% para a plataforma, sem split (plano de loja, boost, assinatura)."""
+        ...
+
+    @abstractmethod
+    def get_charge(self, provider_charge_id: str) -> ChargeResult:
+        """Estado atual da cobranca no PSP — base do polling e da reconciliacao."""
         ...
 
     @abstractmethod
     def get_payer_document(self, *, provider_charge_id: str, webhook_payload: dict | None = None) -> str | None:
-        """CPF/CNPJ de quem efetivamente pagou (Pix). None se o PSP ainda nao informou."""
+        """CPF/CNPJ de quem efetivamente pagou (Pix). None se o PSP nao informou."""
         ...
 
     @abstractmethod
     def refund_charge(self, *, provider_charge_id: str) -> None: ...
 
 
-def _digits(value: str | None) -> str:
-    return re.sub(r"\D", "", value or "")
-
-
 class AsaasProvider(PaymentProvider):
     """
-    Requer conta Asaas aprovada por escrito para o nicho (vestuario
-    intimo usado entre particulares - NAO conteudo adulto digital).
-    Docs: https://docs.asaas.com/docs/split-de-pagamentos
+    Conta Asaas (PF ou PJ). Nicho declarado ao PSP: vestuario intimo usado
+    entre pessoas fisicas — NAO conteudo adulto digital. Manter o aceite
+    por escrito (docs/BASE_JURIDICA.md secao 5).
     """
 
-    BILLING_TYPES = {"pix": "PIX", "credit_card": "CREDIT_CARD", "debit_card": "DEBIT_CARD", "boleto": "BOLETO"}
+    def __init__(self, api_key: str | None = None):
+        self.client = AsaasClient(api_key=api_key)
 
-    def __init__(self):
-        self.base_url = settings.ASAAS_API_URL if hasattr(settings, "ASAAS_API_URL") else "https://api.asaas.com/v3"
-        self.api_key = getattr(settings, "ASAAS_API_KEY", "")
-
-    def _headers(self):
-        return {"access_token": self.api_key, "Content-Type": "application/json"}
-
-    def _get_or_create_customer(self, *, cpf: str, name: str, email: str) -> str:
-        """
-        Um customer Asaas por CPF da conta. E o que amarra TODA cobranca ao
-        titular: cartao de credito com CPF de titular diferente do customer
-        e recusado pelo proprio PSP quando `creditCardHolderInfo.cpfCnpj`
-        diverge, e o Pix e conferido por nos no webhook.
-        """
-        resp = requests.get(
-            f"{self.base_url}/customers",
-            headers=self._headers(),
-            params={"cpfCnpj": cpf, "limit": 1},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json().get("data", [])
-        if data:
-            return data[0]["id"]
-
-        resp = requests.post(
-            f"{self.base_url}/customers",
-            headers=self._headers(),
-            json={"name": name or f"Cliente {cpf[-4:]}", "cpfCnpj": cpf, "email": email},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        return resp.json()["id"]
+    # ------------------------------------------------------------ subcontas
 
     def create_seller_subaccount(self, *, seller_name: str, cpf: str, email: str) -> SubaccountResult:
-        resp = requests.post(
-            f"{self.base_url}/accounts",
-            headers=self._headers(),
-            json={"name": seller_name, "cpfCnpj": cpf, "email": email, "mobilePhone": ""},
-            timeout=15,
+        if not asaas_uses_split():
+            # Bacen nao permite subconta em conta pessoa fisica.
+            logger.info("Asaas PF: subconta ignorada para a loja de %s", email or "vendedora")
+            return SubaccountResult(provider_subaccount_id="", pix_key=None, api_key="")
+
+        data = self.client.create_account(name=seller_name, cpf_cnpj=cpf, email=email)
+        return SubaccountResult(
+            provider_subaccount_id=data.get("walletId") or data["id"],
+            pix_key=None,
+            api_key=data.get("apiKey") or "",
         )
-        resp.raise_for_status()
-        data = resp.json()
-        return SubaccountResult(provider_subaccount_id=data["id"], pix_key=data.get("walletId"))
+
+    # ------------------------------------------------------------- cobrancas
 
     def create_split_charge(
         self,
@@ -152,102 +193,102 @@ class AsaasProvider(PaymentProvider):
         customer_cpf: str,
         customer_name: str,
         customer_email: str,
+        return_url: str = "",
     ) -> ChargeResult:
-        customer_id = self._get_or_create_customer(cpf=customer_cpf, name=customer_name, email=customer_email)
-        resp = requests.post(
-            f"{self.base_url}/payments",
-            headers=self._headers(),
-            json={
-                "customer": customer_id,
-                "billingType": self.BILLING_TYPES[method],
-                "value": str(total_amount),
-                "externalReference": order_id,
-                "split": [
-                    {
-                        "walletId": seller_subaccount_id,
-                        "fixedValue": str(seller_amount),
-                    }
-                ],
-            },
-            timeout=15,
+        customer_id = self.client.get_or_create_customer(
+            cpf_cnpj=customer_cpf, name=customer_name, email=customer_email
         )
-        resp.raise_for_status()
-        data = resp.json()
-        return ChargeResult(
-            provider_charge_id=data["id"],
-            payment_url=data.get("invoiceUrl"),
-            pix_qr_code=data.get("pixQrCode"),
-        )
+        split = None
+        description = f"Pedido {order_id}"
+        if asaas_uses_split() and seller_subaccount_id:
+            split = [{"walletId": seller_subaccount_id, "fixedValue": float(seller_amount)}]
+        else:
+            # Sem split: registra o valor devido a vendedora na descricao
+            # (rastro de auditoria no extrato do Asaas).
+            description = f"Pedido {order_id} | repasse vendedora R$ {seller_amount}"
 
-    def request_seller_withdrawal(self, *, seller_subaccount_id: str, amount: Decimal, pix_key: str) -> str:
-        resp = requests.post(
-            f"{self.base_url}/transfers",
-            headers=self._headers(),
-            json={
-                "walletId": seller_subaccount_id,
-                "value": str(amount),
-                "pixAddressKey": pix_key,
-                "pixAddressKeyType": "CPF",  # saque exclusivamente para chave Pix do CPF da vendedora
-            },
-            timeout=15,
+        payment = self.client.create_payment(
+            customer_id=customer_id,
+            billing_type=BILLING_TYPES[method],
+            value=total_amount,
+            external_reference=str(order_id),
+            description=description,
+            split=split,
+            return_url=return_url,
         )
-        resp.raise_for_status()
-        return resp.json()["id"]
+        return _charge_result(payment)
 
     def create_charge(
         self, *, reference_id: str, method: str, amount: Decimal,
         customer_cpf: str, customer_name: str = "", customer_email: str = "",
     ) -> ChargeResult:
-        customer_id = self._get_or_create_customer(cpf=customer_cpf, name=customer_name, email=customer_email)
-        resp = requests.post(
-            f"{self.base_url}/payments",
-            headers=self._headers(),
-            json={
-                "customer": customer_id,
-                "billingType": self.BILLING_TYPES[method],
-                "value": str(amount),
-                "externalReference": reference_id,
-            },
-            timeout=15,
+        customer_id = self.client.get_or_create_customer(
+            cpf_cnpj=customer_cpf, name=customer_name, email=customer_email
         )
-        resp.raise_for_status()
-        data = resp.json()
-        return ChargeResult(
-            provider_charge_id=data["id"],
-            payment_url=data.get("invoiceUrl"),
-            pix_qr_code=data.get("pixQrCode"),
+        payment = self.client.create_payment(
+            customer_id=customer_id,
+            billing_type=BILLING_TYPES[method],
+            value=amount,
+            external_reference=reference_id,
         )
+        return _charge_result(payment)
+
+    def get_charge(self, provider_charge_id: str) -> ChargeResult:
+        payment = self.client.get_payment(provider_charge_id)
+        if not payment.pix_copy_paste and not payment.is_paid:
+            self.client.attach_pix(payment)
+        return _charge_result(payment)
 
     def get_payer_document(self, *, provider_charge_id: str, webhook_payload: dict | None = None) -> str | None:
-        # 1) Tenta extrair do proprio payload do webhook (menos uma chamada).
         if webhook_payload:
-            payment = webhook_payload.get("payment", {})
-            for key in ("pixTransactionOriginCpfCnpj", "payerCpfCnpj"):
-                doc = _digits(payment.get(key))
-                if doc:
-                    return doc
-            pix = payment.get("pixTransaction") or {}
-            doc = _digits((pix.get("originName") or {}).get("cpfCnpj") if isinstance(pix, dict) else None)
+            doc = payer_document_from_webhook(webhook_payload)
             if doc:
                 return doc
-        # 2) Consulta a transacao Pix da cobranca no Asaas.
-        resp = requests.get(
-            f"{self.base_url}/payments/{provider_charge_id}/pixQrCode",
-            headers=self._headers(),
-            timeout=15,
-        )
-        if resp.status_code >= 400:
-            return None
-        return _digits(resp.json().get("payerCpfCnpj")) or None
+        return self.client.get_payer_document(provider_charge_id) or None
 
     def refund_charge(self, *, provider_charge_id: str) -> None:
-        resp = requests.post(
-            f"{self.base_url}/payments/{provider_charge_id}/refund",
-            headers=self._headers(),
-            json={},
-            timeout=15,
+        self.client.refund_payment(provider_charge_id)
+
+    # ------------------------------------------------------------- repasses
+
+    def request_seller_withdrawal(
+        self,
+        *,
+        seller_subaccount_id: str,
+        amount: Decimal,
+        pix_key: str,
+        pix_key_type: str = "CPF",
+        api_key: str | None = None,
+        reference: str = "",
+    ) -> str:
+        key_type = (pix_key_type or detect_pix_key_type(pix_key)).upper()
+        use_subaccount_key = bool(asaas_uses_split() and api_key)
+        data = self.client.transfer_pix(
+            value=amount,
+            pix_key=pix_key,
+            pix_key_type=key_type,
+            description="Repasse de venda",
+            api_key=api_key if use_subaccount_key else None,
+            wallet_id=(
+                seller_subaccount_id
+                if asaas_uses_split() and seller_subaccount_id and not use_subaccount_key
+                else None
+            ),
+            external_reference=reference or None,
         )
-        resp.raise_for_status()
+        return data["id"]
+
+
+def _charge_result(payment) -> ChargeResult:
+    return ChargeResult(
+        provider_charge_id=payment.id,
+        payment_url=payment.invoice_url,
+        pix_qr_code=payment.pix_qr_code_image,
+        pix_copy_paste=payment.pix_copy_paste,
+        status=payment.status,
+        is_paid=payment.is_paid,
+        pix_expires_at=payment.pix_expires_at,
+    )
 
 
 def get_payment_provider() -> PaymentProvider:
@@ -256,27 +297,46 @@ def get_payment_provider() -> PaymentProvider:
     raise NotImplementedError(f"Provider {settings.PAYMENT_PROVIDER} não implementado ainda (ex.: Iugu).")
 
 
-def verify_payer_cpf(payment, webhook_payload: dict | None) -> bool:
+def verify_payer_cpf(payment, webhook_payload: dict | None = None) -> bool:
     """
-    Confere se quem pagou e o titular da conta (Order.buyer.cpf). Cartao ja
-    e travado pelo customer do PSP; aqui cobrimos principalmente Pix pago
-    de banco de terceiro. CPF divergente -> estorno automatico. Se o PSP
-    nao informar o documento do pagador, seguimos (matched=None) - o
-    customer da cobranca ja e o do titular.
+    Confere se quem pagou e o titular do pedido (comprador logado ou guest).
+
+    E uma trava de idade, nao de fraude: o CPF do pagador e a unica prova
+    de que um adulto identificado esta comprando (docs/BASE_JURIDICA.md).
+    CPF divergente -> estorno automatico, se
+    settings.REFUND_ON_PAYER_CPF_MISMATCH estiver ligado.
+
+    Retorna False apenas quando o pagamento foi (ou deveria ter sido)
+    estornado. PSP que nao informa o pagador nao bloqueia o pedido.
     """
     provider = get_payment_provider()
-    payer_doc = provider.get_payer_document(
-        provider_charge_id=payment.provider_charge_id, webhook_payload=webhook_payload
-    )
+    try:
+        payer_doc = provider.get_payer_document(
+            provider_charge_id=payment.provider_charge_id, webhook_payload=webhook_payload
+        )
+    except AsaasError:
+        logger.warning("Nao foi possivel consultar o pagador da cobranca %s", payment.provider_charge_id)
+        payer_doc = None
+
     if not payer_doc:
         payment.payer_document = ""
         payment.payer_cpf_matched = None
         return True
 
-    payment.payer_document = payer_doc
-    payment.payer_cpf_matched = payer_doc == payment.order.buyer.cpf
+    expected = digits(payment.order.payer_cpf)
+    payment.payer_document = payer_doc[:14]
+    payment.payer_cpf_matched = payer_doc == expected
     if payment.payer_cpf_matched:
         return True
 
-    provider.refund_charge(provider_charge_id=payment.provider_charge_id)
+    logger.warning(
+        "Pedido %s pago por CPF divergente do titular — acionando politica de estorno.",
+        payment.order_id,
+    )
+    if not getattr(settings, "REFUND_ON_PAYER_CPF_MISMATCH", True):
+        return True
+    try:
+        provider.refund_charge(provider_charge_id=payment.provider_charge_id)
+    except AsaasError:
+        logger.exception("Falha ao estornar a cobranca %s do pedido %s", payment.provider_charge_id, payment.order_id)
     return False

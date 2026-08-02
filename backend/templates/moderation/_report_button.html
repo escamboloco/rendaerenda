@@ -8,40 +8,42 @@ Botão + modal de denúncia reutilizável. Uso:
     Denunciar
   </button>
 
-  <div x-show="open" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" @keydown.escape.window="open = false">
-    <div @click.outside="open = false" class="card p-6 w-full max-w-sm space-y-4">
-      <h3 class="font-semibold">Denunciar</h3>
+  <template x-if="open">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" @keydown.escape.window="open = false">
+      <div @click.outside="open = false" class="card p-6 w-full max-w-sm space-y-4">
+        <h3 class="font-semibold">Denunciar</h3>
 
-      <template x-if="sent">
-        <p class="text-sm text-emerald-400">Denúncia enviada. Nossa equipe vai revisar.</p>
-      </template>
+        <template x-if="sent">
+          <p class="text-sm text-emerald-400">Denúncia enviada. Nossa equipe vai revisar.</p>
+        </template>
 
-      <template x-if="!sent">
-        <form @submit.prevent="submit()" class="space-y-3">
-          <div>
-            <label class="input-label">Motivo</label>
-            <select x-model="reason" required class="input-field">
-              <option value="underage_suspicion">Suspeita de menor de idade</option>
-              <option value="sexual_service">Oferta de serviço sexual</option>
-              <option value="scam">Golpe/fraude</option>
-              <option value="illegal_content">Conteúdo ilegal</option>
-              <option value="other">Outro</option>
-            </select>
-          </div>
-          <div>
-            <label class="input-label">Detalhes (opcional)</label>
-            <textarea x-model="details" rows="3" maxlength="1000" class="input-field"></textarea>
-          </div>
-          <p x-show="error" x-text="error" class="input-error"></p>
-          <div class="flex gap-2">
-            <button type="button" @click="open = false" class="btn-secondary flex-1">Cancelar</button>
-            <button type="submit" class="btn-danger flex-1" :disabled="loading">
-              <span x-show="!loading">Enviar</span>
-              <span x-show="loading">Enviando…</span>
-            </button>
-          </div>
-        </form>
-      </template>
+        <template x-if="!sent">
+          <form @submit.prevent="submit()" class="space-y-3">
+            <div>
+              <label class="input-label">Motivo</label>
+              <select x-model="reason" required class="input-field">
+                <option value="underage_suspicion">Suspeita de menor de idade</option>
+                <option value="sexual_service">Oferta de serviço sexual</option>
+                <option value="scam">Golpe/fraude</option>
+                <option value="illegal_content">Conteúdo ilegal</option>
+                <option value="other">Outro</option>
+              </select>
+            </div>
+            <div>
+              <label class="input-label">Detalhes (opcional)</label>
+              <textarea x-model="details" rows="3" maxlength="1000" class="input-field"></textarea>
+            </div>
+            <p x-show="error" x-text="error" class="input-error"></p>
+            <div class="flex gap-2">
+              <button type="button" @click="open = false" class="btn-secondary flex-1">Cancelar</button>
+              <button type="submit" class="btn-danger flex-1" :disabled="loading">
+                <span x-show="!loading">Enviar</span>
+                <span x-show="loading">Enviando…</span>
+              </button>
+            </div>
+          </form>
+        </template>
+      </div>
     </div>
-  </div>
+  </template>
 </div>

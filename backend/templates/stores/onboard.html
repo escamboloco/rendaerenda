@@ -2,11 +2,18 @@
 {% block title %}Abrir minha loja — Renda &amp; Renda{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto space-y-6">
+<div class="max-w-2xl mx-auto space-y-7">
   <div class="text-center">
-    <h1 class="text-2xl font-bold">Abrir minha loja</h1>
-    <p class="text-gray-400 text-sm mt-1">Anunciar é grátis — a plataforma só cobra uma comissão quando você vende.</p>
+    <span class="eyebrow">Leva poucos minutos</span>
+    <h1 class="text-3xl sm:text-4xl font-bold mt-2">Abra sua loja</h1>
+    <p class="text-gray-400 text-sm mt-2 max-w-lg mx-auto">Escolha sua identidade pública e configure como receber. Seus dados reais ficam protegidos e não aparecem na vitrine.</p>
   </div>
+
+  <ol class="grid grid-cols-3 gap-2 text-center text-[11px]">
+    <li class="rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-2 py-3 text-emerald-300">✓ Verificação</li>
+    <li class="rounded-xl border border-brand bg-brand/10 px-2 py-3 text-white">2 · Criar loja</li>
+    <li class="rounded-xl border border-white/10 px-2 py-3 text-gray-500">3 · Anunciar</li>
+  </ol>
 
   {% if already_has_store %}
   <div class="card p-6 text-center space-y-3">
@@ -18,57 +25,98 @@
     </div>
   </div>
 
-  {% elif not request.user.is_age_verified %}
-  <div class="card p-6 text-center space-y-3">
-    <p class="text-gray-300">Primeiro, confirme sua verificação de idade.</p>
-    <a href="{% url 'accounts_pages:verification_page' %}" class="btn-primary w-full">Verificar idade</a>
-  </div>
-
-  {% elif not seller_kyc or seller_kyc.status != 'approved' %}
+  {% elif require_seller_kyc and (not seller_kyc or seller_kyc.status != 'approved') %}
   <div class="card p-6 text-center space-y-3">
     <p class="text-gray-300">
-      {% if seller_kyc.status == 'pending' %}Seu KYC de vendedora está em análise.
+      {% if seller_kyc and seller_kyc.status == 'pending' %}Seu KYC de vendedora está em análise.
       {% else %}Envie seus documentos de verificação de vendedora para continuar.{% endif %}
     </p>
     <a href="{% url 'accounts_pages:seller_kyc_page' %}" class="btn-primary w-full">
-      {% if seller_kyc.status == 'pending' %}Ver status{% else %}Enviar documentos{% endif %}
+      {% if seller_kyc and seller_kyc.status == 'pending' %}Ver status{% else %}Enviar documentos{% endif %}
     </a>
+  </div>
+
+  {% elif not request.user.is_age_verified %}
+  <div class="card p-6 text-center space-y-3">
+    <p class="text-gray-300">Primeiro, confirme sua idade e identidade.</p>
+    <p class="text-xs text-gray-500">Esta etapa protege você e impede que menores publiquem ou vendam na plataforma.</p>
+    <a href="{% url 'accounts_pages:verification_page' %}" class="btn-primary w-full">Verificar identidade</a>
   </div>
 
   {% else %}
   <div x-data="storeOnboarding()" class="space-y-6">
-    <form x-show="step === 1" @submit.prevent="createStore()" class="space-y-4">
+    <form x-show="step === 1" @submit.prevent="createStore()" class="purchase-panel space-y-5">
+      <div>
+        <p class="font-semibold">Identidade da sua vitrine</p>
+        <p class="text-xs text-gray-500 mt-1">É isso que compradores verão. Não use seu nome civil se não quiser.</p>
+      </div>
       <div>
         <label class="input-label">Nome da loja</label>
-        <input type="text" x-model="displayName" required maxlength="80" class="input-field">
+        <input type="text" x-model="displayName" required maxlength="80" autocomplete="off" class="input-field" placeholder="Ex.: Segredo de Cetim">
       </div>
       <div>
         <label class="input-label">Endereço da loja (rendaerenda.com.br/loja/…)</label>
         <input type="text" x-model="slug" required pattern="[a-z0-9-]+" maxlength="60" placeholder="minha-loja" class="input-field">
       </div>
       <div>
-        <label class="input-label">Bio (opcional)</label>
-        <textarea x-model="bio" maxlength="500" rows="3" class="input-field"></textarea>
+        <label class="input-label">Apresentação da loja (opcional)</label>
+        <textarea x-model="bio" maxlength="500" rows="3" class="input-field" placeholder="Conte o que torna sua loja especial, seus prazos e estilo."></textarea>
+      </div>
+      <div class="border-t border-white/10 pt-5">
+        <p class="font-semibold">Envio e recebimento</p>
+        <p class="text-xs text-gray-500 mt-1">Esses dados ficam privados e são usados somente para operar suas vendas.</p>
       </div>
       <div>
-        <label class="input-label">CEP de onde você posta (somente números)</label>
-        <input type="text" x-model="originCep" required pattern="\d{8}" maxlength="8" inputmode="numeric" placeholder="01001000" class="input-field">
-        <p class="input-help">Usado para calcular o frete dos seus itens e mostrar o ponto de postagem mais próximo de você.</p>
+        <label class="input-label">CEP de postagem</label>
+        <input type="text" x-model="originCep" @blur="lookupCep()" required pattern="\d{8}" maxlength="8" inputmode="numeric" placeholder="01001000" class="input-field">
+        <p class="input-help">Usado para calcular o frete e gerar a etiqueta SuperFrete. Seu endereço não aparece na loja.</p>
       </div>
-      <div class="card px-4 py-3 text-sm text-gray-400">
-        Recebimentos e saques vão sempre para a <strong class="text-gray-200">chave Pix do seu CPF</strong> — por segurança, não é possível usar chave de terceiros.
+      <div class="grid sm:grid-cols-6 gap-3">
+        <div class="sm:col-span-4">
+          <label class="input-label">Rua</label>
+          <input type="text" x-model="originStreet" required maxlength="120" autocomplete="address-line1" class="input-field">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="input-label">Número</label>
+          <input type="text" x-model="originNumber" required maxlength="20" class="input-field">
+        </div>
+        <div class="sm:col-span-3">
+          <label class="input-label">Complemento <span class="text-gray-600 normal-case">(opcional)</span></label>
+          <input type="text" x-model="originComplement" maxlength="60" class="input-field">
+        </div>
+        <div class="sm:col-span-3">
+          <label class="input-label">Bairro</label>
+          <input type="text" x-model="originDistrict" required maxlength="80" class="input-field">
+        </div>
+        <div class="sm:col-span-4">
+          <label class="input-label">Cidade</label>
+          <input type="text" x-model="originCity" required maxlength="80" class="input-field">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="input-label">UF</label>
+          <input type="text" x-model="originState" required pattern="[A-Za-z]{2}" maxlength="2" class="input-field uppercase">
+        </div>
+      </div>
+      <p x-show="cepError" x-text="cepError" class="input-help"></p>
+      <div>
+        <label class="input-label">CPF para receber os repasses</label>
+        <input type="text" x-model="pixKey" required maxlength="14" inputmode="numeric" placeholder="O mesmo CPF verificado no cadastro" class="input-field">
+        <p class="input-help">Por segurança, o Pix só pode ser enviado ao CPF da titular verificada.</p>
+      </div>
+      <div class="rounded-xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-gray-400">
+        Você recebe <strong class="text-gray-200">o valor líquido definido no anúncio + taxa de embalagem</strong>. A plataforma compra a etiqueta usando o frete pago pelo comprador.
       </div>
       <p x-show="error" x-text="error" class="input-error"></p>
       <button type="submit" class="btn-primary w-full" :disabled="loading">
-        <span x-show="!loading">Criar loja</span>
+        <span x-show="!loading">Criar loja e continuar</span>
         <span x-show="loading">Enviando…</span>
       </button>
-      <p class="input-help text-center">Sua loja entra em fila de moderação e fica visível após aprovação. Depois disso você já pode anunciar seus itens.</p>
+      <p class="input-help text-center">Sua loja entra em fila de moderação e fica visível após aprovação.</p>
     </form>
 
     <div x-show="step === 2" x-cloak class="card p-6 text-center space-y-3">
       <span class="badge-pending text-sm px-3 py-1">Aguardando moderação</span>
-      <p class="text-gray-400 text-sm">Sua loja foi criada e está em análise. Você será notificada assim que for aprovada — aí é só anunciar.</p>
+      <p class="text-gray-400 text-sm">Sua loja foi criada e está em análise. Depois de aprovada, é só anunciar.</p>
       <a href="{% url 'wallet:dashboard' %}" class="btn-primary w-full">Ir para a carteira</a>
     </div>
   </div>
@@ -85,8 +133,36 @@ function storeOnboarding() {
     slug: "",
     bio: "",
     originCep: "",
+    originStreet: "",
+    originNumber: "",
+    originComplement: "",
+    originDistrict: "",
+    originCity: "",
+    originState: "",
+    cepError: "",
+    pixKey: "",
+    pixKeyType: "CPF",
     loading: false,
     error: "",
+    async lookupCep() {
+      const cep = this.originCep.replace(/\D/g, "");
+      this.cepError = "";
+      if (cep.length !== 8) return;
+      try {
+        const resp = await fetch(`/api/cep/${cep}/`, { credentials: "same-origin" });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          this.cepError = data.detail || "CEP não encontrado. Preencha o endereço manualmente.";
+          return;
+        }
+        this.originStreet = data.street || this.originStreet;
+        this.originDistrict = data.neighborhood || this.originDistrict;
+        this.originCity = data.city || this.originCity;
+        this.originState = data.state || this.originState;
+      } catch (e) {
+        this.cepError = "Não foi possível consultar o CEP. Preencha manualmente.";
+      }
+    },
     async createStore() {
       this.loading = true;
       this.error = "";
@@ -94,7 +170,20 @@ function storeOnboarding() {
         const resp = await fetch("{% url 'stores_api:onboard' %}", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-CSRFToken": window.CSRF_TOKEN },
-          body: JSON.stringify({ slug: this.slug, display_name: this.displayName, bio: this.bio, origin_cep: this.originCep }),
+          body: JSON.stringify({
+            slug: this.slug,
+            display_name: this.displayName,
+            bio: this.bio,
+            origin_cep: this.originCep,
+            origin_street: this.originStreet,
+            origin_number: this.originNumber,
+            origin_complement: this.originComplement,
+            origin_district: this.originDistrict,
+            origin_city: this.originCity,
+            origin_state: this.originState,
+            pix_key: this.pixKey,
+            pix_key_type: this.pixKeyType,
+          }),
         });
         const data = await resp.json();
         if (!resp.ok) {

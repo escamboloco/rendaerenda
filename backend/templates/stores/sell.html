@@ -1,0 +1,174 @@
+{% extends "core/base.html" %}
+{% block title %}Vender no Renda &amp; Renda — cadastro grátis e saque por Pix{% endblock %}
+{% block description %}Abra sua loja sem mensalidade, anuncie itens íntimos e conteúdo digital e receba por Pix depois da entrega confirmada. Sem expor seu nome real.{% endblock %}
+{% block robots %}index, follow{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+
+{% block content %}
+<section class="hero-shell mb-10">
+  <div class="hero-grid">
+    <div class="max-w-3xl">
+      <span class="eyebrow">Sua loja, suas regras, sua privacidade</span>
+      <h1 class="text-4xl sm:text-6xl font-bold leading-[.98] mt-3">
+        Transforme seu conteúdo em <span class="text-gradient-brand">renda.</span>
+      </h1>
+      <p class="text-gray-400 mt-5 max-w-xl leading-relaxed">
+        Crie uma vitrine com nome artístico, venda com pagamento protegido e receba por Pix.
+        A plataforma cuida da cobrança, da etiqueta e da privacidade do envio.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-3 mt-7">
+        <a href="{% url 'stores:onboard_page' %}" class="btn-primary">Começar minha loja grátis</a>
+        <a href="#passo-a-passo" class="btn-secondary">Ver o passo a passo</a>
+      </div>
+      <p class="text-[11px] text-gray-500 mt-3">Sem mensalidade · sem taxa para anunciar · verificação obrigatória +18</p>
+    </div>
+    <div class="hero-orbit" aria-hidden="true">
+      <div class="hero-orbit__core">
+        <span class="hero-orbit__ring hero-orbit__ring--one"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--two"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--three"></span>
+        <span class="hero-orbit__gem"></span>
+      </div>
+      <span class="absolute left-5 top-14 badge-verified">loja verificada</span>
+      <span class="absolute right-0 bottom-14 badge-neutral">saque por Pix</span>
+    </div>
+  </div>
+
+  <dl class="relative z-10 grid grid-cols-2 sm:grid-cols-4 border-t border-white/10">
+    <div class="p-5 sm:px-8">
+      <dt class="text-xs text-gray-500">Custo para abrir</dt>
+      <dd class="text-2xl font-extrabold">R$ 0</dd>
+    </div>
+    <div class="p-5 sm:px-8 border-l border-white/10">
+      <dt class="text-xs text-gray-500">Comissão por venda</dt>
+      <dd class="text-2xl font-extrabold">{{ commission_percent|floatformat:"-2" }}%</dd>
+    </div>
+    <div class="p-5 sm:px-8 border-t sm:border-t-0 sm:border-l border-white/10">
+      <dt class="text-xs text-gray-500">Mensalidade</dt>
+      <dd class="text-2xl font-extrabold">Nenhuma</dd>
+    </div>
+    <div class="p-5 sm:px-8 border-t border-l sm:border-t-0 border-white/10">
+      <dt class="text-xs text-gray-500">Recebimento</dt>
+      <dd class="text-2xl font-extrabold">Pix</dd>
+    </div>
+  </dl>
+</section>
+
+<section class="mb-14">
+  <h2 class="text-xl font-bold mb-2">A comissão entra por cima, não sai do seu bolso</h2>
+  <p class="text-gray-400 text-sm max-w-2xl mb-5">
+    Você digita quanto quer receber pela peça. A plataforma soma a comissão em cima disso e mostra o total
+    para quem compra. O valor que você pediu chega inteiro na sua chave Pix.
+  </p>
+  <div class="card p-6 max-w-md space-y-2 text-sm">
+    <div class="flex justify-between"><span class="text-gray-400">Você quer receber</span><span class="font-semibold">R$ 100,00</span></div>
+    <div class="flex justify-between"><span class="text-gray-400">Comissão da plataforma</span><span class="text-gray-300">+ R$ {{ commission_percent|floatformat:"-2" }}</span></div>
+    <div class="border-t border-surface-border pt-2 flex justify-between">
+      <span class="text-gray-400">Quem compra paga</span>
+      <span class="font-bold text-brand">R$ {{ commission_percent|add:100|floatformat:"-2" }}</span>
+    </div>
+    <p class="text-[11px] text-gray-500 pt-1">A taxa de embalagem vai para você; a plataforma compra a etiqueta de envio.</p>
+  </div>
+</section>
+
+<section id="passo-a-passo" class="mb-14">
+  <h2 class="text-xl font-bold mb-5">Do cadastro ao Pix na conta</h2>
+  <ol class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">01</span>
+      <span class="badge-neutral">Passo 1</span>
+      <p class="font-semibold text-sm">Crie a conta</p>
+      <p class="text-xs text-gray-500 leading-relaxed">E-mail, CPF e data de nascimento. Grátis, sem cartão.</p>
+    </li>
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">02</span>
+      <span class="badge-neutral">Passo 2</span>
+      <p class="font-semibold text-sm">Confirme quem você é</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Documento com foto e selfie. Exigência legal para vender conteúdo adulto — e é o que dá confiança a quem compra.</p>
+    </li>
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">03</span>
+      <span class="badge-neutral">Passo 3</span>
+      <p class="font-semibold text-sm">Monte a loja</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Nome artístico, descrição, chave Pix e o CEP de onde você posta.</p>
+    </li>
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">04</span>
+      <span class="badge-neutral">Passo 4</span>
+      <p class="font-semibold text-sm">Publique os anúncios</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Fotos, vídeo opcional, preço e adicionais. Passa pela moderação antes de ficar público.</p>
+    </li>
+    <li class="seller-step space-y-2">
+      <span class="seller-step__number">05</span>
+      <span class="badge-neutral">Passo 5</span>
+      <p class="font-semibold text-sm">Envie ou entregue</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Imprima a etiqueta já paga, use embalagem neutra e poste. Conteúdo digital é liberado pelo site.</p>
+    </li>
+    <li class="seller-step space-y-2 border-emerald-900/40">
+      <span class="seller-step__number">06</span>
+      <span class="badge-verified">Passo 6</span>
+      <p class="font-semibold text-sm">Receba por Pix</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Assim que a pessoa confirma o recebimento — ou {{ release_hours }}h depois da entrega, sem contestação — o Pix cai na sua chave.</p>
+    </li>
+  </ol>
+</section>
+
+<section class="grid md:grid-cols-2 gap-6 mb-14">
+  <div class="card p-6 space-y-3">
+    <h2 class="font-bold">O que você pode anunciar</h2>
+    <ul class="text-sm text-gray-400 space-y-2">
+      <li>• Roupas íntimas usadas: calcinhas, sutiãs, conjuntos</li>
+      <li>• Meias, meia-calça e calçados</li>
+      <li>• Objetos pessoais e acessórios higienizados</li>
+      <li>• Conteúdo digital: fotos, vídeos e áudios</li>
+      <li>• Itens e conteúdo sob encomenda, combinados com quem compra</li>
+    </ul>
+    <p class="text-xs text-gray-500 pt-1">Adicionais opcionais ("quer com…?") podem ser cobrados junto no mesmo pedido.</p>
+  </div>
+
+  <div class="card p-6 space-y-3 border-red-900/40">
+    <h2 class="font-bold text-red-300">O que não é permitido</h2>
+    <ul class="text-sm text-gray-400 space-y-2">
+      <li>• Encontro presencial, programa ou qualquer serviço sexual</li>
+      <li>• Qualquer conteúdo com menor de idade — banimento imediato e denúncia</li>
+      <li>• Conteúdo com terceiros sem consentimento</li>
+      <li>• Levar a conversa ou o pagamento para fora da plataforma</li>
+      <li>• Material biológico de risco ou produto proibido por lei</li>
+    </ul>
+    <p class="text-xs text-gray-500 pt-1">Anúncio fora das regras é bloqueado antes de publicar; reincidência encerra a conta.</p>
+  </div>
+</section>
+
+<section class="mb-14">
+  <h2 class="text-xl font-bold mb-2">Como aparecer mais na vitrine</h2>
+  <p class="text-gray-400 text-sm max-w-2xl mb-5">
+    A ordem dos anúncios não é sorteio nem antiguidade. O que pesa:
+  </p>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card p-5 space-y-1.5">
+      <p class="font-semibold text-sm">Vendas recentes</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Anúncio que vende sobe. É o sinal mais forte do feed.</p>
+    </div>
+    <div class="card p-5 space-y-1.5">
+      <p class="font-semibold text-sm">Fotos boas e vídeo</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Anúncio com várias fotos e um vídeo do item converte muito mais.</p>
+    </div>
+    <div class="card p-5 space-y-1.5">
+      <p class="font-semibold text-sm">Reputação da loja</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Avaliação de quem comprou, ajustada pelo volume — nota alta com 1 venda não fura fila.</p>
+    </div>
+    <div class="card p-5 space-y-1.5">
+      <p class="font-semibold text-sm">Responder rápido</p>
+      <p class="text-xs text-gray-500 leading-relaxed">Perguntas respondidas no anúncio tiram a dúvida que trava a compra.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card p-6 sm:p-8 flex flex-wrap items-center justify-between gap-4">
+  <div>
+    <p class="text-lg font-bold">Sua loja no ar hoje</p>
+    <p class="text-sm text-gray-400">Cadastro grátis, sem mensalidade e sem exclusividade.</p>
+  </div>
+  <a href="{% url 'stores:onboard_page' %}" class="btn-primary">Abrir minha loja</a>
+</section>
+{% endblock %}
