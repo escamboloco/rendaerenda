@@ -22,67 +22,167 @@ from .tasks import send_shipment_posted_email
 
 class FreightQuoteView(APIView):
     """
-    POST usado na página de produto e no checkout: preço, prazo e
-    transportadora, cotados a partir do CEP da REMETENTE (loja).
+    POST usado na sacola, na página de produto e no checkout.
 
     Embalagem neutra é custo da vendedora — não entra no frete do comprador.
-    Peças leves cotam como envelope pequeno (peso de calcinha média).
+    Peças leves cotam como envelope pequeno. Cada peça usa o valor declarado
+    pela vendedora (ou o preço do anúncio) no seguro.
+
+    Resposta: objeto com `options` (envio único da sacola — o que o checkout
+    cobra) e `items` (cotação individual por peça, para transparência).
     """
 
     permission_classes = [AllowAny]
     throttle_scope = "freight"
 
     def post(self, request):
+        from decimal import Decimal
+
+        from .package_defaults import cheapest_option, quote_package
+
         serializer = FreightQuoteRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        products = list(Product.objects.select_related("store").filter(id__in=data["product_ids"]))
+        products = list(
+            Product.objects.select_related("store").filter(id__in=data["product_ids"])
+        )
         if not products:
-            return Response({"detail": "Produtos não encontrados."}, status=http_status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Produtos não encontrados."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
 
-        from .package_defaults import quote_package
+        quantities = {
+            str(key): int(value)
+            for key, value in (data.get("quantities") or {}).items()
+        }
+        for product in products:
+            quantities.setdefault(str(product.id), 1)
 
-        total_weight, length, width, height = quote_package(products)
         destination_cep = data["destination_cep"]
         store = products[0].store
         origin_cep = store.origin_cep
-        declared_value = sum(p.price for p in products)
-
-        if products_are_payment_test(products):
-            options = [test_free_freight_option()]
-        else:
-            options = calculate_freight_options(
-                destination_cep=destination_cep,
-                weight_grams=total_weight,
-                length_cm=length,
-                width_cm=width,
-                height_cm=height,
-                origin_cep=origin_cep,
-                declared_value=declared_value,
-            )
-        options = sorted(options, key=lambda o: (float(o.price), int(o.deadline_days or 99)))
-        for option in options:
-            save_quote(destination_cep, total_weight, option, origin_cep=origin_cep or "")
-
         origin_city = (store.origin_city or "").strip()
         origin_state = (store.origin_state or "").strip().upper()
+
+        physical = [p for p in products if p.requires_shipping]
+        if not physical:
+            free = test_free_freight_option()
+            payload = {
+                "service": free.service,
+                "label": free.label,
+                "price": 0.0,
+                "deadline_days": free.deadline_days,
+                "company": free.company,
+                "origin_city": origin_city,
+                "origin_state": origin_state,
+            }
+            return Response(
+                {
+                    "options": [payload],
+                    "items": [],
+                    "items_freight_total": 0.0,
+                    "origin_city": origin_city,
+                    "origin_state": origin_state,
+                }
+            )
+
+        # --- cotação individual por peça (transparência na sacola) ---
+        item_rows = []
+        items_total = 0.0
+        for product in physical:
+            qty = quantities.get(str(product.id), 1)
+            weight, length, width, height = quote_package(
+                [product], {str(product.id): qty}
+            )
+            declared = float(product.shipping_declared_value) * qty
+            if products_are_payment_test([product]):
+                item_options = [test_free_freight_option()]
+            else:
+                try:
+                    item_options = calculate_freight_options(
+                        destination_cep=destination_cep,
+                        weight_grams=weight,
+                        length_cm=length,
+                        width_cm=width,
+                        height_cm=height,
+                        origin_cep=origin_cep,
+                        declared_value=declared,
+                    )
+                except Exception:
+                    item_options = []
+            chosen = cheapest_option(item_options)
+            price = round(float(chosen.price), 2) if chosen else 0.0
+            items_total = round(items_total + price, 2)
+            item_rows.append(
+                {
+                    "product_id": str(product.id),
+                    "title": product.title,
+                    "qty": qty,
+                    "declared_value": str(
+                        (product.shipping_declared_value * qty).quantize(Decimal("0.01"))
+                    ),
+                    "price": price,
+                    "label": chosen.label if chosen else "Indisponível",
+                    "deadline_days": chosen.deadline_days if chosen else None,
+                    "service": chosen.service if chosen else "",
+                }
+            )
+
+        # --- envio único da sacola (o que o checkout cobra) ---
+        total_weight, length, width, height = quote_package(physical, quantities)
+        declared_value = sum(
+            float(p.shipping_declared_value) * quantities.get(str(p.id), 1)
+            for p in physical
+        )
+
+        if products_are_payment_test(physical):
+            options = [test_free_freight_option()]
+        else:
+            try:
+                options = calculate_freight_options(
+                    destination_cep=destination_cep,
+                    weight_grams=total_weight,
+                    length_cm=length,
+                    width_cm=width,
+                    height_cm=height,
+                    origin_cep=origin_cep,
+                    declared_value=declared_value,
+                )
+            except Exception:
+                options = []
+        options = sorted(
+            options, key=lambda o: (float(o.price), int(o.deadline_days or 99))
+        )
+        for option in options:
+            save_quote(
+                destination_cep, total_weight, option, origin_cep=origin_cep or ""
+            )
+
+        serialized = FreightOptionSerializer(
+            [
+                {
+                    "service": o.service,
+                    "label": o.label,
+                    "price": round(float(o.price), 2),
+                    "deadline_days": o.deadline_days,
+                    "company": o.company,
+                    "origin_city": origin_city,
+                    "origin_state": origin_state,
+                }
+                for o in options
+            ],
+            many=True,
+        ).data
         return Response(
-            FreightOptionSerializer(
-                [
-                    {
-                        "service": o.service,
-                        "label": o.label,
-                        "price": round(float(o.price), 2),
-                        "deadline_days": o.deadline_days,
-                        "company": o.company,
-                        "origin_city": origin_city,
-                        "origin_state": origin_state,
-                    }
-                    for o in options
-                ],
-                many=True,
-            ).data
+            {
+                "options": serialized,
+                "items": item_rows,
+                "items_freight_total": items_total,
+                "origin_city": origin_city,
+                "origin_state": origin_state,
+            }
         )
 
 

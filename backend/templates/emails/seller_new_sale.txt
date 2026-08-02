@@ -5,19 +5,30 @@ Você tem uma nova venda na loja {{ order.store.display_name }}.
 Pedido #{{ order.id|slice:":8" }}
 - Valor dos itens: R$ {{ order.items_total }}
 - Seu repasse do item: R$ {{ order.payout_total }}
-- Frete: a plataforma compra a etiqueta com o valor pago pelo comprador
+- Frete pago pelo comprador: R$ {{ order.shipping_total }}
 - Embalagem neutra: por sua conta
 
+{% if item_lines %}Itens (descrição neutra):
+{% for line in item_lines %}- {{ line }}
+{% endfor %}{% endif %}
 Entregar em:
 {{ shipping_line }}
 
 Comprador: {{ order.payer_name }}
 E-mail do comprador: {{ order.payer_email }}
 
+{% if label_url %}
+A etiqueta já está pronta para imprimir:
+{{ label_url }}
+{% if tracking_code %}Rastreio: {{ tracking_code }}
+{% endif %}
+{% else %}
 Assim que a etiqueta estiver pronta, você recebe outro e-mail com o PDF
-para imprimir — e o mesmo link aparece na sua carteira (/carteira/).
+para imprimir — e o mesmo link aparece na sua carteira ({{ wallet_url }}).
+{% endif %}
+
 Poste com embalagem neutra; o remetente na etiqueta é o nome discreto da
 plataforma.
 
 {{ site_name }}
-Este e-mail não lista o título do item por privacidade.
+Este e-mail não lista o título íntimo do item por privacidade.

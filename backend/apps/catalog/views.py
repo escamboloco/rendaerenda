@@ -155,7 +155,13 @@ class ProductUpdateView(APIView):
                 content_changed = True
         if "category_id" in payload:
             product.category = payload["category_id"]
-        for field in ("payout_amount", "stock", "weight_grams", "production_days"):
+        for field in (
+            "payout_amount",
+            "stock",
+            "weight_grams",
+            "freight_declared_value",
+            "production_days",
+        ):
             if field in payload:
                 setattr(product, field, payload[field])
 
@@ -446,6 +452,7 @@ class ProductCreateView(APIView):
             kind=payload["kind"],
             payout_amount=payload["payout_amount"],
             weight_grams=payload["weight_grams"],
+            freight_declared_value=payload.get("freight_declared_value") or 0,
             length_cm=payload["length_cm"],
             width_cm=payload["width_cm"],
             height_cm=payload["height_cm"],

@@ -60,6 +60,13 @@ class ProductCreateSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(choices=Product.Kind.choices, default=Product.Kind.PHYSICAL)
     payout_amount = serializers.DecimalField(max_digits=8, decimal_places=2, min_value=Decimal("1.00"))
     weight_grams = serializers.IntegerField(min_value=0, max_value=30000, required=False, default=0)
+    freight_declared_value = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        default=Decimal("0.00"),
+    )
     length_cm = serializers.IntegerField(min_value=1, max_value=100, default=16)
     width_cm = serializers.IntegerField(min_value=1, max_value=100, default=11)
     height_cm = serializers.IntegerField(min_value=1, max_value=100, default=2)
@@ -120,6 +127,12 @@ class ProductUpdateSerializer(serializers.Serializer):
     )
     stock = serializers.IntegerField(min_value=0, max_value=1000, required=False)
     weight_grams = serializers.IntegerField(min_value=0, max_value=30000, required=False)
+    freight_declared_value = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+    )
     production_days = serializers.IntegerField(min_value=0, max_value=90, required=False)
 
     def validate(self, attrs):

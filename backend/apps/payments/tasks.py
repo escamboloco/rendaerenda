@@ -80,12 +80,35 @@ def send_order_confirmation_email(order_id: str):
 def send_seller_new_sale_email(order_id: str):
     from .models import Order
 
-    order = Order.objects.select_related("store__owner").prefetch_related("items").get(id=order_id)
+    order = (
+        Order.objects.select_related("store__owner", "shipment")
+        .prefetch_related("items__product")
+        .get(id=order_id)
+    )
     seller_email = getattr(order.store.owner, "email", "") or ""
+    shipment = getattr(order, "shipment", None)
+    # Se a etiqueta já saiu no mesmo request, o e-mail "Venda + etiqueta"
+    # já cobriu os detalhes — evita duplicar.
+    if shipment and shipment.label_url:
+        logger.info(
+            "Pedido %s: e-mail de venda pulado — etiqueta já enviada com os detalhes.",
+            order_id,
+        )
+        return
+
+    item_lines = []
+    for item in order.items.all():
+        kind = "digital" if not item.product.requires_shipping else "físico"
+        item_lines.append(f"{item.quantity}x peça {kind} — R$ {item.unit_price}")
+
     context = {
         "order": order,
         "site_name": settings.SITE_NAME,
         "shipping_line": _shipping_line(order),
+        "item_lines": item_lines,
+        "label_url": (shipment.label_url if shipment else "") or "",
+        "tracking_code": (shipment.tracking_code if shipment else "") or "",
+        "wallet_url": _site_url("/carteira/"),
     }
     _safe_send(
         subject=f"Nova venda #{str(order.id)[:8]}",

@@ -98,6 +98,14 @@ class Product(models.Model):
         default=0, help_text="Dias para produzir (só para itens sob encomenda)."
     )
     weight_grams = models.PositiveIntegerField(default=0, help_text="Necessário para cálculo de frete.")
+    # Valor declarado na cotação/seguro do frete. A vendedora informa um
+    # aproximado por peça; se zero, usamos o preço público do anúncio.
+    freight_declared_value = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Valor aproximado declarado no frete (seguro). Se zero, usa o preço do anúncio.",
+    )
     length_cm = models.PositiveSmallIntegerField(default=16)
     width_cm = models.PositiveSmallIntegerField(default=11)
     height_cm = models.PositiveSmallIntegerField(default=2)
@@ -133,6 +141,13 @@ class Product(models.Model):
             # um valor esquecido no formulario vire cobranca de frete.
             self.weight_grams = 0
         super().save(*args, **kwargs)
+
+    @property
+    def shipping_declared_value(self) -> Decimal:
+        """Valor usado na cotação/seguro do frete para esta peça."""
+        if self.freight_declared_value and self.freight_declared_value > 0:
+            return self.freight_declared_value
+        return self.price or Decimal("0.00")
 
     @property
     def requires_shipping(self) -> bool:

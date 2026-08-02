@@ -117,6 +117,11 @@ document.addEventListener("alpine:init", () => {
     error: "",
     notice: "",
     justAdded: "",
+    freightCep: "",
+    freight: null,
+    freightItems: [],
+    freightLoading: false,
+    freightError: "",
 
     init() {
       this.read();
@@ -134,9 +139,11 @@ document.addEventListener("alpine:init", () => {
         const raw = JSON.parse(localStorage.getItem(CART_KEY) || "{}");
         this.items = Array.isArray(raw.items) ? raw.items : [];
         this.storeSlug = raw.storeSlug || "";
+        this.freightCep = raw.freightCep || "";
       } catch (e) {
         this.items = [];
         this.storeSlug = "";
+        this.freightCep = "";
       }
     },
 
@@ -144,7 +151,11 @@ document.addEventListener("alpine:init", () => {
       try {
         localStorage.setItem(
           CART_KEY,
-          JSON.stringify({ items: this.items, storeSlug: this.storeSlug })
+          JSON.stringify({
+            items: this.items,
+            storeSlug: this.storeSlug,
+            freightCep: this.freightCep || "",
+          })
         );
       } catch (e) {
         /* modo privado sem storage: a sacola vive so nesta aba */
@@ -159,8 +170,29 @@ document.addEventListener("alpine:init", () => {
       return this.items.length === 0;
     },
 
-    get total() {
+    get itemsTotal() {
       return this.summary ? Number(this.summary.grand_total) : 0;
+    },
+
+    get freightPrice() {
+      return this.freight ? Number(this.freight.price) : 0;
+    },
+
+    get total() {
+      return this.itemsTotal + this.freightPrice;
+    },
+
+    get needsShipping() {
+      return !this.summary || this.summary.requires_shipping !== false;
+    },
+
+    get freightOriginLabel() {
+      const fromFreight = this.freight || {};
+      const fromStore = (this.summary && this.summary.store) || {};
+      const city = fromFreight.origin_city || fromStore.origin_city || "";
+      const state = fromFreight.origin_state || fromStore.origin_state || "";
+      if (city && state) return `${city}/${state}`;
+      return city || "";
     },
 
     has(productId) {
@@ -223,12 +255,19 @@ document.addEventListener("alpine:init", () => {
       this.items = [];
       this.storeSlug = "";
       this.summary = null;
+      this.freight = null;
+      this.freightItems = [];
+      this.freightError = "";
       this.persist();
     },
 
     openDrawer() {
       this.open = true;
-      this.refresh();
+      this.refresh().then(() => {
+        if (onlyDigits(this.freightCep).length === 8 && this.needsShipping) {
+          this.quoteFreight();
+        }
+      });
       document.body.classList.add("overflow-hidden");
     },
 
@@ -240,6 +279,8 @@ document.addEventListener("alpine:init", () => {
     async refresh() {
       if (!this.items.length) {
         this.summary = null;
+        this.freight = null;
+        this.freightItems = [];
         return;
       }
       this.loading = true;
@@ -271,10 +312,55 @@ document.addEventListener("alpine:init", () => {
             this.persist();
           }
         });
+        if (onlyDigits(this.freightCep).length === 8 && this.needsShipping) {
+          await this.quoteFreight();
+        }
       } catch (e) {
         this.error = "Falha de conexão ao carregar a sacola.";
       } finally {
         this.loading = false;
+      }
+    },
+
+    async quoteFreight() {
+      const cep = onlyDigits(this.freightCep);
+      this.freightCep = cep.length ? cep : this.freightCep;
+      this.persist();
+      if (cep.length !== 8 || !this.items.length || !this.needsShipping) {
+        this.freight = null;
+        this.freightItems = [];
+        return;
+      }
+      this.freightLoading = true;
+      this.freightError = "";
+      try {
+        const quantities = {};
+        this.items.forEach((item) => {
+          quantities[item.id] = Number(item.qty || 1);
+        });
+        const { ok, data } = await postJSON("/api/frete/cotacao/", {
+          destination_cep: cep,
+          product_ids: this.items.map((item) => item.id),
+          quantities,
+        });
+        if (!ok) {
+          this.freight = null;
+          this.freightItems = [];
+          this.freightError = errorMessage(data, "Não foi possível calcular o frete.");
+          return;
+        }
+        const options = Array.isArray(data) ? data : data.options || [];
+        this.freight = options[0] || null;
+        this.freightItems = Array.isArray(data) ? [] : data.items || [];
+        if (!this.freight) {
+          this.freightError = "Nenhuma opção de frete para este CEP.";
+        }
+      } catch (e) {
+        this.freight = null;
+        this.freightItems = [];
+        this.freightError = "Falha de conexão ao calcular o frete.";
+      } finally {
+        this.freightLoading = false;
       }
     },
   });
@@ -330,16 +416,30 @@ function storeFollow(slug, initialFollowing, initialCount) {
 }
 window.storeFollow = storeFollow;
 
-/* Caixa de compra da pagina do anuncio: adicionais + total ao vivo. */
+/* Caixa de compra da pagina do anuncio: adicionais + total ao vivo + frete. */
 function productBuyBox(config) {
   const cfg = config || {};
   return {
     productId: cfg.productId,
     storeSlug: cfg.storeSlug,
     basePrice: Number(cfg.price || 0),
+    requiresShipping: cfg.requiresShipping !== false,
     addons: cfg.addons || [],
     selected: [],
     added: false,
+    freightCep: "",
+    freight: null,
+    freightLoading: false,
+    freightError: "",
+
+    init() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(CART_KEY) || "{}");
+        if (raw.freightCep) this.freightCep = raw.freightCep;
+      } catch (e) {
+        /* ignore */
+      }
+    },
 
     toggleAddon(id) {
       this.selected = this.selected.includes(id)
@@ -359,6 +459,51 @@ function productBuyBox(config) {
 
     get totalLabel() {
       return money(this.total);
+    },
+
+    get freightPrice() {
+      return this.freight ? Number(this.freight.price) : 0;
+    },
+
+    async quoteFreight() {
+      const cep = onlyDigits(this.freightCep);
+      this.freightCep = cep;
+      if (!this.requiresShipping) return;
+      if (cep.length !== 8) {
+        this.freightError = "Informe um CEP com 8 dígitos.";
+        this.freight = null;
+        return;
+      }
+      this.freightLoading = true;
+      this.freightError = "";
+      try {
+        try {
+          const raw = JSON.parse(localStorage.getItem(CART_KEY) || "{}");
+          raw.freightCep = cep;
+          localStorage.setItem(CART_KEY, JSON.stringify(raw));
+        } catch (e) {
+          /* ignore */
+        }
+        Alpine.store("cart").freightCep = cep;
+        const { ok, data } = await postJSON("/api/frete/cotacao/", {
+          destination_cep: cep,
+          product_ids: [this.productId],
+          quantities: { [this.productId]: 1 },
+        });
+        if (!ok) {
+          this.freight = null;
+          this.freightError = errorMessage(data, "Não foi possível calcular o frete.");
+          return;
+        }
+        const options = Array.isArray(data) ? data : data.options || [];
+        this.freight = options[0] || null;
+        if (!this.freight) this.freightError = "Nenhuma opção de frete para este CEP.";
+      } catch (e) {
+        this.freight = null;
+        this.freightError = "Falha de conexão ao calcular o frete.";
+      } finally {
+        this.freightLoading = false;
+      }
     },
 
     add() {
@@ -508,6 +653,12 @@ function checkoutFunnel(config) {
       this.restore();
       this.$watch("guest", () => this.remember(), { deep: true });
       this.$watch("address", () => this.remember(), { deep: true });
+      // CEP já calculado na sacola entra direto no checkout.
+      const cartCep = onlyDigits(Alpine.store("cart").freightCep || "");
+      if (cartCep.length === 8 && !onlyDigits(this.address.cep)) {
+        this.address.cep = cartCep;
+        this.lookupCep();
+      }
     },
 
     /* Recupera o que a pessoa ja digitou — recarregar a pagina no meio do
@@ -589,15 +740,29 @@ function checkoutFunnel(config) {
       if (cep.length !== 8 || !items.length) return;
       this.freightLoading = true;
       try {
+        const quantities = {};
+        items.forEach((item) => {
+          quantities[item.id] = Number(item.qty || 1);
+        });
         const { ok, data } = await postJSON("/api/frete/cotacao/", {
           destination_cep: cep,
           product_ids: items.map((item) => item.id),
+          quantities,
         });
-        if (!ok || !Array.isArray(data) || !data.length) {
+        const options = Array.isArray(data) ? data : (data && data.options) || [];
+        if (!ok || !options.length) {
           this.freight = null;
           return;
         }
-        this.freight = data[0];
+        this.freight = options[0];
+        try {
+          const raw = JSON.parse(localStorage.getItem(CART_KEY) || "{}");
+          raw.freightCep = cep;
+          localStorage.setItem(CART_KEY, JSON.stringify(raw));
+          Alpine.store("cart").freightCep = cep;
+        } catch (e) {
+          /* ignore */
+        }
       } catch (e) {
         this.freight = null;
       } finally {

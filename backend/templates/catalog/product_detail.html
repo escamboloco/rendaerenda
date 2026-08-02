@@ -108,7 +108,7 @@
         <p class="text-4xl font-extrabold text-brand-light">R$ {{ product.price }}</p>
         <span class="text-xs text-gray-500 pb-1">via Pix ou cartão</span>
       </div>
-      <p class="text-xs text-gray-500">{% if product.requires_shipping %}{% if store.origin_city and store.origin_state %}Envio de {{ store.origin_city }}/{{ store.origin_state }} · {% endif %}frete pelo seu CEP no checkout{% else %}Sem frete · liberação após pagamento{% endif %}</p>
+      <p class="text-xs text-gray-500">{% if product.requires_shipping %}{% if store.origin_city and store.origin_state %}Envio de {{ store.origin_city }}/{{ store.origin_state }} · {% endif %}calcule o frete pelo CEP abaixo{% else %}Sem frete · liberação após pagamento{% endif %}</p>
     </div>
 
     {% if not product.is_available %}
@@ -122,6 +122,7 @@
            productId: '{{ product.id }}',
            storeSlug: '{{ store.slug }}',
            price: {{ product.price|unlocalize }},
+           requiresShipping: {{ product.requires_shipping|yesno:'true,false' }},
            addons: JSON.parse(document.getElementById('product-addons').textContent)
          })">
       {% if product.stock == 1 %}
@@ -149,6 +150,29 @@
       <div class="flex items-center justify-between border-t border-surface-border pt-3">
         <span class="text-sm text-gray-400">Total</span>
         <span class="text-xl font-extrabold text-brand" x-text="totalLabel"></span>
+      </div>
+      {% endif %}
+
+      {% if product.requires_shipping %}
+      <div class="rounded-xl border border-surface-border bg-surface-alt/50 p-3 space-y-2">
+        <p class="text-xs font-medium text-gray-300">Frete para o seu CEP</p>
+        <div class="flex gap-2">
+          <input type="text" inputmode="numeric" maxlength="8" placeholder="00000000"
+                 class="input-field flex-1" x-model="freightCep"
+                 @keydown.enter.prevent="quoteFreight()">
+          <button type="button" class="btn-secondary !px-3 shrink-0" :disabled="freightLoading" @click="quoteFreight()">
+            <span x-show="!freightLoading">Calcular</span>
+            <span x-show="freightLoading">…</span>
+          </button>
+        </div>
+        <p x-cloak x-show="freightError" x-text="freightError" class="input-error"></p>
+        <template x-if="freight">
+          <p class="text-sm text-gray-300">
+            <span x-text="freight.label"></span>
+            · <strong class="text-brand" x-text="money(freightPrice)"></strong>
+            <span class="text-xs text-gray-500" x-text="' · ' + (freight.deadline_days || '—') + ' dias úteis'"></span>
+          </p>
+        </template>
       </div>
       {% endif %}
 

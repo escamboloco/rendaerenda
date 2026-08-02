@@ -53,7 +53,11 @@ def resolve_superfrete_service_id(order, shipment, *, weight, length, width, hei
                 width_cm=width,
                 height_cm=height,
                 origin_cep=origin,
-                declared_value=order.items_total,
+                declared_value=sum(
+                    item.product.shipping_declared_value * item.quantity
+                    for item in order.items.select_related("product").all()
+                    if item.product.requires_shipping
+                ),
             )
             chosen = cheapest_option(
                 [o for o in options if str(o.service).startswith("sf-")]
@@ -174,7 +178,15 @@ def purchase_label_for_order(order_id: str) -> LabelPurchaseResult:
                 length_cm=length,
                 width_cm=width,
                 height_cm=height,
-                declared_value=order.items_total,
+                declared_value=sum(
+                    (
+                        item.product.shipping_declared_value
+                        if hasattr(item.product, "shipping_declared_value")
+                        else item.unit_price
+                    )
+                    * item.quantity
+                    for item in physical_items
+                ),
                 order_reference=str(order.id),
             )
             shipment.provider_order_id = provider_order_id
@@ -221,9 +233,28 @@ def _email_label_ready(order, shipment) -> None:
         return
     scheme = "http" if settings.DEBUG else "https"
     wallet_url = f"{scheme}://{settings.SITE_DOMAIN}/carteira/"
+    addr = order.shipping_address or {}
+    shipping_line = ", ".join(
+        p
+        for p in [
+            addr.get("street", ""),
+            addr.get("number", ""),
+            addr.get("neighborhood", ""),
+            f"{addr.get('city', '')}/{addr.get('state', '')}".strip("/"),
+            f"CEP {addr.get('cep', '')}" if addr.get("cep") else "",
+        ]
+        if p
+    )
+    # Descrição neutra: sem título íntimo do anúncio.
+    item_lines = []
+    for item in order.items.select_related("product").all():
+        kind = "digital" if not item.product.requires_shipping else "físico"
+        item_lines.append(
+            f"{item.quantity}x peça {kind} — R$ {item.unit_price}"
+        )
     try:
         send_mail(
-            subject=f"Etiqueta pronta — pedido #{str(order.id)[:8]}",
+            subject=f"Venda + etiqueta — pedido #{str(order.id)[:8]}",
             message=render_to_string(
                 "emails/label_ready.txt",
                 {
@@ -231,6 +262,8 @@ def _email_label_ready(order, shipment) -> None:
                     "shipment": shipment,
                     "site_name": settings.SITE_NAME,
                     "wallet_url": wallet_url,
+                    "shipping_line": shipping_line,
+                    "item_lines": item_lines,
                 },
             ),
             from_email=settings.DEFAULT_FROM_EMAIL,

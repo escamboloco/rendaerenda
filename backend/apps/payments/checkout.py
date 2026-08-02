@@ -114,7 +114,9 @@ def quote_shipping(*, lines: list[CartLine], destination_cep: str, preferred_ser
             width_cm=width_cm,
             height_cm=height_cm,
             origin_cep=origin_cep,
-            declared_value=sum(p.price for p in products),
+            declared_value=sum(
+                p.shipping_declared_value * quantities.get(str(p.id), 1) for p in products
+            ),
         )
     except Exception:
         # Transportadora fora do ar ou sem contrato: cai para a tarifa fixa

@@ -260,6 +260,49 @@ aninhados (x-data proprio) continuam funcionando normalmente.
         </template>
 
         <p x-cloak x-show="$store.cart.error" x-text="$store.cart.error" class="input-error"></p>
+
+        <template x-if="!$store.cart.isEmpty && $store.cart.needsShipping">
+          <div class="rounded-xl border border-surface-border bg-surface-alt/60 p-3 space-y-2">
+            <p class="text-xs font-medium text-gray-300">Calcular frete antes do pagamento</p>
+            <template x-if="$store.cart.freightOriginLabel">
+              <p class="text-[11px] text-gray-500">Envio de <span x-text="$store.cart.freightOriginLabel"></span></p>
+            </template>
+            <div class="flex gap-2">
+              <input type="text" inputmode="numeric" maxlength="8" placeholder="Seu CEP"
+                     class="input-field flex-1 !py-2 !min-h-0 text-sm"
+                     x-model="$store.cart.freightCep"
+                     @keydown.enter.prevent="$store.cart.quoteFreight()">
+              <button type="button" class="btn-secondary !py-2 !min-h-0 text-xs shrink-0"
+                      :disabled="$store.cart.freightLoading"
+                      @click="$store.cart.quoteFreight()">
+                <span x-show="!$store.cart.freightLoading">Calcular</span>
+                <span x-show="$store.cart.freightLoading">…</span>
+              </button>
+            </div>
+            <p x-cloak x-show="$store.cart.freightError" x-text="$store.cart.freightError" class="input-error"></p>
+            <template x-if="$store.cart.freight">
+              <div class="space-y-1.5 pt-1">
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-400" x-text="$store.cart.freight.label"></span>
+                  <span class="font-semibold text-brand" x-text="money($store.cart.freightPrice)"></span>
+                </div>
+                <p class="text-[11px] text-gray-500"
+                   x-text="($store.cart.freight.deadline_days || '—') + ' dias úteis · valor cobrado no checkout'"></p>
+                <template x-if="$store.cart.freightItems && $store.cart.freightItems.length > 1">
+                  <div class="border-t border-surface-border pt-1.5 space-y-1">
+                    <p class="text-[10px] uppercase tracking-wide text-gray-600">Por peça</p>
+                    <template x-for="row in $store.cart.freightItems" :key="row.product_id">
+                      <div class="flex justify-between gap-2 text-[11px] text-gray-500">
+                        <span class="truncate" x-text="row.title"></span>
+                        <span class="shrink-0" x-text="money(row.price)"></span>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
 
       <div x-cloak x-show="!$store.cart.isEmpty" class="border-t border-surface-border px-5 py-4 space-y-3">
@@ -268,9 +311,21 @@ aninhados (x-data proprio) continuam funcionando normalmente.
             Pedido de uma única loja: <strong class="text-gray-300" x-text="$store.cart.summary.store.name"></strong>
           </p>
         </template>
-        <div class="flex items-center justify-between text-sm">
-          <span class="text-gray-400">Total</span>
-          <span class="text-xl font-extrabold text-brand" x-text="money($store.cart.total)"></span>
+        <div class="space-y-1 text-sm">
+          <div class="flex items-center justify-between text-gray-400">
+            <span>Itens</span>
+            <span x-text="money($store.cart.itemsTotal)"></span>
+          </div>
+          <div class="flex items-center justify-between text-gray-400" x-show="$store.cart.needsShipping">
+            <span>Frete</span>
+            <span x-show="$store.cart.freightLoading" class="text-gray-600">calculando…</span>
+            <span x-show="!$store.cart.freightLoading && $store.cart.freight" x-text="money($store.cart.freightPrice)"></span>
+            <span x-show="!$store.cart.freightLoading && !$store.cart.freight" class="text-gray-600">informe o CEP</span>
+          </div>
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-gray-300 font-medium">Total</span>
+            <span class="text-xl font-extrabold text-brand" x-text="money($store.cart.total)"></span>
+          </div>
         </div>
         <p class="text-[11px] text-gray-500">Pagamento por Pix com cobrança discreta. O valor fica retido até você confirmar a entrega.</p>
         <a href="{% url 'payments_pages:checkout_page' %}" class="btn-primary w-full">Ir para o pagamento</a>
