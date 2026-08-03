@@ -96,12 +96,17 @@ def cep_lookup(request, cep: str):
 
 # ---------------------------------------------------------------- og:image
 #
-# A midia dos anuncios fica em bucket privado e e servida por URL assinada
-# de curta duracao (AWS_QUERYSTRING_EXPIRE, 5min). Crawler de card de link
-# (X, WhatsApp, Telegram) e do Google buscam a imagem MUITO depois de ler o
-# HTML - a URL assinada ja expirou e o card sai sem imagem. Por isso a
-# prévia tem endereco proprio, estavel e cacheavel, que so expoe anuncio
-# publicado e publico.
+# ProductImage.file.url nunca e uma URL publica estavel: e assinada e
+# expira em minutos, tanto no S3 (AWS_QUERYSTRING_EXPIRE) quanto no disco
+# local (apps.core.media_signing.SignedProductStorage, anti-hotlink).
+# Crawler de card de link (X, WhatsApp, Telegram) e do Google buscam a
+# imagem MUITO depois de ler o HTML - a URL ja expirou e o card sai sem
+# imagem. Por isso a previa tem endereco proprio, estavel e cacheavel, que
+# so expoe anuncio publicado e publico.
+#
+# _render_og_card() abre o arquivo com `image_field.open("rb")`, que le
+# bytes direto do storage sem passar por `.url()` - funciona com qualquer
+# backend, assinado ou nao.
 OG_WIDTH, OG_HEIGHT = 1200, 630
 OG_BACKGROUND = (11, 7, 9)  # mesmo #0b0709 do tema
 OG_CACHE_SECONDS = 60 * 60 * 24 * 7

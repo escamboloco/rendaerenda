@@ -188,16 +188,6 @@ services:
       # Pix da loja teste (CPF/e-mail/telefone/EVP). Sem isso o checkout bloqueia.
       - key: PIX_TEST_KEY
         sync: false
-      # --- Painel de gestao (/gestao/entrar/) ---
-      # create_admin roda no build e cria/promove esta conta.
-      - key: ADMIN_EMAIL
-        sync: false
-      - key: ADMIN_PASSWORD
-        sync: false
-      - key: ADMIN_CPF
-        sync: false
-      - key: ADMIN_BIRTH_DATE
-        sync: false
 
   - type: cron
     name: rendaerenda-poll-shipments
