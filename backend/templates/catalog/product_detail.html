@@ -2,8 +2,6 @@
 {% load l10n seo %}
 {% block title %}{{ product.title }} — {{ store.display_name }} | Renda &amp; Renda{% endblock %}
 {% block description %}{{ product.description|meta_text:155 }}{% endblock %}
-{# Item de pedido personalizado nao e vitrine: so quem tem o link ve, entao
-   nunca entra em indice nem em previa de link. #}
 {% block robots %}{% if og_image_url %}index, follow{% else %}noindex, nofollow{% endif %}{% endblock %}
 {% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
 {% block og_type %}product{% endblock %}

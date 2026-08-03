@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {% extends "backoffice/base.html" %}
 {% block title %}Visão geral — Gestão{% endblock %}
 {% block content %}
@@ -22,5 +23,147 @@
     {% for order in recent_orders %}<tr><td>{{ order.short_id }}</td><td>{{ order.store.display_name }}</td><td><span class="badge">{{ order.get_status_display }}</span></td><td>R$ {{ order.grand_total|floatformat:2 }}</td><td>{{ order.created_at|date:"d/m/Y H:i" }}</td></tr>
     {% empty %}<tr><td colspan="5" class="empty">Nenhum pedido ainda.</td></tr>{% endfor %}
   </tbody></table>
+=======
+{% extends "backoffice/_base.html" %}
+{% block title %}Visão geral{% endblock %}
+
+{% block content %}
+{% comment %}
+Ordem das seções = ordem de urgência. Primeiro o que tem gente esperando
+resposta; depois o dinheiro; por último o histórico.
+{% endcomment %}
+
+{% if filas.kyc or filas.disputas or filas.anuncios or filas.saques_falhos or filas.sem_pix %}
+<section class="mb-6">
+  <h1 class="text-lg font-bold mb-3">Precisa de você agora</h1>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+    {% if filas.kyc %}
+    <a href="{% url 'backoffice:kyc_queue' %}" class="bo-alert bo-alert--urgent">
+      <span class="bo-alert__n">{{ filas.kyc }}</span>
+      <span class="bo-alert__t">identidade{{ filas.kyc|pluralize:"s" }} para conferir</span>
+      <span class="bo-alert__h">prometemos 24h úteis</span>
+    </a>
+    {% endif %}
+    {% if filas.disputas %}
+    <a href="{% url 'backoffice:orders' %}?status=disputed" class="bo-alert bo-alert--urgent">
+      <span class="bo-alert__n">{{ filas.disputas }}</span>
+      <span class="bo-alert__t">disputa{{ filas.disputas|pluralize }} aberta{{ filas.disputas|pluralize }}</span>
+      <span class="bo-alert__h">dinheiro travado dos dois lados</span>
+    </a>
+    {% endif %}
+    {% if filas.anuncios %}
+    <a href="/admin/moderation/moderationqueueitem/" class="bo-alert">
+      <span class="bo-alert__n">{{ filas.anuncios }}</span>
+      <span class="bo-alert__t">anúncio{{ filas.anuncios|pluralize }} na moderação</span>
+      <span class="bo-alert__h">não aparecem na vitrine até aprovar</span>
+    </a>
+    {% endif %}
+    {% if filas.saques_falhos %}
+    <a href="{% url 'backoffice:finance' %}" class="bo-alert bo-alert--urgent">
+      <span class="bo-alert__n">{{ filas.saques_falhos }}</span>
+      <span class="bo-alert__t">saque{{ filas.saques_falhos|pluralize }} que falhou</span>
+      <span class="bo-alert__h">Pix manual pelo painel do PSP</span>
+    </a>
+    {% endif %}
+    {% if filas.sem_pix %}
+    <a href="{% url 'backoffice:stores' %}" class="bo-alert">
+      <span class="bo-alert__n">{{ filas.sem_pix }}</span>
+      <span class="bo-alert__t">loja{{ filas.sem_pix|pluralize }} sem chave Pix</span>
+      <span class="bo-alert__h">vende mas não recebe</span>
+    </a>
+    {% endif %}
+  </div>
+</section>
+{% else %}
+<p class="card p-4 text-sm text-emerald-300 border-emerald-900/40 mb-6">
+  Nenhuma fila pendente. Nada esperando decisão sua.
+</p>
+{% endif %}
+
+<section class="mb-6">
+  <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">Últimos 30 dias</h2>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="bo-kpi">
+      <p class="bo-kpi__v">R$ {{ gmv_30d|floatformat:2 }}</p>
+      <p class="bo-kpi__l">vendido (itens)</p>
+    </div>
+    <div class="bo-kpi">
+      <p class="bo-kpi__v text-brand-light">R$ {{ comissao_30d|floatformat:2 }}</p>
+      <p class="bo-kpi__l">sua comissão</p>
+    </div>
+    <div class="bo-kpi">
+      <p class="bo-kpi__v">{{ pedidos_30d }}</p>
+      <p class="bo-kpi__l">pedidos pagos</p>
+    </div>
+    <div class="bo-kpi">
+      <p class="bo-kpi__v">R$ {{ ticket_medio|floatformat:2 }}</p>
+      <p class="bo-kpi__l">ticket médio</p>
+    </div>
+  </div>
+</section>
+
+<section class="mb-6">
+  <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">Dinheiro na conta</h2>
+  <div class="grid sm:grid-cols-3 gap-3">
+    <div class="bo-kpi border-amber-900/40">
+      <p class="bo-kpi__v text-amber-300">R$ {{ retido|floatformat:2 }}</p>
+      <p class="bo-kpi__l">em custódia</p>
+      <p class="text-[11px] text-gray-600 mt-2 leading-relaxed">
+        Dinheiro de terceiro. <strong class="text-gray-400">Não é seu</strong> — sai para as
+        vendedoras conforme as entregas confirmam.
+      </p>
+    </div>
+    <div class="bo-kpi">
+      <p class="bo-kpi__v">R$ {{ liberado_nao_sacado|floatformat:2 }}</p>
+      <p class="bo-kpi__l">liberado e não sacado</p>
+      <p class="text-[11px] text-gray-600 mt-2">Elas podem sacar a qualquer momento.</p>
+    </div>
+    <div class="bo-kpi">
+      <p class="bo-kpi__v">R$ {{ gmv_total|floatformat:2 }}</p>
+      <p class="bo-kpi__l">vendido desde o início</p>
+    </div>
+  </div>
+</section>
+
+<section class="mb-6 grid sm:grid-cols-3 gap-3">
+  <div class="bo-kpi"><p class="bo-kpi__v">{{ lojas_ativas }}</p><p class="bo-kpi__l">lojas ativas</p></div>
+  <div class="bo-kpi"><p class="bo-kpi__v">{{ anuncios_no_ar }}</p><p class="bo-kpi__l">anúncios no ar</p></div>
+  <div class="bo-kpi"><p class="bo-kpi__v">{{ aguardando_pagamento }}</p><p class="bo-kpi__l">aguardando pagamento</p></div>
+</section>
+
+<section>
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Últimos pedidos</h2>
+    <a href="{% url 'backoffice:orders' %}" class="text-xs text-brand hover:underline">ver todos</a>
+  </div>
+  <div class="card overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="text-xs text-gray-500 border-b border-surface-border">
+        <tr>
+          <th class="text-left px-4 py-2.5 font-medium">Pedido</th>
+          <th class="text-left px-4 py-2.5 font-medium">Loja</th>
+          <th class="text-right px-4 py-2.5 font-medium">Total</th>
+          <th class="text-left px-4 py-2.5 font-medium">Situação</th>
+          <th class="text-left px-4 py-2.5 font-medium">Quando</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pedido in ultimos_pedidos %}
+        <tr class="border-b border-surface-border/50 last:border-0">
+          <td class="px-4 py-2.5 font-mono text-xs">
+            <a href="{{ pedido.track_url }}" class="hover:text-brand-light">{{ pedido.short_id }}</a>
+          </td>
+          <td class="px-4 py-2.5 truncate max-w-[14rem]">{{ pedido.store.display_name }}</td>
+          <td class="px-4 py-2.5 text-right">R$ {{ pedido.grand_total }}</td>
+          <td class="px-4 py-2.5"><span class="bo-status bo-status--{{ pedido.status }}">{{ pedido.get_status_display }}</span></td>
+          <td class="px-4 py-2.5 text-gray-500 text-xs">{{ pedido.created_at|date:"d/m H:i" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="px-4 py-10 text-center text-gray-500">Nenhum pedido ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+>>>>>>> 4df39f633ec1e7b18ef9954ec7be5eb99492cfc4
 </section>
 {% endblock %}
