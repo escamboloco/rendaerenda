@@ -170,8 +170,6 @@ class SellerKYC(models.Model):
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-<<<<<<< HEAD
-=======
     @property
     def review_files(self):
         """
@@ -184,7 +182,6 @@ class SellerKYC(models.Model):
             ("Selfie com documento e código", self.selfie_with_document),
         ]
 
->>>>>>> 4df39f633ec1e7b18ef9954ec7be5eb99492cfc4
     def approve(self, reviewer: User, *, document_birth_date=None, activate_store: bool = True):
         """
         Aprova o KYC e, com a data de nascimento lida no documento,
@@ -200,11 +197,8 @@ class SellerKYC(models.Model):
         """
         from apps.payments.services import is_adult
 
-<<<<<<< HEAD
-=======
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
->>>>>>> 4df39f633ec1e7b18ef9954ec7be5eb99492cfc4
         if document_birth_date:
             self.document_birth_date = document_birth_date
         if not self.document_birth_date:
@@ -212,11 +206,6 @@ class SellerKYC(models.Model):
                 "Informe a data de nascimento lida no documento antes de aprovar."
             )
 
-<<<<<<< HEAD
-        self.status = self.Status.APPROVED
-        self.reviewed_by = reviewer
-        self.reviewed_at = timezone.now()
-=======
         # A idade e conferida ANTES de gravar o status. Marcar APROVADO
         # primeiro e corrigir depois deixava uma janela em que a conta
         # ficava banida e o KYC aprovado ao mesmo tempo — e quem lesse o
@@ -234,7 +223,6 @@ class SellerKYC(models.Model):
             return
 
         self.status = self.Status.APPROVED
->>>>>>> 4df39f633ec1e7b18ef9954ec7be5eb99492cfc4
         self.rejection_reason = ""
         self.save(
             update_fields=[
@@ -242,13 +230,6 @@ class SellerKYC(models.Model):
             ]
         )
 
-<<<<<<< HEAD
-        if not is_adult(self.document_birth_date):
-            self.user.ban("Menor de idade confirmado na conferência do documento.")
-            return
-
-=======
->>>>>>> 4df39f633ec1e7b18ef9954ec7be5eb99492cfc4
         verification, _ = AgeVerification.objects.get_or_create(
             user=self.user,
             defaults={"provider": "manual", "provider_reference_id": f"kyc:{self.pk}"},

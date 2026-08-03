@@ -1,32 +1,3 @@
-<<<<<<< HEAD
-{% extends "backoffice/base.html" %}
-{% block title %}Lojas — Gestão{% endblock %}
-{% block content %}
-<div class="top"><div><h1>Lojas</h1><div class="muted">Todas as lojas; melhores avaliações aparecem primeiro por padrão.</div></div></div>
-<form class="filters" method="get">
-  <input type="search" name="q" value="{{ query }}" placeholder="Buscar loja, slug ou e-mail">
-  <select name="status"><option value="">Todos os status</option>{% for value,label in store_statuses %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-  <select name="ordem"><option value="rating" {% if ordering == "rating" %}selected{% endif %}>Melhor avaliação</option><option value="sales" {% if ordering == "sales" %}selected{% endif %}>Mais vendas</option><option value="newest" {% if ordering == "newest" %}selected{% endif %}>Mais novas</option><option value="name" {% if ordering == "name" %}selected{% endif %}>Nome</option></select>
-  <button class="btn primary" type="submit">Filtrar</button>
-</form>
-<table><thead><tr><th>Loja</th><th>Responsável</th><th>Status</th><th>Avaliação</th><th>Vendas</th><th>Origem</th><th>Ações</th></tr></thead><tbody>
-{% for store in stores %}
-  <tr>
-    <td><strong>{{ store.display_name }}</strong><div class="muted">/{{ store.slug }}</div></td>
-    <td>{{ store.owner.email }}</td>
-    <td><span class="badge">{{ store.get_status_display }}</span></td>
-    <td><strong>{{ store.avg_rating|floatformat:1 }}</strong> ({{ store.review_count }})<div class="muted">ajustada: {{ store.bayesian_rating|floatformat:2 }}</div></td>
-    <td>{{ store.sales_count }}</td>
-    <td>{% if store.origin_cep and store.origin_street %}<span class="ok">Completa</span>{% else %}<span class="danger">Incompleta</span>{% endif %}</td>
-    <td class="actions">
-      <a class="btn primary" href="{% url 'backoffice:seller_detail' store.id %}">Dossiê</a>
-      <a class="btn" href="{% url 'stores:detail' store.slug %}" target="_blank" rel="noreferrer">Vitrine</a>
-    </td>
-  </tr>
-{% empty %}<tr><td colspan="7" class="empty">Nenhuma loja encontrada.</td></tr>{% endfor %}
-</tbody></table>
-{% include "backoffice/pagination.html" with page=stores %}
-=======
 {% extends "backoffice/_base.html" %}
 {% block title %}Lojas{% endblock %}
 
@@ -79,5 +50,4 @@
     </tbody>
   </table>
 </div>
->>>>>>> 4df39f633ec1e7b18ef9954ec7be5eb99492cfc4
 {% endblock %}
