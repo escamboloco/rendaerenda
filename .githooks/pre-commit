@@ -1,0 +1,54 @@
+#!/bin/sh
+# Recusa commit que leve marcador de conflito de merge para o repositorio.
+#
+# Por que existe: `git commit` sozinho recusa merge nao resolvido, mas
+# `git add -A` seguido de `git commit` grava os marcadores sem reclamar.
+# Ja aconteceu duas vezes aqui (030e5d3 e e659bb5), e as duas quebraram o
+# build inteiro - o Python nao importa um arquivo com ">>>>>>> <sha>", entao
+# manage.py check morre, a suite nao roda e o deploy do Render falha.
+#
+# Habilitar (uma vez por clone):
+#     git config core.hooksPath .githooks
+#
+# Para pular conscientemente num caso legitimo: git commit --no-verify
+
+set -e
+
+# Analisa o conteudo EM STAGE, nao o da arvore de trabalho: e ele que vai
+# para o commit. -I faz o grep ignorar binario (imagem, .ico, etc).
+#
+# O padrao pede o espaco depois dos sete caracteres porque e assim que o git
+# escreve o marcador ("<<<<<<< HEAD"). Sem isso, uma linha de "=======" de
+# titulo em markdown ou de separador em CSS viraria falso positivo.
+# Os pipes do marcador diff3 vao escapados: em ERE, "^||||||| " seria lido
+# como alternancia de vazios e casaria com QUALQUER linha, bloqueando todo
+# commit do repositorio.
+lead='^'
+markers="${lead}<<<<<<< |${lead}>>>>>>> |${lead}\\|\\|\\|\\|\\|\\|\\| "
+
+found=""
+for path in $(git diff --cached --name-only --diff-filter=ACM); do
+    if git show ":$path" 2>/dev/null | grep -I -n -E "$markers" > /dev/null 2>&1; then
+        found="$found $path"
+    fi
+done
+
+if [ -n "$found" ]; then
+    echo ""
+    echo "  COMMIT BLOQUEADO - marcador de conflito de merge no conteudo em stage:"
+    echo ""
+    for path in $found; do
+        line=$(git show ":$path" | grep -I -n -E "$markers" | head -1 | cut -d: -f1)
+        echo "    $path (primeira ocorrencia na linha $line)"
+    done
+    echo ""
+    echo "  Resolva o merge antes de commitar. Para ver os conflitos:"
+    echo "    git diff --cached --diff-filter=ACM -G'^<<<<<<< '"
+    echo ""
+    echo "  Se for texto legitimo (ex.: documentacao sobre conflitos), use:"
+    echo "    git commit --no-verify"
+    echo ""
+    exit 1
+fi
+
+exit 0

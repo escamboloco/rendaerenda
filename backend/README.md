@@ -31,6 +31,24 @@ sem Postgres instalado, use `DATABASE_URL=sqlite:///db.sqlite3` +
 
 **Sempre que mexer em `templates/**/*.html` ou `static/css/input.css`, rode `npm run build:css` de novo antes de commitar** — o build do Render não roda `npm` (ver `build.sh`), então o CSS compilado precisa estar atualizado no repo.
 
+## Hook de pré-commit (habilite uma vez por clone)
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-commit` recusa commit que leve marcador de conflito de merge
+(`<<<<<<<`, `>>>>>>>`, `|||||||`) para o repositório. `git commit` sozinho já
+recusa merge não resolvido, mas `git add -A` seguido de `git commit` grava os
+marcadores calado — aconteceu duas vezes aqui, e as duas derrubaram o build
+inteiro: o Python não importa um arquivo com `>>>>>>> <sha>`, então
+`manage.py check` morre, a suíte não roda e o deploy no Render falha.
+
+O hook analisa o conteúdo em stage (não a árvore de trabalho), ignora binário
+e exige o espaço depois dos sete caracteres — `=======` de título em markdown
+ou de separador em CSS não é falso positivo. Para pular num caso legítimo:
+`git commit --no-verify`.
+
 ## Testes
 
 ```bash
