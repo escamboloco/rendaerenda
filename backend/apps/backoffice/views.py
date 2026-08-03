@@ -89,7 +89,14 @@ def staff_login(request):
                 _client_ip(request),
             )
 
-    return render(request, "backoffice/login.html", {"erro": erro, "next": destino})
+    response = render(request, "backoffice/login.html", {"erro": erro, "next": destino})
+    # same-origin: sem isso, no HTTPS o navegador não manda Referer no POST
+    # do formulário e o Django rejeita o CSRF com 403 antes de checar login.
+    response["Referrer-Policy"] = "same-origin"
+    # Tela sensível (acesso a documento de terceiro e dinheiro em custódia):
+    # nunca fica em cache do navegador nem de proxy intermediário.
+    response["Cache-Control"] = "no-store, private"
+    return response
 
 
 @require_POST

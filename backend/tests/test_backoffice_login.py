@@ -35,10 +35,12 @@ class LoginDoPainelTests(ApiTestCase):
         self.assertContains(resposta, "Acesso restrito")
 
     def test_pagina_e_noindex(self):
-        """Painel não pode aparecer em buscador nem vazar pelo referrer."""
+        """Painel não pode aparecer em buscador."""
         resposta = self.client.get(self.url)
         self.assertContains(resposta, "noindex")
-        self.assertContains(resposta, "no-referrer")
+        # NÃO afirmar "no-referrer" aqui: isso já foi bug em produção — sem
+        # Referer no POST em HTTPS, o Django rejeita o CSRF antes mesmo de
+        # checar login. Ver test_backoffice.py::test_login_manda_referer_para_o_csrf_passar.
 
     def test_staff_entra_e_vai_para_o_painel(self):
         staff = _staff()

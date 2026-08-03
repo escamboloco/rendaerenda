@@ -77,6 +77,23 @@ class AcessoAoPainelTests(ApiTestCase):
     def test_painel_fica_fora_do_robots(self):
         self.assertContains(self.client.get("/robots.txt"), "Disallow: /gestao/")
 
+    def test_login_manda_referer_para_o_csrf_passar(self):
+        """
+        Regressão: `no-referrer` na tela de login fazia o navegador OMITIR
+        o Referer no POST do formulário. Em HTTPS o Django exige Referer
+        (ou Origin) batendo com CSRF_TRUSTED_ORIGINS antes mesmo de olhar
+        usuário/senha — sem isso, todo login no painel vira 403 "Verificação
+        CSRF falhou", mesmo com credencial certa. Já vazou em produção
+        assim uma vez (commit 9f08acd), e a correção foi perdida numa
+        resolução de merge malfeita depois — por isso este teste existe.
+        """
+        resposta = self.client.get(reverse("backoffice:login"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Referrer-Policy"], "same-origin")
+        self.assertNotContains(resposta, 'content="no-referrer"')
+        self.assertContains(resposta, "csrfmiddlewaretoken")
+
 
 class AprovacaoDeIdentidadeTests(ApiTestCase):
     def setUp(self):

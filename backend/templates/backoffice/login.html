@@ -9,7 +9,12 @@
   site é, nem que existe um painel com documento de terceiro atrás.
   {% endcomment %}
   <meta name="robots" content="noindex, nofollow">
-  <meta name="referrer" content="no-referrer">
+  {% comment %}
+  same-origin, nao no-referrer: no HTTPS o navegador precisa mandar
+  Referer no POST do formulario, senao o Django rejeita o CSRF com 403
+  antes mesmo de checar o login (ja vazou em producao uma vez).
+  {% endcomment %}
+  <meta name="referrer" content="same-origin">
   <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
 </head>
 <body class="bg-surface text-gray-100 font-sans min-h-screen grid place-items-center px-4">
