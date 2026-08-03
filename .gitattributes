@@ -1,0 +1,5 @@
+# Hooks precisam de LF mesmo em checkout no Windows. Com CRLF, o shell le a
+# shebang como "/bin/sh\r" e falha com "bad interpreter" - o hook simplesmente
+# para de rodar, sem erro visivel, e a protecao contra marcador de conflito
+# some sem ninguem perceber.
+.githooks/* text eol=lf
