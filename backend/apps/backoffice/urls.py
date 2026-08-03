@@ -8,18 +8,6 @@ urlpatterns = [
     path("entrar/", views.staff_login, name="login"),
     path("sair/", views.staff_logout, name="logout"),
     path("", views.dashboard, name="dashboard"),
-<<<<<<< HEAD
-    path("identidade/", views.kyc_queue, name="kyc_queue"),
-    path("identidade/<int:kyc_id>/decidir/", views.kyc_decide, name="kyc_decide"),
-    path("moderacao/", views.moderation_queue, name="moderation"),
-    path("moderacao/<uuid:item_id>/decidir/", views.moderation_decide, name="moderation_decide"),
-    path("disputas/", views.disputes, name="disputes"),
-    path("disputas/<uuid:order_id>/decidir/", views.dispute_decide, name="dispute_decide"),
-    path("financeiro/", views.finance, name="finance"),
-    path("pedidos/", views.orders, name="orders"),
-    path("lojas/", views.stores_list, name="stores"),
-    path("pessoas/", views.people, name="people"),
-=======
     path("pedidos/", views.orders, name="orders"),
     path("financeiro/", views.finance, name="finance"),
     path("lojas/", views.stores, name="stores"),
@@ -33,5 +21,4 @@ urlpatterns = [
     path("disputas/", views.disputes, name="disputes"),
     path("disputas/<uuid:order_id>/<str:decision>/", views.resolve_dispute, name="resolve_dispute"),
     path("contas/", views.accounts, name="accounts"),
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
 ]

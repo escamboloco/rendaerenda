@@ -170,23 +170,7 @@ class SellerKYC(models.Model):
     reviewed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-<<<<<<< HEAD
-    @property
-    def review_files(self):
-        """
-        As três provas na ordem em que o revisor precisa ver: documento
-        aberto, verso e o rosto junto do documento e do código.
-        """
-        return [
-            ("Documento — frente", self.document_front),
-            ("Documento — verso", self.document_back),
-            ("Selfie com documento e código", self.selfie_with_document),
-        ]
-
-    def approve(self, reviewer: User, *, document_birth_date=None):
-=======
     def approve(self, reviewer: User, *, document_birth_date=None, activate_store: bool = True):
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
         """
         Aprova o KYC e, com a data de nascimento lida no documento,
         promove a conta a "idade verificada".
@@ -201,30 +185,6 @@ class SellerKYC(models.Model):
         """
         from apps.payments.services import is_adult
 
-<<<<<<< HEAD
-        self.reviewed_by = reviewer
-        self.reviewed_at = timezone.now()
-        if document_birth_date:
-            self.document_birth_date = document_birth_date
-
-        # A idade e conferida ANTES de gravar o status. Marcar APROVADO
-        # primeiro e corrigir depois deixava uma janela em que a conta
-        # ficava banida e o KYC aprovado ao mesmo tempo — e quem lesse o
-        # status (o painel, por exemplo) liberava a loja de um menor.
-        if self.document_birth_date and not is_adult(self.document_birth_date):
-            self.status = self.Status.REJECTED
-            self.rejection_reason = "Documento indica menor de 18 anos."
-            self.save(
-                update_fields=[
-                    "status", "reviewed_by", "reviewed_at", "rejection_reason",
-                    "document_birth_date",
-                ]
-            )
-            self.user.ban("Menor de idade confirmado na conferência do documento.")
-            return
-
-        self.status = self.Status.APPROVED
-=======
         if document_birth_date:
             self.document_birth_date = document_birth_date
         if not self.document_birth_date:
@@ -235,7 +195,6 @@ class SellerKYC(models.Model):
         self.status = self.Status.APPROVED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
         self.rejection_reason = ""
         self.save(
             update_fields=[
@@ -243,12 +202,8 @@ class SellerKYC(models.Model):
             ]
         )
 
-<<<<<<< HEAD
-        if not self.document_birth_date:
-=======
         if not is_adult(self.document_birth_date):
             self.user.ban("Menor de idade confirmado na conferência do documento.")
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
             return
 
         verification, _ = AgeVerification.objects.get_or_create(

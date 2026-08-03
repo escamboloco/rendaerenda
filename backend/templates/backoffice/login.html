@@ -1,66 +1,3 @@
-<<<<<<< HEAD
-{% load static %}<!DOCTYPE html>
-<html lang="pt-br" class="dark">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Acesso restrito</title>
-  {% comment %}
-  Título e texto genéricos: quem cair aqui por acaso não descobre que
-  site é, nem que existe um painel com documento de terceiro atrás.
-  {% endcomment %}
-  <meta name="robots" content="noindex, nofollow">
-  <meta name="referrer" content="no-referrer">
-  <link rel="stylesheet" href="{% static 'css/tailwind.css' %}">
-</head>
-<body class="bg-surface text-gray-100 font-sans min-h-screen grid place-items-center px-4">
-
-  <main class="w-full max-w-sm">
-    <div class="text-center mb-6">
-      <div class="inline-flex w-12 h-12 rounded-2xl bg-brand/10 border border-brand/25 items-center justify-center mb-3">
-        <svg class="w-5 h-5 text-brand-light" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4"/>
-        </svg>
-      </div>
-      <h1 class="text-xl font-bold">Acesso restrito</h1>
-      <p class="text-xs text-gray-500 mt-1">Área da equipe.</p>
-    </div>
-
-    <form method="post" class="card p-6 space-y-4" autocomplete="off">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ next }}">
-
-      {% if erro %}
-      <p class="text-sm text-red-300 bg-red-500/10 border border-red-900/50 rounded-xl px-3 py-2.5">
-        {{ erro }}
-      </p>
-      {% endif %}
-
-      <div>
-        <label class="input-label" for="email">E-mail</label>
-        <input id="email" name="email" type="email" required autofocus autocomplete="username"
-               class="input-field" inputmode="email">
-      </div>
-
-      <div>
-        <label class="input-label" for="password">Senha</label>
-        <input id="password" name="password" type="password" required autocomplete="current-password"
-               class="input-field">
-      </div>
-
-      <button type="submit" class="btn-primary w-full">Entrar</button>
-
-      <p class="text-[11px] text-gray-600 text-center leading-relaxed">
-        Tentativas são registradas. Após 5 falhas o acesso trava por alguns minutos.
-      </p>
-    </form>
-
-    <p class="text-center mt-4">
-      <a href="/" class="text-xs text-gray-600 hover:text-gray-400">voltar ao site</a>
-    </p>
-  </main>
-
-=======
 <!doctype html>
 <html lang="pt-br">
 <head>
@@ -87,6 +24,5 @@
       <a href="{% url 'account_login' %}" style="color:#a7b0be">Voltar ao login de comprador/vendedora</a>
     </p>
   </main>
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
 </body>
 </html>

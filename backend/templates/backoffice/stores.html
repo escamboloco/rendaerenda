@@ -1,57 +1,3 @@
-<<<<<<< HEAD
-{% extends "backoffice/_base.html" %}
-{% block title %}Lojas{% endblock %}
-
-{% block content %}
-<h1 class="text-lg font-bold mb-1">Lojas</h1>
-<p class="text-xs text-gray-500 mb-4">
-  Loja sem chave Pix vende mas não recebe — o valor fica preso na carteira.
-</p>
-
-<div class="card overflow-x-auto">
-  <table class="w-full text-sm">
-    <thead class="text-xs text-gray-500 border-b border-surface-border">
-      <tr>
-        <th class="text-left px-4 py-2.5 font-medium">Loja</th>
-        <th class="text-left px-4 py-2.5 font-medium">Titular</th>
-        <th class="text-left px-4 py-2.5 font-medium">Situação</th>
-        <th class="text-right px-4 py-2.5 font-medium">Anúncios</th>
-        <th class="text-right px-4 py-2.5 font-medium">Vendas</th>
-        <th class="text-right px-4 py-2.5 font-medium">Nota</th>
-        <th class="text-left px-4 py-2.5 font-medium">Pix</th>
-        <th class="text-left px-4 py-2.5 font-medium">CEP origem</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for loja in lojas %}
-      <tr class="border-b border-surface-border/50 last:border-0">
-        <td class="px-4 py-2.5">
-          <a href="/loja/{{ loja.slug }}/" target="_blank" rel="noopener" class="hover:text-brand-light truncate block max-w-[14rem]">
-            {{ loja.display_name }}
-          </a>
-        </td>
-        <td class="px-4 py-2.5 text-xs text-gray-500 truncate max-w-[14rem]">{{ loja.owner.email }}</td>
-        <td class="px-4 py-2.5">
-          <span class="bo-status {% if loja.status == 'active' %}bo-status--delivered{% elif loja.status == 'pending' %}bo-status--awaiting_payment{% else %}bo-status--canceled{% endif %}">
-            {{ loja.get_status_display }}
-          </span>
-        </td>
-        <td class="px-4 py-2.5 text-right">{{ loja.anuncios }}</td>
-        <td class="px-4 py-2.5 text-right">{{ loja.sales_count }}</td>
-        <td class="px-4 py-2.5 text-right">{% if loja.review_count %}{{ loja.avg_rating }}{% else %}—{% endif %}</td>
-        <td class="px-4 py-2.5 text-xs">
-          {% if loja.pix_key %}<span class="text-emerald-400">ok</span>
-          {% else %}<span class="text-red-300">falta</span>{% endif %}
-        </td>
-        <td class="px-4 py-2.5 text-xs font-mono text-gray-500">{{ loja.origin_cep|default:"—" }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="8" class="px-4 py-10 text-center text-gray-500">Nenhuma loja ainda.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-=======
 {% extends "backoffice/base.html" %}
 {% block title %}Lojas — Gestão{% endblock %}
 {% block content %}
@@ -79,5 +25,4 @@
 {% empty %}<tr><td colspan="7" class="empty">Nenhuma loja encontrada.</td></tr>{% endfor %}
 </tbody></table>
 {% include "backoffice/pagination.html" with page=stores %}
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
 {% endblock %}

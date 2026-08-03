@@ -15,18 +15,15 @@ api_urlpatterns = [
 page_urlpatterns = [
     path("healthz/", views.healthz, name="healthz"),
     path("robots.txt", views.robots_txt, name="robots_txt"),
-<<<<<<< HEAD
     # Prévia de link (Open Graph). Endereço estável e fora do age gate —
     # crawler de card não tem sessão e a URL assinada da mídia expira.
     path("og/anuncio/<slug:store_slug>/<slug:product_slug>.jpg", views.og_product_image, name="og_product"),
     path("og/loja/<slug:slug>.jpg", views.og_store_image, name="og_store"),
-=======
     path(
         "media/protegido/<path:path>",
         media_views.protected_product_media,
         name="protected_media",
     ),
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
     path("termos-de-uso/", views.legal_page, {"doc": "termos-de-uso"}, name="terms"),
     path("privacidade/", views.legal_page, {"doc": "privacidade"}, name="privacy"),
     path("email/descadastrar/<str:token>/", views.marketing_unsubscribe, name="marketing_unsubscribe"),

@@ -15,16 +15,8 @@ python manage.py createcachetable || true
 python manage.py create_admin \
   || echo "AVISO: create_admin falhou; deploy continua."
 
-<<<<<<< HEAD
-# Cria/promove o administrador do painel a partir de ADMIN_EMAIL/ADMIN_PASSWORD.
-# Idempotente e silencioso se as variaveis nao existirem.
-python manage.py create_admin || true
-
-# Loja + 3 produtos teste (R$ 5) para a primeira venda. Idempotente.
-=======
 # Catálogo demo: 20+ lojas, 70+ produtos, CEPs distintos, fotos públicas.
 # Com SEED_PAYMENT_TEST=False, limpa demo/smoke e deixa a vitrine só com lojas reais.
->>>>>>> 7e6874543ce340c57922fe8a8f07ef864ae0d537
 if [ "${SEED_PAYMENT_TEST:-}" = "True" ] || [ "${SEED_PAYMENT_TEST:-}" = "true" ] || [ "${SEED_PAYMENT_TEST:-}" = "1" ]; then
   echo "SEED_PAYMENT_TEST ligado — povoando catálogo demo (seed_demo)."
   python manage.py seed_demo --force --skip-social \
