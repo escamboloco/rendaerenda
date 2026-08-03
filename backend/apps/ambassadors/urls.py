@@ -6,6 +6,7 @@ app_name = "ambassadors"
 
 urlpatterns = [
     path("", views.ambassador_landing, name="landing"),
+    path("convite/<str:token>/", views.accept_ambassador_invite, name="accept_invite"),
 ]
 
 api_urlpatterns = [

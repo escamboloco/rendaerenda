@@ -1,0 +1,12 @@
+{% extends "core/base.html" %}
+{% block title %}Vagas encerradas — Renda & Renda{% endblock %}
+{% block robots %}noindex{% endblock %}
+{% block content %}
+<div class="max-w-md mx-auto text-center py-20">
+  <p class="text-5xl mb-6">🎽</p>
+  <h1 class="text-2xl font-bold mb-3">As vagas já foram preenchidas</h1>
+  <p class="text-gray-400 mb-6">As {{ program.max_seats }} vagas fundadoras foram todas ocupadas. Mas você ainda pode abrir sua loja normalmente e vender na plataforma.</p>
+  <a href="{% url 'stores:sell' %}" class="btn-primary mr-3">Abrir minha loja</a>
+  <a href="/" class="btn-secondary">Voltar ao início</a>
+</div>
+{% endblock %}

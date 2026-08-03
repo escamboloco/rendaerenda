@@ -11,6 +11,7 @@ from django.utils import timezone
 from .models import Ambassador, AmbassadorProgram, Referral
 
 REFERRAL_SESSION_KEY = "referral_code"
+AMBASSADOR_INVITE_SESSION_KEY = "ambassador_program_invite"
 _CODE_RE = re.compile(r"^[A-Za-z0-9-]{1,12}$")
 
 
@@ -55,6 +56,27 @@ def attach_referral(store, request) -> Referral | None:
 
     request.session.pop(REFERRAL_SESSION_KEY, None)
     return referral
+
+
+def capture_ambassador_invite(request) -> None:
+    """Marca a sessão quando a vendedora chega pelo link de convite do programa."""
+    request.session[AMBASSADOR_INVITE_SESSION_KEY] = True
+
+
+def attach_ambassador_on_store_creation(store, request) -> "Ambassador | None":
+    """
+    Chamado logo após criar a loja (StoreOnboardView.post).
+
+    Se a sessão tem a marca do convite, entra no programa automaticamente.
+    Silenciosamente ignora se as vagas já foram preenchidas — o cadastro
+    da loja nunca falha por causa disso; a vendedora vira cliente comum.
+    """
+    if not request.session.pop(AMBASSADOR_INVITE_SESSION_KEY, False):
+        return None
+    try:
+        return join_ambassador_program(store)
+    except ValidationError:
+        return None
 
 
 def join_ambassador_program(store) -> Ambassador:

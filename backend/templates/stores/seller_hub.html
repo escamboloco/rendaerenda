@@ -160,11 +160,29 @@
         <p class="font-semibold">Prévia da vitrine</p>
         <p class="text-xs text-gray-500">{% if store.status == 'active' %}Como o público vê sua loja{% else %}Disponível após liberação{% endif %}</p>
       </a>
-      <a href="{% url 'ambassadors:landing' %}" class="card card-hover p-5 space-y-2 {% if is_ambassador %}border-accent-gold/40{% endif %}">
+      {% if is_ambassador %}
+      <div class="card p-5 space-y-3 border-accent-gold/40 col-span-2 sm:col-span-2">
+        <div class="flex items-center gap-2">
+          <span class="trust-icon">★</span>
+          <p class="font-semibold">Embaixadora fundadora #{{ ambassador_seat }}</p>
+        </div>
+        <p class="text-xs text-gray-400">Compartilhe seu link — você ganha 10% das vendas de cada loja que abrir por ele, pelos primeiros 2 meses.</p>
+        <div class="flex gap-2 items-center"
+             x-data="{ copied: false, async copy() { this.copied = await copyText('{{ ambassador_referral_link|escapejs }}'); setTimeout(() => this.copied = false, 2000); } }">
+          <input type="text" readonly value="{{ ambassador_referral_link }}"
+            class="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm font-mono text-gray-300 focus:outline-none">
+          <button @click="copy()" x-text="copied ? 'Copiado!' : 'Copiar'"
+            class="shrink-0 btn-secondary text-xs px-3 py-2"></button>
+        </div>
+        <a href="{% url 'ambassadors:landing' %}" class="text-xs text-brand hover:underline">Ver extrato de indicações →</a>
+      </div>
+      {% else %}
+      <a href="{% url 'ambassadors:landing' %}" class="card card-hover p-5 space-y-2">
         <span class="trust-icon">★</span>
         <p class="font-semibold">Programa de embaixadoras</p>
-        <p class="text-xs text-gray-500">{% if is_ambassador %}Seu link e o extrato de indicações{% else %}Indique vendedoras e ganhe % das vendas delas{% endif %}</p>
+        <p class="text-xs text-gray-500">Indique vendedoras e ganhe % das vendas delas</p>
       </a>
+      {% endif %}
     </div>
   </div>
 

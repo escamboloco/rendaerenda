@@ -582,6 +582,14 @@ def seller_hub(request):
             "checklist": checklist,
             "require_seller_kyc": settings.REQUIRE_SELLER_KYC,
             "is_ambassador": hasattr(store, "ambassador"),
+            "ambassador_referral_link": (
+                request.build_absolute_uri(store.ambassador.referral_path)
+                if hasattr(store, "ambassador")
+                else None
+            ),
+            "ambassador_seat": (
+                store.ambassador.seat_number if hasattr(store, "ambassador") else None
+            ),
         },
     )
 
@@ -710,9 +718,10 @@ class StoreOnboardView(APIView):
         # um código válido (capturado em sell_landing). Nunca falha o
         # cadastro por causa de um código velho/inválido — ver
         # apps.ambassadors.services.attach_referral.
-        from apps.ambassadors.services import attach_referral
+        from apps.ambassadors.services import attach_ambassador_on_store_creation, attach_referral
 
         attach_referral(store, request)
+        attach_ambassador_on_store_creation(store, request)
         # Nome/bio da loja nunca podem ser canal de contato pessoal (telefone,
         # whatsapp, @handle) - mesma trava usada em pedidos personalizados e
         # avaliações (docs/BASE_JURIDICA.md § 3). Sinalizado, nunca bloqueado
