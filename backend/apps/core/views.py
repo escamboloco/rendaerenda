@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 LEGAL_DOCS = {
     "termos-de-uso": ("TERMOS_DE_USO.md", "Termos de Uso"),
     "privacidade": ("POLITICA_DE_PRIVACIDADE.md", "Política de Privacidade"),
+    "embaixadoras": ("CONTRATO_EMBAIXADORAS.md", "Termo de Adesão — Programa de Embaixadoras"),
 }
 
 

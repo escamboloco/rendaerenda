@@ -311,10 +311,20 @@ vaga reivindicada em `/embaixadoras/`) recebem um link próprio
 (`/vender/?ref=<código>`). Quando alguém abre uma loja **através desse
 link**, toda venda paga dessa loja nova, pelos primeiros **60 dias**
 (`AMBASSADOR_REWARD_WINDOW_DAYS`), gera um bônus de **10%**
-(`AMBASSADOR_REVENUE_SHARE_PERCENT`) sobre `Order.platform_amount` — o
-**lucro da plataforma** naquele pedido (comissão do item + margem do
-frete, quando a plataforma compra a etiqueta), não o valor que a
-vendedora indicada recebe.
+(`AMBASSADOR_REVENUE_SHARE_PERCENT`) sobre `Order.items_total` — o
+**valor da venda** (o preço do item pago pela compradora, sem frete), não
+o lucro da plataforma naquele pedido. **Sem teto de ganho**: soma a cada
+venda nova, sem limite de valor total nem de quantas lojas a embaixadora
+pode indicar.
+
+**Nota de economia unitária** (não é a parte jurídica, é só a conta): com
+a comissão padrão de 20%, `items_total` = `payout_amount × 1,20`. 10%
+disso é `payout_amount × 0,12`, contra uma comissão da plataforma de
+`payout_amount × 0,20` — ou seja, a plataforma abre mão de boa parte do
+próprio lucro em cada venda da loja indicada durante os 60 dias, embora
+ainda fique com uma margem positiva (`payout_amount × 0,08`). Isso é bem
+mais generoso do que 10% do lucro (a versão anterior deste programa,
+`payout_amount × 0,02`) — decisão de produto, não engano de conta.
 
 O bônus é lançado direto na carteira da embaixadora
 (`WalletEntry.Kind.REFERRAL_BONUS`), com a mesma custódia e liberação do
@@ -322,6 +332,11 @@ crédito de venda normal — fica retido até a entrega da loja indicada ser
 confirmada, libera junto, e é revertido junto se o pedido for
 reembolsado. Ela saca pelo mesmo fluxo de sempre (chave Pix da própria
 loja); não existe um segundo Pix nem um segundo prazo de saque.
+
+O texto que a embaixadora aceita ao entrar é
+`docs/CONTRATO_EMBAIXADORAS.md`, servido em `/embaixadoras/termo/` pelo
+mesmo mecanismo de `Termos de Uso`/`Política de Privacidade`
+(`apps.core.views.legal_page`).
 
 ### Por que "bônus de venda indicada" e não "comissão da plataforma"
 

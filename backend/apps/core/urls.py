@@ -26,5 +26,11 @@ page_urlpatterns = [
     ),
     path("termos-de-uso/", views.legal_page, {"doc": "termos-de-uso"}, name="terms"),
     path("privacidade/", views.legal_page, {"doc": "privacidade"}, name="privacy"),
+    path(
+        "embaixadoras/termo/",
+        views.legal_page,
+        {"doc": "embaixadoras"},
+        name="ambassador_contract",
+    ),
     path("email/descadastrar/<str:token>/", views.marketing_unsubscribe, name="marketing_unsubscribe"),
 ]

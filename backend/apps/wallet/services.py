@@ -74,7 +74,7 @@ def _credit_referral_bonus(order: Order, *, hold_until) -> None:
     """
     Programa de embaixadoras (apps.ambassadors): se a loja que vendeu foi
     indicada por uma embaixadora e a venda caiu dentro da janela de bônus,
-    credita a fração combinada do lucro da plataforma na carteira DA
+    credita a fração combinada do valor da venda na carteira DA
     EMBAIXADORA (não da loja que vendeu) — retido junto com o crédito da
     venda, para liberar e reverter em lockstep (ver release_sale e
     reverse_sale_credit logo abaixo).

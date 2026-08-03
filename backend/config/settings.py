@@ -279,12 +279,13 @@ PLATFORM_COMMISSION_PERCENT = config("PLATFORM_COMMISSION_PERCENT", default=Deci
 WALLET_RELEASE_DAYS_AFTER_SHIPPING = config("WALLET_RELEASE_DAYS_AFTER_SHIPPING", default=3, cast=int)
 
 # --- Programa de embaixadoras (apps.ambassadors) ---
-# As 20 primeiras vendedoras a entrar ganham 10% do platform_amount (lucro
-# da plataforma, não o valor do item) de cada venda de quem elas indicarem,
-# pelos primeiros 60 dias da loja indicada. Ver docs/checkout.md § 8 sobre
-# por que isso é lançado como bônus de venda indicada, não como repasse de
-# comissão — e docs/BASE_JURIDICA.md sobre o que ainda precisa de validação
-# jurídica/contábil antes do lançamento.
+# As 20 primeiras vendedoras a entrar ganham 10% de items_total (o valor da
+# venda, sem frete) de cada venda de quem elas indicarem, pelos primeiros
+# 60 dias da loja indicada. Sem teto de ganho: soma a cada pedido novo,
+# quantas vezes a loja indicada vender dentro da janela. Ver
+# docs/checkout.md § 8 sobre por que isso é lançado como bônus de venda
+# indicada, não como repasse de comissão — e docs/BASE_JURIDICA.md sobre o
+# que ainda precisa de validação jurídica/contábil antes do lançamento.
 AMBASSADOR_PROGRAM_MAX_SEATS = config("AMBASSADOR_PROGRAM_MAX_SEATS", default=20, cast=int)
 AMBASSADOR_REVENUE_SHARE_PERCENT = config(
     "AMBASSADOR_REVENUE_SHARE_PERCENT", default=Decimal("10"), cast=Decimal

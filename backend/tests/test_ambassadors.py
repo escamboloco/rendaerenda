@@ -196,10 +196,22 @@ class ReferralBonusLedgerTests(ApiTestCase):
             ambassador=self.ambassador, referred_store=self.referred_store
         )
 
-    def test_bonus_is_ten_percent_of_the_platform_profit(self):
+    def test_bonus_is_ten_percent_of_the_sale_value(self):
         order = make_order(self.referred_store, payout=Decimal("100.00"))
-        # price = 120 (comissão 20% por cima) -> platform_amount = 20 -> bônus = 2.00
-        self.assertEqual(referral_bonus_amount(order), Decimal("2.00"))
+        # items_total = 120 (comissão 20% por cima do payout) -> bônus = 10% de 120 = 12.00
+        self.assertEqual(referral_bonus_amount(order), Decimal("12.00"))
+
+    def test_bonus_is_based_on_the_sale_value_not_the_platform_commission(self):
+        """
+        A base é items_total (o que a compradora paga pelo item), não
+        platform_amount (a comissão da plataforma) — com comissão 20%,
+        10% do valor da venda é mais da metade da comissão, não uma fração dela.
+        """
+        order = make_order(self.referred_store, payout=Decimal("100.00"))
+        self.assertEqual(referral_bonus_amount(order), order.items_total * Decimal("10") / Decimal("100"))
+        self.assertNotEqual(
+            referral_bonus_amount(order), order.platform_amount * Decimal("10") / Decimal("100")
+        )
 
     def test_credit_sale_credits_the_ambassadors_own_wallet(self):
         order = make_order(self.referred_store, payout=Decimal("100.00"))
@@ -208,7 +220,7 @@ class ReferralBonusLedgerTests(ApiTestCase):
 
         bonus = WalletEntry.objects.get(order=order, kind=WalletEntry.Kind.REFERRAL_BONUS)
         self.assertEqual(bonus.store, self.ambassador_store)
-        self.assertEqual(bonus.amount, Decimal("2.00"))
+        self.assertEqual(bonus.amount, Decimal("12.00"))
         # Retido junto com o crédito da venda — não sacável na hora.
         sale_credit = WalletEntry.objects.get(order=order, kind=WalletEntry.Kind.SALE_CREDIT)
         self.assertEqual(bonus.available_at, sale_credit.available_at)

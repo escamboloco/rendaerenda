@@ -87,9 +87,16 @@ def join_ambassador_program(store) -> Ambassador:
 
 def referral_bonus_amount(order) -> Decimal | None:
     """
-    Quanto (se algo) a embaixadora ganha por este pedido — 10% do lucro
-    da plataforma no pedido (`order.platform_amount`), só se a loja que
-    vendeu foi indicada e o pedido foi pago dentro da janela de 2 meses.
+    Quanto (se algo) a embaixadora ganha por este pedido — 10% do valor
+    da venda (`order.items_total`, o preço do item pago pelo comprador,
+    sem frete), só se a loja que vendeu foi indicada e o pedido foi pago
+    dentro da janela de 2 meses. Sem teto: soma normalmente em cada
+    pedido novo, quantas vezes a loja indicada vender dentro da janela.
+
+    Base de cálculo é o valor da venda, não o lucro da plataforma
+    (`order.platform_amount`) — ver docs/checkout.md § 8. É bem mais
+    generoso: com comissão padrão de 20%, isso consome a maior parte do
+    lucro da plataforma naquele pedido durante a janela de bônus.
 
     Retorna None (não Decimal(0)) quando não há bônus, para o chamador
     nunca criar um WalletEntry de valor zero à toa.
@@ -101,7 +108,7 @@ def referral_bonus_amount(order) -> Decimal | None:
     if not referral.covers(moment):
         return None
 
-    amount = (order.platform_amount * referral.bonus_percent / Decimal("100")).quantize(
+    amount = (order.items_total * referral.bonus_percent / Decimal("100")).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
     return amount if amount > 0 else None

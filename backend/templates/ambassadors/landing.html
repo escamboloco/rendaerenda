@@ -1,6 +1,6 @@
 {% extends "core/base.html" %}
 {% block title %}{% if ambassador %}Painel da embaixadora{% else %}Programa de embaixadoras{% endif %} — Renda &amp; Renda{% endblock %}
-{% block description %}As 20 primeiras vendedoras a entrar no programa ganham {{ bonus_percent|floatformat:"-2" }}% do lucro da plataforma em cada venda das lojas que indicarem, pelos primeiros {{ window_days }} dias.{% endblock %}
+{% block description %}As 20 primeiras vendedoras a entrar no programa ganham {{ bonus_percent|floatformat:"-2" }}% do valor de cada venda das lojas que indicarem, pelos primeiros {{ window_days }} dias, sem limite de ganho.{% endblock %}
 {# A landing pública é caminho de aquisição orgânica (docs/BASE_JURIDICA.md § 6);
    a variante com extrato/saldo da embaixadora tem dado pessoal e não deve indexar. #}
 {% block robots %}{% if is_dashboard_view %}noindex{% else %}index, follow{% endif %}{% endblock %}
@@ -17,9 +17,10 @@
       </h1>
       <p class="text-gray-400 mt-5 max-w-xl leading-relaxed">
         As <strong class="text-gray-200">20 primeiras</strong> vendedoras a entrar ganham
-        <strong class="text-gray-200">{{ bonus_percent|floatformat:"-2" }}%</strong> do lucro da plataforma em
-        cada venda das lojas que indicarem, pelos primeiros {{ window_days }} dias de loja nova. Sem limite de
-        quantas vendedoras você pode indicar.
+        <strong class="text-gray-200">{{ bonus_percent|floatformat:"-2" }}%</strong> do valor de
+        cada venda das lojas que indicarem, pelos primeiros {{ window_days }} dias de loja nova —
+        <strong class="text-gray-200">sem limite de ganho</strong> e sem limite de quantas vendedoras
+        você pode indicar.
       </p>
     </div>
     <div class="hero-orbit" aria-hidden="true">
@@ -40,7 +41,7 @@
       <dd class="text-2xl font-extrabold">{{ program.max_seats }}</dd>
     </div>
     <div class="p-5 sm:px-8 border-l border-white/10">
-      <dt class="text-xs text-gray-500">Sua parte no lucro</dt>
+      <dt class="text-xs text-gray-500">Seu bônus por venda</dt>
       <dd class="text-2xl font-extrabold">{{ bonus_percent|floatformat:"-2" }}%</dd>
     </div>
     <div class="p-5 sm:px-8 border-t sm:border-t-0 sm:border-l border-white/10">
@@ -73,8 +74,10 @@
     </div>
     <p class="text-xs text-gray-500 mt-2">
       Compartilhe este link com quem quer abrir loja. Quando a pessoa se cadastrar e vender por aqui,
-      {{ bonus_percent|floatformat:"-2" }}% do lucro da plataforma nas vendas dela vira bônus seu, pelos
-      primeiros {{ window_days }} dias da loja dela.
+      {{ bonus_percent|floatformat:"-2" }}% do valor de cada venda dela vira bônus seu, pelos
+      primeiros {{ window_days }} dias da loja dela — sem limite de quanto você pode ganhar. Ao entrar
+      no programa, você concorda com o
+      <a href="{% url 'core_pages:ambassador_contract' %}" class="text-brand hover:underline" target="_blank">termo de adesão</a>.
     </p>
   </div>
 </section>
@@ -155,6 +158,10 @@
     <span x-cloak x-show="loading">Entrando…</span>
   </button>
   <p x-cloak x-show="error" x-text="error" class="text-sm text-brand-light"></p>
+  <p class="text-[11px] text-gray-500">
+    Ao entrar, você concorda com o
+    <a href="{% url 'core_pages:ambassador_contract' %}" class="text-brand hover:underline" target="_blank">termo de adesão ao programa de embaixadoras</a>.
+  </p>
   {% endif %}
 </section>
 
