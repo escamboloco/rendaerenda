@@ -401,6 +401,7 @@ aninhados (x-data proprio) continuam funcionando normalmente.
           {% if request.user.is_authenticated and request.user.has_store %}
           <li><a href="{% url 'stores:seller_hub' %}" class="hover:text-gray-300">Painel da loja</a></li>
           {% endif %}
+          <li><a href="{% url 'ambassadors:landing' %}" class="hover:text-gray-300">Programa de embaixadoras</a></li>
           <li><a href="{% url 'account_signup' %}" class="hover:text-gray-300">Criar conta</a></li>
         </ul>
       </div>

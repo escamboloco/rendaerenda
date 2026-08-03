@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "apps.accounts",
+    "apps.ambassadors",
     "apps.stores",
     "apps.catalog",
     "apps.subscriptions",
@@ -276,6 +277,19 @@ REST_FRAMEWORK = {
 # gratuitos - a plataforma só ganha em cima da venda.
 PLATFORM_COMMISSION_PERCENT = config("PLATFORM_COMMISSION_PERCENT", default=Decimal("20"), cast=Decimal)
 WALLET_RELEASE_DAYS_AFTER_SHIPPING = config("WALLET_RELEASE_DAYS_AFTER_SHIPPING", default=3, cast=int)
+
+# --- Programa de embaixadoras (apps.ambassadors) ---
+# As 20 primeiras vendedoras a entrar ganham 10% do platform_amount (lucro
+# da plataforma, não o valor do item) de cada venda de quem elas indicarem,
+# pelos primeiros 60 dias da loja indicada. Ver docs/checkout.md § 8 sobre
+# por que isso é lançado como bônus de venda indicada, não como repasse de
+# comissão — e docs/BASE_JURIDICA.md sobre o que ainda precisa de validação
+# jurídica/contábil antes do lançamento.
+AMBASSADOR_PROGRAM_MAX_SEATS = config("AMBASSADOR_PROGRAM_MAX_SEATS", default=20, cast=int)
+AMBASSADOR_REVENUE_SHARE_PERCENT = config(
+    "AMBASSADOR_REVENUE_SHARE_PERCENT", default=Decimal("10"), cast=Decimal
+)
+AMBASSADOR_REWARD_WINDOW_DAYS = config("AMBASSADOR_REWARD_WINDOW_DAYS", default=60, cast=int)
 
 # --- Custódia (o dinheiro fica com a plataforma até a entrega) ---
 # É a promessa central da vitrine: o comprador não paga direto na mão de

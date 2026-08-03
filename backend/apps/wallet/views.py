@@ -49,10 +49,12 @@ def dashboard(request):
             # "Retido ate quando": o saldo pendente sozinho nao responde a
             # pergunta que a vendedora faz. Cada linha traz a data em que
             # aquele valor vira sacavel, e a primeira delas vira o destaque.
+            # Inclui REFERRAL_BONUS: para quem é embaixadora, esse retido
+            # também é dinheiro dela esperando a mesma liberação.
             "held_entries": (
                 WalletEntry.objects.filter(
                     store=store,
-                    kind=WalletEntry.Kind.SALE_CREDIT,
+                    kind__in=[WalletEntry.Kind.SALE_CREDIT, WalletEntry.Kind.REFERRAL_BONUS],
                     available_at__gt=timezone.now(),
                 )
                 .select_related("order")
@@ -61,7 +63,7 @@ def dashboard(request):
             "next_release_at": (
                 WalletEntry.objects.filter(
                     store=store,
-                    kind=WalletEntry.Kind.SALE_CREDIT,
+                    kind__in=[WalletEntry.Kind.SALE_CREDIT, WalletEntry.Kind.REFERRAL_BONUS],
                     available_at__gt=timezone.now(),
                 )
                 .order_by("available_at")

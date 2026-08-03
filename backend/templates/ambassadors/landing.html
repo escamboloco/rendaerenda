@@ -1,0 +1,175 @@
+{% extends "core/base.html" %}
+{% block title %}{% if ambassador %}Painel da embaixadora{% else %}Programa de embaixadoras{% endif %} — Renda &amp; Renda{% endblock %}
+{% block description %}As 20 primeiras vendedoras a entrar no programa ganham {{ bonus_percent|floatformat:"-2" }}% do lucro da plataforma em cada venda das lojas que indicarem, pelos primeiros {{ window_days }} dias.{% endblock %}
+{# A landing pública é caminho de aquisição orgânica (docs/BASE_JURIDICA.md § 6);
+   a variante com extrato/saldo da embaixadora tem dado pessoal e não deve indexar. #}
+{% block robots %}{% if is_dashboard_view %}noindex{% else %}index, follow{% endif %}{% endblock %}
+{% block canonical %}<link rel="canonical" href="{{ request.build_absolute_uri }}">{% endblock %}
+{% block body_class %}storefront-light{% endblock %}
+
+{% block content %}
+<section class="hero-shell mb-10">
+  <div class="hero-grid">
+    <div class="max-w-3xl">
+      <span class="eyebrow">Programa de embaixadoras</span>
+      <h1 class="text-4xl sm:text-6xl font-bold leading-[.98] mt-3">
+        Indique uma vendedora, <span class="text-gradient-brand">ganhe com as vendas dela.</span>
+      </h1>
+      <p class="text-gray-400 mt-5 max-w-xl leading-relaxed">
+        As <strong class="text-gray-200">20 primeiras</strong> vendedoras a entrar ganham
+        <strong class="text-gray-200">{{ bonus_percent|floatformat:"-2" }}%</strong> do lucro da plataforma em
+        cada venda das lojas que indicarem, pelos primeiros {{ window_days }} dias de loja nova. Sem limite de
+        quantas vendedoras você pode indicar.
+      </p>
+    </div>
+    <div class="hero-orbit" aria-hidden="true">
+      <div class="hero-orbit__core">
+        <span class="hero-orbit__ring hero-orbit__ring--one"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--two"></span>
+        <span class="hero-orbit__ring hero-orbit__ring--three"></span>
+        <span class="hero-orbit__gem"></span>
+      </div>
+      <span class="absolute left-5 top-14 orbit-label orbit-label--ok">{{ program.seats_left }} de {{ program.max_seats }} vagas</span>
+      <span class="absolute right-0 bottom-14 orbit-label">{{ window_days }} dias por indicada</span>
+    </div>
+  </div>
+
+  <dl class="relative z-10 grid grid-cols-2 sm:grid-cols-4 border-t border-white/10">
+    <div class="p-5 sm:px-8">
+      <dt class="text-xs text-gray-500">Vagas no programa</dt>
+      <dd class="text-2xl font-extrabold">{{ program.max_seats }}</dd>
+    </div>
+    <div class="p-5 sm:px-8 border-l border-white/10">
+      <dt class="text-xs text-gray-500">Sua parte no lucro</dt>
+      <dd class="text-2xl font-extrabold">{{ bonus_percent|floatformat:"-2" }}%</dd>
+    </div>
+    <div class="p-5 sm:px-8 border-t sm:border-t-0 sm:border-l border-white/10">
+      <dt class="text-xs text-gray-500">Janela por indicada</dt>
+      <dd class="text-2xl font-extrabold">{{ window_days }} dias</dd>
+    </div>
+    <div class="p-5 sm:px-8 border-t border-l sm:border-t-0 border-white/10">
+      <dt class="text-xs text-gray-500">Vagas restantes</dt>
+      <dd class="text-2xl font-extrabold">{{ program.seats_left }}</dd>
+    </div>
+  </dl>
+</section>
+
+{% if ambassador %}
+{# --------------------------------------------------------- painel da embaixadora #}
+<section class="mb-10 card p-6 sm:p-8 space-y-4"
+         x-data="{ copied: false, async copy() { this.copied = await copyText('{{ referral_link|escapejs }}'); setTimeout(() => this.copied = false, 2000); } }">
+  <div class="flex items-center gap-2">
+    <span class="badge-verified">Embaixadora fundadora nº {{ seat_number }}</span>
+  </div>
+  <div>
+    <p class="input-label">Seu link de indicação</p>
+    <div class="flex flex-col sm:flex-row gap-2 mt-1">
+      <input type="text" readonly value="{{ referral_link }}"
+             class="input-field font-mono text-xs flex-1" @focus="$event.target.select()">
+      <button type="button" class="btn-primary shrink-0" @click="copy()">
+        <span x-show="!copied">Copiar link</span>
+        <span x-cloak x-show="copied">Copiado ✓</span>
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 mt-2">
+      Compartilhe este link com quem quer abrir loja. Quando a pessoa se cadastrar e vender por aqui,
+      {{ bonus_percent|floatformat:"-2" }}% do lucro da plataforma nas vendas dela vira bônus seu, pelos
+      primeiros {{ window_days }} dias da loja dela.
+    </p>
+  </div>
+</section>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-2xl">{{ referred_count }}</p>
+    <p class="stat-label">vendedoras indicadas</p>
+  </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-2xl">R$ {{ total_earned|floatformat:2 }}</p>
+    <p class="stat-label">ganho total em bônus</p>
+  </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-2xl">R$ {{ available_balance|floatformat:2 }}</p>
+    <p class="stat-label">disponível na carteira</p>
+  </div>
+  <div class="surface-raised p-4 sm:p-5">
+    <p class="stat-value text-2xl">R$ {{ pending_balance|floatformat:2 }}</p>
+    <p class="stat-label">em custódia</p>
+  </div>
+</div>
+
+<section>
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-lg font-bold">Vendedoras que você indicou</h2>
+    <a href="{% url 'wallet:dashboard' %}" class="text-xs text-brand hover:underline">abrir carteira →</a>
+  </div>
+  <div class="space-y-2">
+    {% for row in referrals %}
+    <div class="card px-4 py-3 flex items-center justify-between gap-3 text-sm">
+      <div class="min-w-0">
+        <p class="font-medium truncate">{{ row.store.display_name }}</p>
+        <p class="text-xs text-gray-500">
+          Indicada em {{ row.referral.created_at|date:"d/m/Y" }} ·
+          {% if row.window_open %}{{ row.days_left }} dia{{ row.days_left|pluralize }} restantes{% else %}janela encerrada{% endif %}
+        </p>
+      </div>
+      <p class="font-bold text-brand shrink-0">R$ {{ row.earned|floatformat:2 }}</p>
+    </div>
+    {% empty %}
+    <p class="text-sm text-gray-500 py-8 text-center">
+      Ninguém entrou pelo seu link ainda. Compartilhe o link acima com vendedoras que você conhece.
+    </p>
+    {% endfor %}
+  </div>
+</section>
+
+{% elif store %}
+{# --------------------------------------------------------------- convite para entrar #}
+<section class="card p-6 sm:p-8 space-y-4" x-data="{ loading: false, error: '' }">
+  {% if store.status != 'active' %}
+  <p class="text-sm text-amber-300">
+    Sua loja precisa estar ativa (liberada da moderação) para entrar no programa.
+  </p>
+  <a href="{% url 'stores:seller_hub' %}" class="btn-secondary inline-flex">Ver status da loja</a>
+  {% elif program.is_full %}
+  <p class="text-sm text-gray-400">
+    As {{ program.max_seats }} vagas do programa já foram preenchidas. Fique de olho — futuras turmas
+    são anunciadas no painel da loja.
+  </p>
+  {% else %}
+  <div>
+    <p class="text-lg font-bold">Restam {{ program.seats_left }} de {{ program.max_seats }} vagas</p>
+    <p class="text-sm text-gray-400 mt-1 max-w-xl">
+      Entrar não custa nada e não muda sua comissão. Você recebe um link próprio; toda venda de loja
+      indicada por ele gera bônus na sua carteira, junto com o dinheiro das suas próprias vendas.
+    </p>
+  </div>
+  <button type="button" class="btn-primary" :disabled="loading"
+          @click="
+            loading = true; error = '';
+            fetch('{% url 'ambassadors_api:join' %}', {method: 'POST', headers: {'X-CSRFToken': document.querySelector('meta[name=csrf-token]').content}})
+              .then(async r => { const body = await r.json(); if (!r.ok) throw new Error(body.detail || 'Não foi possível entrar agora.'); window.location.reload(); })
+              .catch(e => { error = e.message; loading = false; })
+          ">
+    <span x-show="!loading">Quero ser embaixadora</span>
+    <span x-cloak x-show="loading">Entrando…</span>
+  </button>
+  <p x-cloak x-show="error" x-text="error" class="text-sm text-brand-light"></p>
+  {% endif %}
+</section>
+
+{% else %}
+{# ------------------------------------------------------- visitante sem loja #}
+<section class="card p-6 sm:p-8 flex flex-wrap items-center justify-between gap-4">
+  <div>
+    <p class="text-lg font-bold">Para participar, é preciso ter uma loja ativa</p>
+    <p class="text-sm text-gray-400">Abrir loja é grátis e sem mensalidade.</p>
+  </div>
+  {% if request.user.is_authenticated %}
+  <a href="{% url 'stores:onboard_page' %}" class="btn-primary">Abrir minha loja</a>
+  {% else %}
+  <a href="{% url 'account_login' %}?next={{ request.path|urlencode }}" class="btn-primary">Entrar</a>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

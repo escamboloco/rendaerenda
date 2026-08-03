@@ -374,7 +374,16 @@ def category_detail(request, slug):
 
 
 def sell_landing(request):
-    """Página de captação de vendedoras: regras, comissão e passo a passo."""
+    """
+    Página de captação de vendedoras: regras, comissão e passo a passo.
+
+    É o destino do link de indicação do programa de embaixadoras
+    (?ref=<código>) — guarda o código na sessão aqui; StoreOnboardView
+    lê e vincula a indicação só quando a loja é de fato criada.
+    """
+    from apps.ambassadors.services import capture_referral_code
+
+    capture_referral_code(request)
     return render(
         request,
         "stores/sell.html",
@@ -572,6 +581,7 @@ def seller_hub(request):
             "origin_complete": origin_complete,
             "checklist": checklist,
             "require_seller_kyc": settings.REQUIRE_SELLER_KYC,
+            "is_ambassador": hasattr(store, "ambassador"),
         },
     )
 
@@ -696,6 +706,13 @@ class StoreOnboardView(APIView):
             origin_city=payload["origin_city"],
             origin_state=payload["origin_state"],
         )
+        # Programa de embaixadoras: vincula a indicação se a sessão trouxer
+        # um código válido (capturado em sell_landing). Nunca falha o
+        # cadastro por causa de um código velho/inválido — ver
+        # apps.ambassadors.services.attach_referral.
+        from apps.ambassadors.services import attach_referral
+
+        attach_referral(store, request)
         # Nome/bio da loja nunca podem ser canal de contato pessoal (telefone,
         # whatsapp, @handle) - mesma trava usada em pedidos personalizados e
         # avaliações (docs/BASE_JURIDICA.md § 3). Sinalizado, nunca bloqueado

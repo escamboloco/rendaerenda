@@ -4,6 +4,7 @@ from django.contrib.sitemaps.views import sitemap
 from django.urls import include, path
 
 import apps.accounts.urls as accounts_urls
+import apps.ambassadors.urls as ambassadors_urls
 import apps.catalog.urls as catalog_urls
 import apps.core.urls as core_urls
 import apps.moderation.urls as moderation_urls
@@ -24,6 +25,7 @@ sitemaps = {
 
 api_urlpatterns = [
     path("", include((accounts_urls.urlpatterns, "accounts"))),
+    path("", include((ambassadors_urls.api_urlpatterns, "ambassadors_api"))),
     path("", include((payments_urls.urlpatterns, "payments"))),
     path("", include((stores_urls.api_urlpatterns, "stores_api"))),
     path("", include((wallet_urls.api_urlpatterns, "wallet_api"))),
@@ -53,6 +55,7 @@ urlpatterns = [
     path("", include((accounts_urls.page_urlpatterns, "accounts_pages"))),
     path("", include((payments_urls.page_urlpatterns, "payments_pages"))),
     path("sitemap.xml", sitemap, {"sitemaps": sitemaps}, name="sitemap"),
+    path("embaixadoras/", include("apps.ambassadors.urls")),
     path("", include("apps.subscriptions.urls")),
     path("", include("apps.wallet.urls")),
     path("", include("apps.offers.urls")),

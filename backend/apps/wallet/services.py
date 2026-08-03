@@ -65,7 +65,41 @@ def credit_sale(order: Order) -> tuple[WalletEntry, bool]:
             "available_at": _hold_until(order),
         },
     )
+    if created:
+        _credit_referral_bonus(order, hold_until=entry.available_at)
     return entry, created
+
+
+def _credit_referral_bonus(order: Order, *, hold_until) -> None:
+    """
+    Programa de embaixadoras (apps.ambassadors): se a loja que vendeu foi
+    indicada por uma embaixadora e a venda caiu dentro da janela de bônus,
+    credita a fração combinada do lucro da plataforma na carteira DA
+    EMBAIXADORA (não da loja que vendeu) — retido junto com o crédito da
+    venda, para liberar e reverter em lockstep (ver release_sale e
+    reverse_sale_credit logo abaixo).
+
+    Import local: apps.wallet é o ledger genérico, apps.ambassadors é
+    quem decide "há bônus aqui e quanto" — mesma forma que este módulo já
+    consulta apps.shipping.services.platform_buys_shipping_label().
+    """
+    from apps.ambassadors.services import referral_bonus_amount
+
+    referral = getattr(order.store, "referred_by", None)
+    if referral is None:
+        return
+    amount = referral_bonus_amount(order)
+    if amount is None:
+        return
+    WalletEntry.objects.get_or_create(
+        order=order,
+        kind=WalletEntry.Kind.REFERRAL_BONUS,
+        defaults={
+            "store": referral.ambassador.store,
+            "amount": amount,
+            "available_at": hold_until,
+        },
+    )
 
 
 def credit_shipping(order: Order) -> tuple[WalletEntry | None, bool]:
@@ -109,6 +143,7 @@ def reverse_sale_credit(order: Order) -> bool:
     if not credit:
         return False
     _reverse_shipping_credit(order)
+    _reverse_referral_bonus(order)
     already_reversed = order.wallet_entries.filter(
         kind=WalletEntry.Kind.ADJUSTMENT, amount=-credit.amount
     ).exists()
@@ -152,16 +187,48 @@ def _reverse_shipping_credit(order: Order) -> None:
     )
 
 
+def _reverse_referral_bonus(order: Order) -> None:
+    """
+    Reembolso desfaz também o bônus de indicação — do contrário a
+    embaixadora ficaria com um bônus calculado sobre uma venda que não
+    aconteceu mais. O ajuste vai para a carteira DELA (o `store` gravado
+    no próprio WalletEntry), nunca para `order.store`.
+    """
+    bonus = order.wallet_entries.filter(kind=WalletEntry.Kind.REFERRAL_BONUS).first()
+    if not bonus:
+        return
+    if order.wallet_entries.filter(
+        kind=WalletEntry.Kind.ADJUSTMENT, amount=-bonus.amount, store=bonus.store
+    ).exists():
+        return
+    WalletEntry.objects.create(
+        store=bonus.store,
+        order=order,
+        kind=WalletEntry.Kind.ADJUSTMENT,
+        amount=-bonus.amount,
+        available_at=timezone.now(),
+    )
+
+
 def release_sale(order: Order) -> bool:
     """
     Tira o pedido da custódia: o saldo vira sacável agora. Idempotente —
     retorna True só na primeira vez.
+
+    Libera junto o bônus de indicação (se houver) — ele fica retido pelo
+    mesmo prazo do crédito da venda e sai da custódia no mesmo instante,
+    nunca antes (a embaixadora não pode sacar o bônus antes de a própria
+    venda estar confirmada como entregue).
     """
     entry = order.wallet_entries.filter(kind=WalletEntry.Kind.SALE_CREDIT).first()
     if not entry or entry.available_at <= timezone.now():
         return False
-    entry.available_at = timezone.now()
+    now = timezone.now()
+    entry.available_at = now
     entry.save(update_fields=["available_at"])
+    order.wallet_entries.filter(kind=WalletEntry.Kind.REFERRAL_BONUS, available_at__gt=now).update(
+        available_at=now
+    )
     return True
 
 

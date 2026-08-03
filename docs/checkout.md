@@ -294,3 +294,65 @@ python manage.py runserver
 - [ ] Saque cai só na chave Pix = CPF da vendedora.
 - [ ] NF de serviço emitida e e-mail enviado (sem conteúdo explícito).
 - [ ] Todos os itens do `docs/BASE_JURIDICA.md` § 7 revisados por advogado.
+
+---
+
+## 8. Programa de embaixadoras (`apps.ambassadors`)
+
+> Igual ao resto deste documento: descreve uma decisão de produto/negócio,
+> **não é parecer jurídico ou contábil**. A caracterização tributária abaixo
+> precisa ser confirmada por contador/advogado antes do lançamento — ver
+> `docs/BASE_JURIDICA.md` § 4.4.
+
+### Como funciona
+
+As **20 primeiras** vendedoras a entrar no programa (`AmbassadorProgram`,
+vaga reivindicada em `/embaixadoras/`) recebem um link próprio
+(`/vender/?ref=<código>`). Quando alguém abre uma loja **através desse
+link**, toda venda paga dessa loja nova, pelos primeiros **60 dias**
+(`AMBASSADOR_REWARD_WINDOW_DAYS`), gera um bônus de **10%**
+(`AMBASSADOR_REVENUE_SHARE_PERCENT`) sobre `Order.platform_amount` — o
+**lucro da plataforma** naquele pedido (comissão do item + margem do
+frete, quando a plataforma compra a etiqueta), não o valor que a
+vendedora indicada recebe.
+
+O bônus é lançado direto na carteira da embaixadora
+(`WalletEntry.Kind.REFERRAL_BONUS`), com a mesma custódia e liberação do
+crédito de venda normal — fica retido até a entrega da loja indicada ser
+confirmada, libera junto, e é revertido junto se o pedido for
+reembolsado. Ela saca pelo mesmo fluxo de sempre (chave Pix da própria
+loja); não existe um segundo Pix nem um segundo prazo de saque.
+
+### Por que "bônus de venda indicada" e não "comissão da plataforma"
+
+**Decisão de produto:** o valor recebido pela embaixadora é registrado e
+comunicado a ela como bônus vinculado às vendas que ela indicou — nunca
+como repasse ou divisão da comissão de intermediação da plataforma. Na
+prática:
+
+- O rótulo do lançamento na carteira é "Bônus de indicação (vendas
+  indicadas)", nunca "comissão".
+- Nenhuma NF-e é emitida da plataforma para a embaixadora por este valor
+  (diferente da comissão de intermediação, que gera `Invoice` — ver
+  `apps.payments.models.Invoice`). O valor é tratado como parte da renda
+  de vendedora dela, mesma cesta das próprias vendas — o que evita
+  caracterizá-la como sócia da receita de intermediação da plataforma ou
+  como prestadora de serviço de marketing/indicação PARA a plataforma
+  (o que exigiria nota fiscal dela para o site).
+- A declaração de renda continua sendo responsabilidade da vendedora
+  (mesma cláusula dos Termos de Uso que já cobre a renda das vendas
+  dela) — o bônus não muda esse regime.
+
+Essa distinção importa porque `docs/BASE_JURIDICA.md` § 1 e § 4.4
+constroem toda a defesa jurídica do site em cima de a plataforma **nunca**
+repartir receita de venda com terceiro fora da relação comprador↔vendedora
+— ela só cobra comissão de intermediação, e só dela. Rotular o bônus como
+"comissão repartida" borraria essa linha; rotular como "bônus atrelado às
+vendas da própria vendedora indicada" mantém a mesma arquitetura.
+
+### Regras de elegibilidade
+- Só loja com `status=active` pode reivindicar vaga.
+- Uma loja só pode ser indicada **uma vez** (não retroage se ela já existia).
+- Auto-indicação é ignorada.
+- Vaga incapaz de "voltar": embaixadora desativada mantém o histórico de
+  bônus já lançados, só para de gerar bônus novo.

@@ -160,6 +160,11 @@
         <p class="font-semibold">Prévia da vitrine</p>
         <p class="text-xs text-gray-500">{% if store.status == 'active' %}Como o público vê sua loja{% else %}Disponível após liberação{% endif %}</p>
       </a>
+      <a href="{% url 'ambassadors:landing' %}" class="card card-hover p-5 space-y-2 {% if is_ambassador %}border-accent-gold/40{% endif %}">
+        <span class="trust-icon">★</span>
+        <p class="font-semibold">Programa de embaixadoras</p>
+        <p class="text-xs text-gray-500">{% if is_ambassador %}Seu link e o extrato de indicações{% else %}Indique vendedoras e ganhe % das vendas delas{% endif %}</p>
+      </a>
     </div>
   </div>
 

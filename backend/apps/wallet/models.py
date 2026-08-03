@@ -41,6 +41,12 @@ class WalletEntry(models.Model):
         # dinheiro que a vendedora usa para comprar a caixa e postar. Segurar
         # isso junto com o valor do item obrigaria ela a adiantar do bolso.
         SHIPPING_CREDIT = "shipping_credit", "Crédito de frete e embalagem"
+        # Bônus do programa de embaixadoras (apps.ambassadors) — % do lucro
+        # da plataforma numa venda de loja indicada, creditado na carteira
+        # de QUEM indicou, nao da loja que vendeu. Deliberadamente rotulado
+        # como bônus de venda indicada, nao como "repasse de comissao": ver
+        # docs/checkout.md § 8.
+        REFERRAL_BONUS = "referral_bonus", "Bônus de indicação (vendas indicadas)"
         WITHDRAWAL_DEBIT = "withdrawal_debit", "Débito de saque"
         ADJUSTMENT = "adjustment", "Ajuste"
 
@@ -68,6 +74,13 @@ class WalletEntry(models.Model):
                 fields=["order", "kind"],
                 condition=models.Q(kind="shipping_credit"),
                 name="wallet_unique_shipping_credit_per_order",
+            ),
+            # Mesma trava do credito de venda: webhook duplicado nao pode
+            # pagar duas vezes o bonus de indicacao da embaixadora.
+            models.UniqueConstraint(
+                fields=["order", "kind"],
+                condition=models.Q(kind="referral_bonus"),
+                name="wallet_unique_referral_bonus_per_order",
             ),
         ]
 

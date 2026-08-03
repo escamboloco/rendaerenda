@@ -56,6 +56,10 @@ Qualquer um destes itens muda o enquadramento jurídico e é **banido da platafo
 - CNPJ (CNAEs de portais/intermediação), conta PJ com **razão social neutra** (cobrança discreta no extrato).
 - Emissão de nota fiscal sobre assinaturas, desbloqueios e boosts.
 - Declaração de renda das vendedoras é responsabilidade delas; incluir aviso nos Termos.
+- **Programa de embaixadoras** (`apps.ambassadors`, ver `docs/checkout.md` § 8): o bônus pago à
+  vendedora que indica é registrado como bônus de venda indicada, não como repasse de comissão da
+  plataforma — decisão de produto que ainda precisa de validação de contador/advogado, como todo o
+  resto desta seção, antes de valer para o programa em escala.
 
 ## 5. Pagamentos
 

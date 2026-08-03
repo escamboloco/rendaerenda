@@ -76,6 +76,7 @@ chamar o Asaas de verdade, é sinal de que alguém importou
 | `shipping` | Cotação de frete e rastreio (Correios / SuperFrete) |
 | `moderation` | Fila de moderação prévia + denúncias |
 | `offers` | Pedidos personalizados |
+| `ambassadors` | Programa de embaixadoras: vaga limitada, link de indicação, bônus sobre vendas indicadas |
 | `core` | Age gate, SEO, consulta de CEP, middleware de segurança, filtro de logs |
 
 ### Como o app de pagamentos está organizado
@@ -141,7 +142,8 @@ Tudo idempotente: webhook repetido não credita duas vezes e
 | `/og/anuncio/<loja>/<item>.jpg` | Prévia de link do anúncio (1200×630) |
 | `/og/loja/<loja>.jpg` | Prévia de link da loja |
 | `/como-funciona/` | Explicação da custódia, prazos e privacidade |
-| `/vender/` | Landing de captação de vendedoras |
+| `/vender/` | Landing de captação de vendedoras — destino do link de indicação (`?ref=<código>`) |
+| `/embaixadoras/` | Programa de embaixadoras: convite público ou painel da embaixadora (link + extrato) |
 | `/loja/<slug>/` | Loja da vendedora |
 | `/loja/<slug>/item/<slug>/` | Anúncio: galeria, adicionais, perguntas, reputação |
 | `/finalizar/` | Funil de checkout em 3 passos |
